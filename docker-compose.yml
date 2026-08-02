@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: partvision
       POSTGRES_PASSWORD: partvision
     ports:
-      - "5432:5432"
+      # Host 5442 para no chocar con un PostgreSQL nativo en 5432 ni con otras apps.
+      - "5442:5432"
     volumes:
       - partvision-db-data:/var/lib/postgresql/data
     healthcheck:

@@ -64,6 +64,16 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login -H "Content-Type: applic
 - `GET /api/v1/stock?productoId=<id>` → total + desglose por ubicación (flujo de escaneo).
 - `GET /api/v1/movimientos?productoId=<id>` → historial paginado.
 
+### Fase 6 — importación masiva
+- Importación de productos desde **CSV** (multipart). Cabecera (case-insensitive): `sku,marca,categoria,descripcion,codigo,tipoCodigo` — solo `descripcion` es obligatoria.
+- **Importación parcial:** cada fila se procesa en su propia transacción; el error de una no frena las demás y se reporta por fila.
+- Marca y categoría se resuelven por nombre y se **crean si no existen** (acelera la carga de catálogos; se normaliza después).
+
+**Endpoint (requiere token):**
+- `POST /api/v1/importaciones/productos` (multipart, campo `archivo`) → resumen `{ totalFilas, importados, errores[] }`.
+
+> Nota: el `docker-compose` publica PostgreSQL en el host **5442** (no 5432) para no chocar con un Postgres nativo u otras apps. El default de dev (`DB_URL`) ya apunta a 5442.
+
 ## Requisitos
 
 - JDK 21, Maven 3.9+, Docker (para la base y los tests de integración con Testcontainers).
