@@ -74,6 +74,16 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login -H "Content-Type: applic
 
 > Nota: el `docker-compose` publica PostgreSQL en el host **5442** (no 5432) para no chocar con un Postgres nativo u otras apps. El default de dev (`DB_URL`) ya apunta a 5442.
 
+### Fase 7 — integración con IA
+- Flujo: subir imagen → la IA sugiere datos → **borrador** (`ai_extractions`, estado `PENDIENTE`) → revisión humana → confirmación → producto oficial. **La IA nunca crea productos** (regla D4): el producto se crea recién al confirmar.
+- Proveedor de visión **pluggable** (`VisionExtractor`): impl actual `StubVisionExtractor` (devuelve todo en null, no inventa) hasta enchufar Claude/OpenAI. Storage **pluggable** (`StorageService`): impl local en disco (dev), reemplazable por S3/MinIO.
+
+**Endpoints (requieren token):**
+- `POST /api/v1/extracciones` (multipart, campo `archivo`) → crea borrador PENDIENTE con datos sugeridos.
+- `GET /api/v1/extracciones/{id}` · `GET /api/v1/extracciones?estado=PENDIENTE` (paginado).
+- `POST /api/v1/extracciones/{id}/confirmar` (body: `producto` corregido + `ubicacionId`/`cantidad` opcionales) → crea el producto (y stock inicial si corresponde).
+- `POST /api/v1/extracciones/{id}/descartar`.
+
 ## Requisitos
 
 - JDK 21, Maven 3.9+, Docker (para la base y los tests de integración con Testcontainers).
