@@ -1,0 +1,11 @@
+# Perfil de test: la datasource la inyecta Testcontainers (@ServiceConnection).
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.testcontainers: warn
+    com.github.dockerjava: warn

@@ -1,0 +1,6 @@
+explicar-decisiones.md
+Antes de seguir, explicame en máximo 5 líneas:
+1. Qué decisión de diseño tomaste en este slice que yo no especifiqué explícitamente.
+2. Por qué elegiste esa opción y no una alternativa más simple.
+3. Si esta decisión afecta algo del patrón GoF ya acordado.
+No escribas código nuevo en esta respuesta, solo explicá.

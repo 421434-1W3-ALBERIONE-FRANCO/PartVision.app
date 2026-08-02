@@ -1,0 +1,34 @@
+---
+name: seguridad_jwt
+description: Autenticación y autorización con Spring Security + JWT stateless, incluyendo ownership de recursos.
+version: 1.0.0
+---
+
+## Cuándo activar esta skill
+Obligatoria para este recuperatorio: las condiciones oficiales de la cátedra exigen autenticación, autorización y ownership de recursos, y penalizan explícitamente "autenticación falsificable, secretos JWT expuestos o endpoints sin protección". Activarla como parte del plan inicial (minuto 0-15), no como afterthought — el AuthController y el SecurityConfig deben ser de los primeros slices, no de los últimos, porque el resto de los endpoints protegidos dependen de esto para poder testearse con un token real.
+
+## Contexto técnico
+Spring Security 6.x, JWT stateless (sin sesiones de servidor), BCrypt para hash de passwords.
+
+## Orden de entrega
+1. **Entidad Usuario** (`domain/`): el campo password se persiste SIEMPRE hasheado con `BCryptPasswordEncoder`. Nunca se expone en ningún DTO de salida, log, o respuesta de error.
+2. **JwtService** (`config/` o `services/`): generación y validación de tokens (firma, expiración, claims mínimos necesarios). El secret se lee de `application.properties`, nunca hardcodeado en el código fuente.
+3. **SecurityFilterChain** (`config/SecurityConfig`):
+   - `SessionCreationPolicy.STATELESS`.
+   - Endpoints públicos explícitos: `/api/v1/auth/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/h2-console/**` (si se sigue usando H2 en este punto).
+   - Todo el resto: `authenticated()`.
+4. **JwtAuthenticationFilter** (`OncePerRequestFilter`): valida el header `Authorization: Bearer <token>` en cada request protegida y setea el contexto de seguridad.
+5. **AuthController** (`controllers/`): únicamente endpoints `/register` y `/login`.
+   - `/login` devuelve `{ token, expiresIn }` — nunca el objeto usuario completo.
+   - `/register` valida datos con `@Valid` como cualquier otro DTO de entrada.
+6. **Ownership de recursos**: la validación de que el usuario autenticado es dueño del recurso que intenta modificar/consultar se hace en el **Service** (vía `SecurityContextHolder`), nunca en el Controller. Si no es el dueño → `403 Forbidden`.
+7. **Tests**: cubrir con `@WebMvcTest` + mocks de seguridad, o `@SpringBootTest` generando un token real en `@BeforeEach`. No desactivar Spring Security completo en los tests salvo que sea estrictamente una capa que no lo necesita (justificarlo si se hace).
+
+## Restricciones críticas
+- Prohibido passwords en texto plano en cualquier capa: entidad expuesta, log, DTO, mensaje de error.
+- Prohibido hardcodear el JWT secret si el enunciado exige configuración externa.
+- Prohibido lógica de autorización dentro del Controller.
+- Prohibido devolver el objeto `Usuario`/`Entity` completo en cualquier respuesta, incluida `/login` y `/register`.
+
+## Al finalizar, confirmá en una línea
+Que `mvn clean verify` sigue en BUILD SUCCESS con la cobertura ≥95% incluyendo las nuevas clases de seguridad, y que probaste manualmente login + un endpoint protegido con Swagger o Postman.

@@ -1,0 +1,32 @@
+---
+name: crear_slice_backend
+description: Desarrollo por slices verticales de backend, entregando código funcional y testeado que cumple JaCoCo >=95%.
+version: 1.0.0
+---
+
+## Propósito
+Cuando se te asigne una funcionalidad, tu objetivo es entregar un "vertical slice" de backend completo, funcional y testeado. No es una skill de arquitectura general: asumí que las reglas de arquitectura (multicapa, IoC por constructor, DTOs, manejo global de excepciones) ya están definidas en el contexto general del proyecto.
+
+## Orden estricto de entrega
+Seguí este orden y detenete al finalizar cada slice (no arranques el siguiente sin confirmación):
+
+1. **Entidad de Dominio** (`domain/`): campos, relaciones JPA (`@OneToMany`, `@ManyToOne`, etc.), validaciones a nivel de entidad si corresponde.
+2. **Repositorio** (`repositories/`): interfaz extendiendo `JpaRepository`, con métodos derivados o `@Query` solo si son necesarios para el slice actual.
+3. **Service** (`services/`): lógica de negocio real del slice. Nada de lógica de negocio en el Controller. Inyección por constructor (`private final` + `@RequiredArgsConstructor`).
+4. **DTOs + Controller** (`dtos/` + `controllers/`):
+   - DTOs de entrada con `@Valid` y anotaciones de Bean Validation (`@NotNull`, `@NotBlank`, `@Min`, etc.) según las reglas del enunciado.
+   - DTOs de salida que NUNCA expongan la entidad completa.
+   - Controller con `ResponseEntity<T>`, código HTTP correcto (201 en creación, 204 en delete, etc.), sin lógica de negocio.
+5. **Tests**: suite completa (unitarios de Service, tests de Repository si tienen lógica custom, tests de Controller con `@WebMvcTest` o `MockMvc`). Cubrir:
+   - Camino feliz.
+   - Casos de error / excepción (cada `if` de validación necesita su propio test).
+   - Confirmar que el slice, sumado al resto del proyecto, mantiene JaCoCo ≥95% LINE y ≥95% BRANCH.
+
+## Restricciones
+- Entregá solo código funcional y testeado. Cero explicaciones decorativas, cero resúmenes largos.
+- No agregues funcionalidades, endpoints o validaciones que el enunciado no pida.
+- No dejes los tests "para después": el slice no está terminado hasta que compila, pasa y cubre.
+- Si el patrón GoF definido en la fase de planning aplica a este slice, implementalo en la clase específica ya acordada — no lo apliques en un lugar distinto sin avisar.
+
+## Al finalizar el slice, confirmá en una línea
+`mvn clean verify` → BUILD SUCCESS / FAILURE, y el % de cobertura si es relevante.

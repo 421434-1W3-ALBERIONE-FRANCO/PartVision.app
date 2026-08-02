@@ -1,0 +1,32 @@
+---
+name: fix_jacoco
+description: Reparar cobertura JaCoCo cuando mvn clean verify rompe el build por no alcanzar el 95% de LINE/BRANCH.
+version: 1.0.0
+---
+
+## Cuándo usar esta skill
+Cuando `mvn clean verify` falla con un mensaje tipo `Rule violated for bundle ...: lines/branches covered ratio is X, but expected minimum is 0.95`. No es para escribir tests nuevos de una funcionalidad recién creada (eso ya es parte de SKILL-crear-slice-backend) — es específicamente para el caso en que el slice ya tiene tests pero el % no alcanza.
+
+## Datos que tenés que pasarle a la IA junto con esta skill
+1. El log completo del error de JaCoCo (con el % exacto reportado).
+2. El nombre de la clase o paquete señalado como insuficiente, si el log lo indica.
+3. Si tenés a mano, el reporte HTML (`backend/target/site/jacoco/index.html`) abierto, decile qué líneas/branches aparecen en rojo o amarillo.
+
+## Orden de trabajo
+1. **No adivinar**: identificar con precisión qué líneas y qué branches no están cubiertos antes de escribir un solo test. Si el log no da el detalle suficiente, pedir que se abra el reporte HTML de esa clase puntual.
+2. **Priorizar branches sobre líneas**: los branches sin cubrir casi siempre son:
+   - Caminos de excepción (`if (condición) throw ...`).
+   - Validaciones (`if (x == null)`, `if (lista.isEmpty())`).
+   - Ramas de un `switch` o condicional múltiple.
+   Cada branch sin cubrir necesita su propio test, no alcanza con "tocar la línea".
+3. **Generar solo los tests faltantes**, no reescribir toda la suite existente.
+4. **No tocar código de producción** salvo que, al mapear los casos sin cubrir, se detecte un bug real (por ejemplo, una rama muerta o lógica inalcanzable). Si eso pasa, avisarlo explícitamente antes de tocar nada: "Detecté código inalcanzable en X, ¿lo corrijo o lo dejo?".
+5. Confirmar, antes de entregar, que los tests nuevos efectivamente ejercitan las líneas/branches identificados como faltantes (no solo agregar tests "por las dudas" que puedan no mover el número).
+
+## Restricciones críticas
+- Prohibido tocar la configuración de JaCoCo (umbral, exclusiones) para "resolver" el problema bajando la exigencia. Eso es una causal de desaprobación directa según la RULE del examen.
+- Prohibido agregar exclusiones nuevas a paquetes que sí tienen lógica de negocio real, solo para esquivar la medición.
+- Prohibido marcar tests como `@Disabled` o similar para maquillar el resultado.
+
+## Al finalizar, confirmá en una línea
+Corré `mvn clean verify` de nuevo y reportá el % final de LINE y BRANCH, confirmando BUILD SUCCESS.

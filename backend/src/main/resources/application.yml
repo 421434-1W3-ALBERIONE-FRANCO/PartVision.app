@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: partvision
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/partvision}
+    username: ${DB_USERNAME:partvision}
+    password: ${DB_PASSWORD:partvision}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # El esquema lo gobierna Flyway; Hibernate solo valida contra el.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+security:
+  jwt:
+    # En produccion definir SIEMPRE JWT_SECRET (>=32 bytes). El default es solo para desarrollo.
+    secret: ${JWT_SECRET:dev-secret-cambiar-en-produccion-0123456789abcdef}
+    expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

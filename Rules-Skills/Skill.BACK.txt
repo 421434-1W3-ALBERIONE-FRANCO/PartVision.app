@@ -1,0 +1,44 @@
+---
+name: utn_backend_springboot_master
+description: Estándar de desarrollo de APIs RESTful profesionales con Spring Boot e Inversión de Control.
+version: 2.0.0
+---
+
+## 1. Propósito
+Asegurar la creación de APIs RESTful robustas en Java con Spring Boot, siguiendo las pautas de inmutabilidad, el patrón de Inyección de Dependencias (IoC), aislamiento por capas y control centralizado de excepciones.
+
+## 2. Contexto Técnico Mandatorio
+- **Lenguaje/Framework:** Java 17+ y Spring Boot 3.x / 21.
+- **Herramientas:** Project Lombok habilitado.
+- **Arquitectura:** Patrón multicapa estricto (Controller -> Service -> Repository).
+
+## 3. Instrucciones de Arquitectura y Buenas Prácticas
+
+### Paso 1: Capa de Controladores (Controllers RESTful)
+- Decorar la clase únicamente con `@RestController` y mapear la ruta base en plural con `@RequestMapping("/api/v1/recursos")`.
+- Implementar los verbos HTTP correctos para el modelado de recursos: `GET`, `POST`, `PUT`, `DELETE`.
+- Envolver todos los retornos en un objeto `ResponseEntity<T>` para manipular con precisión los códigos de estado HTTP (200 OK, 201 Created, 204 No Content).
+
+### Paso 2: Inmutabilidad e Inyección de Dependencias (IoC)
+- Todas las dependencias requeridas por un componente (ej: el repositorio dentro del servicio, o el servicio dentro del controlador) deben declararse como `private final`.
+- Utilizar la **Inyección por Constructor** mediante la anotación `@RequiredArgsConstructor` de Lombok a nivel de clase. **PROHIBIDO el uso de `@Autowired` sobre campos/variables sueltas.**
+
+### Paso 3: Aislamiento del Modelo (Uso estricto de DTOs)
+- Queda terminantemente prohibido exponer las entidades de la base de datos (`@Entity`) en los endpoints públicos de la API.
+- Crear registros (`record`) o clases DTO específicas para la entrada (`RequestDTO`) y salida (`ResponseDTO`) de datos.
+
+### Paso 4: Manejo Global y Centralizado de Errores
+- Ningún controlador o servicio debe contener bloques `try-catch` repetitivos.
+- Crear una clase interceptora decorada con `@RestControllerAdvice` (`GlobalExceptionHandler`).
+- Utilizar métodos con `@ExceptionHandler` para capturar excepciones específicas (como `ResourceNotFoundException`) y transformarlas en una respuesta unificada tipo `ResponseEntity<ApiError>` que devuelva un JSON estructurado (timestamp, status, error, message, path).
+
+## 4. Restricciones Críticas (Errores Graves)
+- **PROHIBIDO** meter lógica de negocio o validaciones complejas dentro de los métodos del Controlador.
+- **PROHIBIDO** inventar URLs orientadas a acciones (ej: `/api/crearUsuario`). Utilizar los verbos HTTP sobre el recurso base.
+- **PROHIBIDO** devolver estados de éxito genéricos (como 200 OK) cuando se crea un recurso (exigir 201 CREATED).
+
+## 5. Checklist de Validación de Salida
+- [ ] ¿Todas las dependencias del sistema se inyectan como 'private final' vía constructor de Lombok?
+- [ ] ¿Los controladores están 100% libres de lógica de negocio y bloques try-catch?
+- [ ] ¿El cliente siempre recibe un DTO formateado y nunca una entidad directa de persistencia?
+- [ ] ¿Se maneja el control de excepciones de forma centralizada con un JSON uniforme para los errores?

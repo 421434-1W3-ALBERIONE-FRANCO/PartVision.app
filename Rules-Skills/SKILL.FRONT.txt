@@ -1,0 +1,44 @@
+---
+name: utn_frontend_vanilla_master
+description: Estándar de desarrollo Front-End en JavaScript puro, HTML semántico y Tailwind CSS para exámenes de la UTN.
+version: 2.0.0
+---
+
+## 1. Propósito
+Garantizar la construcción de aplicaciones web interactivas y de alto rendimiento utilizando tecnologías nativas del navegador, asegurando la separación estricta de la lógica y la vista, diseño interactivo responsive y accesibilidad.
+
+## 2. Contexto Técnico Mandatorio
+- **Lenguaje:** JavaScript Vanilla (ES6+) moderno (clases modulares, métodos de array como map/filter/reduce, async/await).
+- **Estilos:** Tailwind CSS (diseño responsive Mobile-First, paletas oscuras Slate/Zinc).
+- **Estructura:** Arquitectura limpia. Prohibido mezclar lógica matemática en archivos HTML o controladores de eventos.
+
+## 3. Instrucciones de Arquitectura y Buenas Prácticas
+
+### Paso 1: Gestión de Estado Aislada (State Management)
+- Toda la lógica del negocio debe vivir en una clase de JavaScript pura (ej: `GameCore` o `AppEngine`).
+- El estado interno debe manejarse bajo el principio de **inmutabilidad** (utilizar `Object.freeze()` si es necesario). Cada mutación de datos debe retornar un estado nuevo para evitar efectos colaterales.
+
+### Paso 2: El Controlador de la Vista (DOM Manager / Render Engine)
+- Crear una clase dedicada exclusivamente a pintar la pantalla (`RenderEngine`).
+- **Renderizado Eficiente:** Al actualizar la pantalla, limpiar zonas específicas o mutar nodos concretos en lugar de hacer `innerHTML = ""` de todo el documento para no destruir el rendimiento del navegador.
+- Utilizar elementos **SVG nativos** sobre Canvas cuando se requiera escalabilidad vectorial perfecta e interacción directa con elementos individuales del DOM.
+
+### Paso 3: Manejo de Eventos y Callbacks
+- Los listeners (`addEventListener`) se configuran una sola vez al arrancar la app.
+- Al capturar un evento (clic, input), el DOM Manager debe delegar la acción al núcleo lógico mediante un callback, recibir el nuevo estado y gatillar el re-renderizado.
+
+### Paso 4: Consumo de APIs y Persistencia
+- Las llamadas de red para configuraciones iniciales se realizan mediante `fetch` con bloques `try/catch` para capturar fallos.
+- Manejar explícitamente tres estados visuales en la pantalla: **Cargando** (spinners), **Éxito** (render de datos) y **Error** (banners de feedback flotantes).
+- Persistir configuraciones o rankings utilizando `localStorage`.
+
+## 4. Restricciones Críticas (Puntos de Desaprobación en la UTN)
+- **PROHIBIDO** el uso de frameworks de componentes (React, Angular, Vue).
+- **PROHIBIDO** duplicar identificadores `id` en el HTML o romper el árbol del DOM con etiquetas de cierre huérfanas.
+- **PROHIBIDO** el uso de variables globales (`var`). Todo debe estar encapsulado en módulos.
+
+## 5. Checklist de Validación de Salida
+- [ ] ¿El HTML es 100% semántico y responsivo en móviles mediante breakpoints de Tailwind?
+- [ ] ¿La lógica matemática está 100% libre de referencias a 'document.getElementById'?
+- [ ] ¿Se añadieron atributos ARIA (`aria-live`, `role="status"`, `aria-selected`) para accesibilidad?
+- [ ] ¿Las jugadas inválidas se rechazan con un feedback visual visible (banner temporal) sin romper la app?

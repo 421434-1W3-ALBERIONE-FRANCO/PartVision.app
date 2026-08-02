@@ -1,0 +1,37 @@
+---
+name: crear_slice_frontend
+description: Desarrollo del lado Angular de un slice ya probado en backend, consumiendo datos reales vía HttpClient.
+version: 1.0.0
+---
+
+## Propósito
+Al recibir un slice de backend ya funcionando (endpoint probado, compilando, con tests en verde), tu objetivo es entregar la parte de Angular que lo consume de punta a punta. No mockees datos bajo ninguna circunstancia: el enunciado exige comunicación real con el backend.
+
+## Precondición
+Antes de arrancar, confirmá que tenés:
+- La URL base del backend (normalmente `http://localhost:8080/api/v1/...`).
+- El contrato exacto del DTO de entrada/salida del endpoint (nombres de campos, tipos).
+- Si el endpoint requiere autenticación (token JWT en el header), o es público.
+
+Si falta alguno de estos datos, pedilo antes de generar código — no asumas la forma del contrato.
+
+## Orden estricto de entrega
+1. **Modelo/Interfaz TypeScript** (`models/` o `interfaces/`): reflejando exactamente el DTO del backend, sin campos de más ni de menos.
+2. **Servicio Angular** (`services/`): usando `HttpClient`, con métodos tipados (`Observable<T>`) para cada operación del slice (GET, POST, etc.). Base URL centralizada (environment o constante), no hardcodeada en cada método.
+3. **Componente(s)**: el mínimo necesario para el slice (standalone components salvo que el proyecto use NgModules por consigna de cátedra). Separar lógica de presentación de lógica de datos — el componente consume el servicio, no llama HttpClient directamente.
+4. **Ruta correspondiente** (`app.routes.ts` o el archivo de rutas del proyecto), con guard si el endpoint requiere sesión.
+5. **Manejo de estados obligatorio** en cada componente que consuma datos:
+   - Loading (mientras espera la respuesta).
+   - Error (mensaje claro si el backend responde 4xx/5xx).
+   - Éxito / datos cargados.
+   - Si hay formulario: validaciones básicas, no permitir submit con datos inválidos, mensaje de error visible por campo.
+
+## Restricciones
+- Prohibido mockear o simular datos, incluso "temporalmente".
+- Prohibido lógica de negocio compleja en el componente — si hay cálculo o transformación no trivial, va en el servicio.
+- No se testea frontend (no perder tiempo en specs de Angular salvo pedido explícito).
+- Cero errores visibles en consola del navegador al operar el flujo normal.
+- Cero explicaciones decorativas: entregá el código y, si tomaste alguna decisión de estructura no obvia, decila en una línea (ver SKILL-explicar-decisiones si aplica).
+
+## Al finalizar el slice, confirmá en una línea
+Que `ng serve` compila sin errores y que probaste manualmente el flujo contra el backend real (no contra datos hardcodeados).
