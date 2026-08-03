@@ -39,6 +39,13 @@ management:
     health:
       show-details: when-authorized
 
+ai:
+  vision:
+    # "stub" (no llama a ninguna IA, devuelve null) o "claude" (API real de Anthropic).
+    provider: ${AI_VISION_PROVIDER:stub}
+    # Modelo de vision cuando provider=claude. Podés usar uno más barato (ej: claude-haiku-4-5).
+    model: ${AI_VISION_MODEL:claude-opus-5}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

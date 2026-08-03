@@ -1,16 +1,17 @@
 package com.partvision.ai.vision;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
 /**
- * Implementacion por defecto (placeholder) hasta enchufar un proveedor real de
- * vision. Devuelve todo en null (no inventa nada): el operario completa los datos
- * en la revision. Cuando exista un extractor real, marcarlo como {@code @Primary}
- * (o activarlo por perfil) para que reemplace a este stub.
+ * Implementacion por defecto (no inventa nada: devuelve todo en null, el operario
+ * completa los datos en la revision). Activa salvo que se configure otro proveedor
+ * con {@code ai.vision.provider} (ej: "claude" -> {@link ClaudeVisionExtractor}).
  */
 @Component
+@ConditionalOnProperty(name = "ai.vision.provider", havingValue = "stub", matchIfMissing = true)
 public class StubVisionExtractor implements VisionExtractor {
 
     @Override
