@@ -41,10 +41,13 @@ management:
 
 ai:
   vision:
-    # "stub" (no llama a ninguna IA, devuelve null) o "claude" (API real de Anthropic).
+    # Proveedor de vision: "stub" (no llama a ninguna IA, devuelve null),
+    # "claude" (Anthropic) u "openai" (OpenAI). Requiere la API key del proveedor elegido.
     provider: ${AI_VISION_PROVIDER:stub}
-    # Modelo de vision cuando provider=claude. Podés usar uno más barato (ej: claude-haiku-4-5).
-    model: ${AI_VISION_MODEL:claude-opus-5}
+    # Modelo: NO se fija un default acá a proposito. El env AI_VISION_MODEL lo sobreescribe
+    # (relaxed binding); si no se define, cada proveedor aplica su propio default
+    # (claude-opus-5 para claude, gpt-4o para openai). Fijar uno aca forzaria un modelo
+    # de un proveedor sobre el otro.
 
 springdoc:
   swagger-ui:

@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
+// Smoke test: con la app recién iniciada y sin token guardado, se muestra el login.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// flutter_secure_storage no tiene plugin nativo en el entorno de test, así que
+// mockeamos su MethodChannel para que `read` devuelva null (sin sesión previa).
 
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:partvision_mobile/main.dart';
+import 'package:partvision_mobile/services/api_client.dart';
+import 'package:partvision_mobile/services/token_store.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      if (call.method == 'readAll') return <String, String>{};
+      // read / write / delete / containsKey: sin sesión persistida.
+      return null;
+    });
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
+  });
+
+  testWidgets('arranca en la pantalla de login cuando no hay sesión',
+      (WidgetTester tester) async {
+    final tokenStore = TokenStore();
+    final apiClient = ApiClient(tokenStore);
+
+    await tester.pumpWidget(
+      PartVisionApp(apiClient: apiClient, tokenStore: tokenStore),
+    );
+    await tester.pumpAndSettle();
+
+    // La pantalla de login muestra el título y el botón de ingreso.
+    expect(find.text('PartVision'), findsOneWidget);
+    expect(find.text('Ingresar'), findsOneWidget);
   });
 }

@@ -9,5 +9,6 @@ pubspec.lock
 .idea/
 .vscode/
 
-# Plataformas generadas por `flutter create .`
-# (se regeneran localmente; ver README)
+# Nota: las carpetas de plataforma (android/, web/, windows/) SÍ están versionadas
+# (se commitearon con el scaffold). Si preferís regenerarlas en vez de versionarlas,
+# ignoralas acá y borralas del índice con `git rm -r --cached`. Ver README.
