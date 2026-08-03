@@ -112,6 +112,13 @@
             <version>2.34.0</version>
         </dependency>
 
+        <!-- SDK oficial de OpenAI para el proveedor de vision alternativo -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>4.49.0</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

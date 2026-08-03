@@ -1,97 +1,182 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { StockService } from '../core/stock.service';
 import { Movimiento, StockResumen } from '../core/models';
+import { StockService } from '../core/stock.service';
 
 @Component({
   selector: 'app-stock',
-  imports: [FormsModule],
+  standalone: true,
+  imports: [FormsModule, DatePipe],
   template: `
-    <h2>Stock y movimientos</h2>
-
-    <div class="card">
-      <div class="row">
+    <div class="space-y-8 animate-fade-in max-w-7xl mx-auto">
+      <!-- Header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-dark-border pb-6">
         <div>
-          <label>Id de producto</label>
-          <input type="number" [(ngModel)]="productoId" (keyup.enter)="consultar()" />
+          <h2 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <span>Control de Stock e Inventario</span>
+            <span class="text-xs font-mono bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-2 py-0.5 rounded-full uppercase">
+              DEPOSITO REAL
+            </span>
+          </h2>
+          <p class="text-sm text-gray-400 mt-1">
+            Consultas de posiciones físicas y auditoría de movimientos de entrada y salida.
+          </p>
         </div>
-        <div style="flex:0 0 auto">
-          <button [disabled]="cargando()" (click)="consultar()">Consultar</button>
+
+        <div class="flex gap-3 items-center">
+          <input
+            [(ngModel)]="productoIdInput"
+            type="number"
+            placeholder="ID de Producto..."
+            class="px-3.5 py-2 bg-dark-surface border border-dark-border rounded-xl text-white text-xs w-36 focus:outline-none focus:border-neon-purple"
+          />
+          <button
+            (click)="consultar()"
+            class="px-4 py-2 rounded-xl text-xs font-semibold neon-button-primary cursor-pointer"
+          >
+            Consultar
+          </button>
         </div>
       </div>
-      @if (error()) { <p class="error">{{ error() }}</p> }
+
+      <!-- Resumen de Stock -->
+      @if (resumen()) {
+        <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card space-y-4">
+          <div class="flex items-center justify-between border-b border-dark-border pb-3">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Stock del Producto #{{ resumen()!.productoId }}
+            </h3>
+            <span class="text-xl font-extrabold text-neon-green font-mono">
+              Total: {{ resumen()!.total }} u.
+            </span>
+          </div>
+
+          @if (resumen()!.ubicaciones.length === 0) {
+            <p class="text-xs text-gray-500 py-4 text-center">Este producto no cuenta con existencias registradas en ubicaciones.</p>
+          } @else {
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                    <th class="py-3 px-4">ID Ubicación</th>
+                    <th class="py-3 px-4">Ruta / Código</th>
+                    <th class="py-3 px-4">Cantidad</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-dark-border/50">
+                  @for (l of resumen()!.ubicaciones; track l.ubicacionId) {
+                    <tr class="hover:bg-dark-surface/40 transition-colors">
+                      <td class="py-3 px-4 font-mono text-xs text-gray-400">#{{ l.ubicacionId }}</td>
+                      <td class="py-3 px-4 font-mono font-semibold text-neon-purple">
+                        {{ l.ubicacionPath }}
+                      </td>
+                      <td class="py-3 px-4 font-mono font-bold text-neon-green">
+                        {{ l.cantidad }} u.
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Movimientos Table -->
+      <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card space-y-4">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Historial de Movimientos
+        </h3>
+
+        @if (cargando()) {
+          <div class="py-12 text-center text-gray-400 font-mono">
+            <svg class="animate-spin h-8 w-8 text-neon-purple mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Ingresá un ID de producto arriba para consultar su stock y movimientos.
+          </div>
+        } @else if (movimientos().length === 0) {
+          <div class="py-12 text-center text-gray-500">
+            Sin movimientos registrados para esta consulta.
+          </div>
+        } @else {
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                  <th class="py-3 px-4">ID</th>
+                  <th class="py-3 px-4">Fecha</th>
+                  <th class="py-3 px-4">Tipo</th>
+                  <th class="py-3 px-4">Cantidad</th>
+                  <th class="py-3 px-4">Origen / Destino</th>
+                  <th class="py-3 px-4">Motivo</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-dark-border/50">
+                @for (m of movimientos(); track m.id) {
+                  <tr class="hover:bg-dark-surface/40 transition-colors">
+                    <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">#{{ m.id }}</td>
+                    <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">
+                      {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm') : '-' }}
+                    </td>
+                    <td class="py-3.5 px-4 font-semibold">
+                      <span class="px-2.5 py-1 rounded-md text-xs font-mono"
+                            [class]="m.tipo === 'ENTRADA' ? 'neon-badge-green' : m.tipo === 'SALIDA' ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'neon-badge-cyan'">
+                        {{ m.tipo }}
+                      </span>
+                    </td>
+                    <td class="py-3.5 px-4 font-mono font-bold text-white">
+                      {{ m.cantidad }} u.
+                    </td>
+                    <td class="py-3.5 px-4 text-xs font-mono text-gray-300">
+                      {{ m.ubicacionOrigenId ?? '-' }} ➔ {{ m.ubicacionDestinoId ?? '-' }}
+                    </td>
+                    <td class="py-3.5 px-4 text-gray-400 text-xs">
+                      {{ m.motivo ?? '-' }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
     </div>
-
-    @if (resumen(); as r) {
-      <div class="card">
-        <h3>Stock total: {{ r.total }}</h3>
-        <table>
-          <thead><tr><th>Ubicación</th><th>Cantidad</th></tr></thead>
-          <tbody>
-            @for (l of r.ubicaciones; track l.ubicacionId) {
-              <tr><td>{{ l.ubicacionPath }}</td><td>{{ l.cantidad }}</td></tr>
-            } @empty {
-              <tr><td colspan="2" class="muted">Sin stock registrado.</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-
-      <div class="card">
-        <h3>Historial de movimientos</h3>
-        <table>
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Cant.</th><th>Origen</th><th>Destino</th><th>Usuario</th><th>Motivo</th></tr></thead>
-          <tbody>
-            @for (m of movimientos(); track m.id) {
-              <tr>
-                <td>{{ m.fecha }}</td>
-                <td>{{ m.tipo }}</td>
-                <td>{{ m.cantidad }}</td>
-                <td>{{ m.ubicacionOrigenId ?? '—' }}</td>
-                <td>{{ m.ubicacionDestinoId ?? '—' }}</td>
-                <td>{{ m.usuarioId ?? '—' }}</td>
-                <td>{{ m.motivo ?? '—' }}</td>
-              </tr>
-            } @empty {
-              <tr><td colspan="7" class="muted">Sin movimientos.</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    }
   `,
 })
 export class Stock {
-  private stock = inject(StockService);
+  private service = inject(StockService);
 
-  productoId: number | null = null;
+  productoIdInput: number | null = 1;
   resumen = signal<StockResumen | null>(null);
   movimientos = signal<Movimiento[]>([]);
   cargando = signal(false);
-  error = signal<string | null>(null);
 
   consultar(): void {
-    if (this.productoId == null) {
-      this.error.set('Ingresá el id del producto');
-      return;
-    }
-    const id = this.productoId;
+    if (!this.productoIdInput) return;
     this.cargando.set(true);
-    this.error.set(null);
-    this.resumen.set(null);
-    this.movimientos.set([]);
-    this.stock.resumen(id).subscribe({
-      next: (r) => {
-        this.resumen.set(r);
+
+    this.service.resumen(this.productoIdInput).subscribe({
+      next: (res) => this.resumen.set(res),
+      error: () => this.resumen.set(null),
+    });
+
+    this.service.movimientos(this.productoIdInput).subscribe({
+      next: (page) => {
+        this.movimientos.set(page.content);
         this.cargando.set(false);
-        this.stock.movimientos(id).subscribe({
-          next: (p) => this.movimientos.set(p.content),
-          error: () => {},
-        });
       },
-      error: (e) => {
-        this.error.set(e?.status === 404 ? 'No existe el producto' : 'No se pudo consultar el stock');
+      error: () => {
+        this.movimientos.set([]);
         this.cargando.set(false);
       },
     });

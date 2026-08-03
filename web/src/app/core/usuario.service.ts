@@ -9,9 +9,19 @@ import { Usuario } from './models';
 export class UsuarioService {
   private http = inject(HttpClient);
 
-  // El backend expone /auth/register (crea OPERARIO). El listado de usuarios
-  // todavia no existe como endpoint.
-  registrar(req: { username: string; password: string; nombre: string }): Observable<Usuario> {
-    return this.http.post<Usuario>(`${API_BASE_URL}/auth/register`, req);
+  me(): Observable<Usuario> {
+    return this.http.get<Usuario>(`${API_BASE_URL}/usuarios/me`);
+  }
+
+  listar(): Observable<Usuario[]> {
+    return this.http.get<Usuario[]>(`${API_BASE_URL}/usuarios`);
+  }
+
+  crear(req: { username: string; password: string; nombre: string }): Observable<Usuario> {
+    return this.http.post<Usuario>(`${API_BASE_URL}/usuarios`, req);
+  }
+
+  toggleActivo(id: number): Observable<Usuario> {
+    return this.http.patch<Usuario>(`${API_BASE_URL}/usuarios/${id}/activo`, {});
   }
 }

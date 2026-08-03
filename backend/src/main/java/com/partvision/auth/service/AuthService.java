@@ -11,12 +11,14 @@ import com.partvision.auth.repository.UsuarioRepository;
 import com.partvision.auth.security.JwtService;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.InvalidCredentialsException;
+import com.partvision.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -33,6 +35,12 @@ public class AuthService {
 
     @Transactional
     public UsuarioResponse register(RegisterRequest request) {
+        return crearUsuario(request);
+    }
+
+    /** Crea un usuario con rol OPERARIO. Reutilizable desde el controller de admin. */
+    @Transactional
+    public UsuarioResponse crearUsuario(RegisterRequest request) {
         if (usuarioRepository.existsByUsername(request.username())) {
             throw new DuplicateResourceException("El username ya existe: " + request.username());
         }
@@ -47,6 +55,23 @@ public class AuthService {
                 .roles(new HashSet<>(Set.of(rol)))
                 .build();
 
+        return UsuarioResponse.from(usuarioRepository.save(usuario));
+    }
+
+    /** Lista todos los usuarios del sistema. */
+    @Transactional(readOnly = true)
+    public List<UsuarioResponse> listarTodos() {
+        return usuarioRepository.findAll().stream()
+                .map(UsuarioResponse::from)
+                .toList();
+    }
+
+    /** Activa o desactiva un usuario. No puede desactivarse a sí mismo (lo valida el controller). */
+    @Transactional
+    public UsuarioResponse toggleActivo(Long id) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        usuario.setActivo(!usuario.isActivo());
         return UsuarioResponse.from(usuarioRepository.save(usuario));
     }
 

@@ -4,6 +4,7 @@ import com.partvision.auth.controller.UsuarioController;
 import com.partvision.auth.domain.Rol;
 import com.partvision.auth.domain.Usuario;
 import com.partvision.auth.dto.UsuarioResponse;
+import com.partvision.auth.service.AuthService;
 import com.partvision.auth.service.UsuarioService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,8 @@ class SecurityIntegrationTest {
     private JwtService jwtService;
     @MockBean
     private UsuarioService usuarioService;
+    @MockBean
+    private AuthService authService;
 
     @Test
     void endpointProtegido_sinToken_devuelve401() throws Exception {

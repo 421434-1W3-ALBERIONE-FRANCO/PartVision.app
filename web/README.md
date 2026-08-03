@@ -1,11 +1,9 @@
-# PartVision — Panel web (Angular 20)
+# PartVision — Panel Web (Angular 20 + Three.js + Tailwind CSS)
 
-Panel de administración: productos, stock/movimientos, ubicaciones, revisión de
-extracciones IA, importación masiva y alta de usuarios. Consume el backend real
-(Spring Boot) con JWT. Sin datos mockeados.
+Panel de administración enterprise con diseño futurista Neon-Dark: productos, stock/movimientos, ubicaciones, revisión de extracciones IA, importación masiva CSV y gestión completa de usuarios. Consume el backend real (Spring Boot) autenticado via JWT.
 
 ## Requisitos
-- Node.js y npm (probado con Node 24).
+- Node.js y npm (probado con Node 20 / 24).
 - Backend corriendo (por defecto en `http://localhost:8080`).
 
 ## Ejecutar
@@ -14,23 +12,22 @@ cd web
 npm install
 npm start        # ng serve -> http://localhost:4200
 ```
-Login de dev: `admin` / `admin1234`.
+- Credenciales Dev: `admin` / `admin1234`.
 
-## Configuración
-- URL base del backend: `src/app/core/api.config.ts` (`API_BASE_URL`, default `http://localhost:8080/api/v1`).
-- El backend permite CORS desde `http://localhost:4200` (configurable con `CORS_ALLOWED_ORIGINS`).
+## UI/UX & Componentes 3D
+- **Tailwind CSS**: Estilos globales dark (`#0a0a0f`), tarjetas glassmorphism, botones y badges neón.
+- **Three.js Background (`three-bg.component.ts`)**: Fondo 3D animado de red de partículas en la pantalla de inicio de sesión.
+- **Three.js Logo (`three-logo.component.ts`)**: Logotipo 3D geométrico rotativo en el sidebar principal.
 
 ## Estructura
 ```
 src/app/
-├── core/       api.config, models (espejo de DTOs), services (1 por dominio),
-│               auth (service + interceptor JWT + guard)
+├── core/       api.config, models, services (usuario, producto, stock, ubicacion, extraccion, import),
+│               auth (service + interceptor JWT + guard), three-bg, three-logo
 └── features/   login, layout, productos, stock, ubicaciones, extracciones,
                 importacion, usuarios (standalone components)
 ```
 
 ## Estado
-- `ng build` compila sin errores (verificado).
-- No probado aún en navegador contra el backend en vivo; al levantarlo con `npm start`
-  se validan login + flujos. Endpoints ya validados desde el backend.
-- `gestión de usuarios`: por ahora solo alta (el backend aún no expone listado de usuarios).
+- `npx ng build` compila limpiamente (verificado).
+- Gestión completa de usuarios (listado, alta y toggle activo/inactivo).

@@ -45,6 +45,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request, null);
     }
 
+    @ExceptionHandler({
+            org.springframework.security.access.AccessDeniedException.class,
+            org.springframework.security.authorization.AuthorizationDeniedException.class
+    })
+    public ResponseEntity<ApiError> handleAccessDenied(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, "Acceso denegado: no tenés permisos para realizar esta acción", request, null);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex,
                                                         HttpServletRequest request) {
