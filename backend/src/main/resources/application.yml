@@ -42,7 +42,8 @@ management:
 ai:
   vision:
     # Proveedor de vision: "stub" (no llama a ninguna IA, devuelve null),
-    # "claude" (Anthropic) u "openai" (OpenAI). Requiere la API key del proveedor elegido.
+    # "claude" (Anthropic), "openai" (OpenAI) o "gemini" (Google, con nivel gratuito).
+    # Requiere la API key del proveedor elegido (ANTHROPIC/OPENAI/GEMINI_API_KEY).
     provider: ${AI_VISION_PROVIDER:stub}
     # Modelo: NO se fija un default acá a proposito. El env AI_VISION_MODEL lo sobreescribe
     # (relaxed binding); si no se define, cada proveedor aplica su propio default
