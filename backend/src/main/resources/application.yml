@@ -20,6 +20,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
+  servlet:
+    multipart:
+      # Fotos de repuestos desde el celular: el default de 1MB es muy chico.
+      max-file-size: 15MB
+      max-request-size: 15MB
 
 security:
   jwt:

@@ -36,7 +36,13 @@ class _AiCaptureScreenState extends State<AiCaptureScreen> {
   }
 
   Future<void> _tomarFoto() async {
-    final XFile? foto = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 85);
+    // maxWidth + imageQuality achican la foto: sube mas rapido, mas barata para
+    // la IA y evita el limite de upload; el texto de la etiqueta sigue legible.
+    final XFile? foto = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
     if (foto == null) return;
     setState(() {
       _procesando = true;
