@@ -32,7 +32,9 @@ public class GeminiVisionExtractor implements VisionExtractor {
             Reglas estrictas: si un dato no se ve con claridad en la imagen, poné null. \
             No inventes datos. No deduzcas compatibilidad con vehiculos. \
             detalles_extra es un objeto con atributos sueltos que veas (voltaje, medidas, \
-            origen, material, etc.) o {} si no hay ninguno. No agregues texto fuera del JSON.""";
+            origen, material, etc.) o {} si no hay ninguno. Si en la imagen hay varias cajas o \
+            etiquetas, extrae SOLO la del producto central o mas prominente. \
+            No agregues texto fuera del JSON.""";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -80,9 +82,12 @@ public class GeminiVisionExtractor implements VisionExtractor {
         Map<String, Object> imagePart = Map.of(
                 "inline_data", Map.of("mime_type", mimeType, "data", base64));
         Map<String, Object> content = Map.of("parts", List.of(textPart, imagePart));
+        // maxOutputTokens alto a proposito: los modelos Gemini 2.x gastan tokens de
+        // "thinking" (thoughtsTokenCount) ANTES de emitir la respuesta; con un limite
+        // bajo (ej: 1024) el JSON se corta a la mitad (finishReason=MAX_TOKENS) y no parsea.
         return Map.of(
                 "contents", List.of(content),
-                "generationConfig", Map.of("maxOutputTokens", 1024));
+                "generationConfig", Map.of("maxOutputTokens", 8192));
     }
 
     /** Extrae el texto concatenado de candidates[0].content.parts[].text. */
