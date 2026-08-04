@@ -72,8 +72,8 @@ class UbicacionServiceTest {
 
     @Test
     void create_jerarquiaInvertida_lanza422() {
-        Ubicacion nivel = Ubicacion.builder().id(1L).tipo(TipoUbicacion.NIVEL).codigo("2").path("A/1/4/2").build();
-        when(ubicacionRepository.findById(1L)).thenReturn(Optional.of(nivel));
+        Ubicacion cajon = Ubicacion.builder().id(1L).tipo(TipoUbicacion.CAJON).codigo("2").path("A/1/2").build();
+        when(ubicacionRepository.findById(1L)).thenReturn(Optional.of(cajon));
 
         assertThatThrownBy(() -> ubicacionService.create(new UbicacionRequest(TipoUbicacion.DEPOSITO, "B", 1L)))
                 .isInstanceOf(BusinessException.class);

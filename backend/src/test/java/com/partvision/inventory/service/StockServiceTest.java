@@ -60,7 +60,7 @@ class StockServiceTest {
     }
 
     private Ubicacion ubicacion(long id, String codigo) {
-        return Ubicacion.builder().id(id).tipo(TipoUbicacion.NIVEL).codigo(codigo).path(codigo).activo(true).build();
+        return Ubicacion.builder().id(id).tipo(TipoUbicacion.ESTANTE).codigo(codigo).path(codigo).activo(true).build();
     }
 
     private Stock stock(Ubicacion u, int cantidad) {
