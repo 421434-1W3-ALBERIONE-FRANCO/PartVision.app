@@ -115,7 +115,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
         <!-- Footer Info -->
         <div class="mt-8 pt-6 border-t border-dark-border/50 text-center">
           <p class="text-xs text-gray-500 font-mono">
-            PartVision IA Engine v2.4 • Powered by OpenAI Vision
+            PartVision IA Engine v2.4 • Motor de Visión IA
           </p>
         </div>
       </div>

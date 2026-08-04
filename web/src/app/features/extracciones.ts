@@ -15,7 +15,7 @@ import { ExtraccionService } from '../core/extraccion.service';
           <h2 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
             <span>Extracciones de Visión IA</span>
             <span class="text-xs font-mono bg-neon-pink/20 text-neon-pink border border-neon-pink/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              OPENAI VISION ACTIVE
+              VISIÓN IA ACTIVA
             </span>
           </h2>
           <p class="text-sm text-gray-400 mt-1">
