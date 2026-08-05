@@ -18,7 +18,8 @@ public record ProductoResponse(
         String descripcion,
         ProductoEstado estado,
         Map<String, Object> detallesExtra,
-        List<ProductoCodigoResponse> codigos
+        List<ProductoCodigoResponse> codigos,
+        String proveedor
 ) {
     public static ProductoResponse from(Producto producto) {
         Marca marca = producto.getMarca();
@@ -36,6 +37,7 @@ public record ProductoResponse(
                 producto.getDescripcion(),
                 producto.getEstado(),
                 producto.getDetallesExtra(),
-                codigos);
+                codigos,
+                producto.getProveedor());
     }
 }

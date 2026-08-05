@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * Importacion masiva de productos desde CSV.
- * Cabecera esperada (case-insensitive): sku, marca, categoria, descripcion, codigo, tipoCodigo.
+ * Cabecera esperada (case-insensitive): sku, marca, categoria, descripcion, codigo, tipoCodigo, proveedor.
  * Solo "descripcion" es obligatoria. Cada fila se procesa de forma independiente:
  * el error de una no frena las demas (importacion parcial).
  */
@@ -74,7 +74,8 @@ public class ImportService {
                 valor(registro, "categoria"),
                 descripcion,
                 valor(registro, "codigo"),
-                valor(registro, "tipoCodigo"));
+                valor(registro, "tipoCodigo"),
+                valor(registro, "proveedor"));
     }
 
     /** Devuelve el valor de la columna o null si no esta mapeada o esta en blanco. */

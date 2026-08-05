@@ -53,7 +53,7 @@ class ProductoServiceTest {
         });
 
         ProductoResponse response = service().create(
-                new ProductoRequest(null, null, null, "Filtro generico", null, null, null));
+                new ProductoRequest(null, null, null, "Filtro generico", null, null, null, null));
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.estado()).isEqualTo(ProductoEstado.ACTIVO);
@@ -79,7 +79,7 @@ class ProductoServiceTest {
         ProductoResponse response = service().create(new ProductoRequest(
                 "ABC-123", 5L, 7L, "Filtro de aceite", ProductoEstado.BORRADOR,
                 Map.of("origen", "Argentina"),
-                List.of(new ProductoCodigoRequest("7791234567890", "EAN13"))));
+                List.of(new ProductoCodigoRequest("7791234567890", "EAN13")), "Autopartes SA"));
 
         assertThat(response.marcaId()).isEqualTo(5L);
         assertThat(response.marcaNombre()).isEqualTo("Bosch");
@@ -87,6 +87,7 @@ class ProductoServiceTest {
         assertThat(response.estado()).isEqualTo(ProductoEstado.BORRADOR);
         assertThat(response.detallesExtra()).containsEntry("origen", "Argentina");
         assertThat(response.codigos()).extracting(c -> c.codigo()).containsExactly("7791234567890");
+        assertThat(response.proveedor()).isEqualTo("Autopartes SA");
     }
 
     @Test
@@ -96,7 +97,7 @@ class ProductoServiceTest {
         when(productoRepository.existsByMarcaAndSku(marca, "ABC-123")).thenReturn(true);
 
         assertThatThrownBy(() -> service().create(
-                new ProductoRequest("ABC-123", 5L, null, "Filtro", null, null, null)))
+                new ProductoRequest("ABC-123", 5L, null, "Filtro", null, null, null, null)))
                 .isInstanceOf(DuplicateResourceException.class);
     }
 
@@ -109,7 +110,7 @@ class ProductoServiceTest {
         });
 
         ProductoResponse response = service().create(
-                new ProductoRequest("SUELTO-1", null, null, "Repuesto sin marca", null, null, null));
+                new ProductoRequest("SUELTO-1", null, null, "Repuesto sin marca", null, null, null, null));
 
         assertThat(response.sku()).isEqualTo("SUELTO-1");
         assertThat(response.marcaId()).isNull();
@@ -121,7 +122,7 @@ class ProductoServiceTest {
 
         assertThatThrownBy(() -> service().create(new ProductoRequest(
                 null, null, null, "Filtro", null, null,
-                List.of(new ProductoCodigoRequest("DUP", null)))))
+                List.of(new ProductoCodigoRequest("DUP", null)), null)))
                 .isInstanceOf(DuplicateResourceException.class);
     }
 

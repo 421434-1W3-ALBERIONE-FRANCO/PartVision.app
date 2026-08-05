@@ -45,6 +45,7 @@ public class ProductoService {
                 .marca(marca)
                 .categoria(categoria)
                 .descripcion(request.descripcion())
+                .proveedor(request.proveedor())
                 .estado(request.estado() == null ? ProductoEstado.ACTIVO : request.estado())
                 .detallesExtra(request.detallesExtra() == null ? new HashMap<>() : new HashMap<>(request.detallesExtra()))
                 .build();

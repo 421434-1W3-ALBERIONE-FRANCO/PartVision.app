@@ -55,6 +55,10 @@ public class Producto extends Auditable {
     @Column(nullable = false, length = 500)
     private String descripcion;
 
+    /** Proveedor de origen (ej: catalogo importado). Opcional. */
+    @Column(length = 150)
+    private String proveedor;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductoEstado estado;

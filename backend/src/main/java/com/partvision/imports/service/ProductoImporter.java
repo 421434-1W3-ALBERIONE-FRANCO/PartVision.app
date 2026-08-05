@@ -40,7 +40,7 @@ public class ProductoImporter {
                 : List.of(new ProductoCodigoRequest(fila.codigo(), fila.tipoCodigo()));
 
         productoService.create(new ProductoRequest(
-                fila.sku(), marcaId, categoriaId, fila.descripcion(), null, null, codigos));
+                fila.sku(), marcaId, categoriaId, fila.descripcion(), null, null, codigos, fila.proveedor()));
     }
 
     private Marca resolverOCrearMarca(String nombre) {
@@ -60,7 +60,8 @@ public class ProductoImporter {
             String categoria,
             String descripcion,
             String codigo,
-            String tipoCodigo
+            String tipoCodigo,
+            String proveedor
     ) {
     }
 }

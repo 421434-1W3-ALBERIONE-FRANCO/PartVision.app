@@ -60,7 +60,7 @@ class AiExtractionControllerTest {
     @Test
     void confirmar_devuelve201() throws Exception {
         ProductoResponse prod = new ProductoResponse(50L, null, null, null, null, null, "Filtro",
-                ProductoEstado.ACTIVO, Map.of(), List.of());
+                ProductoEstado.ACTIVO, Map.of(), List.of(), null);
         when(aiExtractionService.confirmar(eq(1L), any()))
                 .thenReturn(new ConfirmacionResponse(1L, prod, null));
 

@@ -40,7 +40,7 @@ class ProductoImporterTest {
                 .thenReturn(Categoria.builder().id(7L).nombre("Filtros").build());
 
         importer.importar(new ProductoImporter.FilaProducto(
-                "ABC-123", "Bosch", "Filtros", "Filtro de aceite", "779123", "EAN13"));
+                "ABC-123", "Bosch", "Filtros", "Filtro de aceite", "779123", "EAN13", "EGSA"));
 
         verify(productoService).create(captor.capture());
         ProductoRequest req = captor.getValue();
@@ -49,6 +49,7 @@ class ProductoImporterTest {
         assertThat(req.descripcion()).isEqualTo("Filtro de aceite");
         assertThat(req.codigos()).hasSize(1);
         assertThat(req.codigos().get(0).codigo()).isEqualTo("779123");
+        assertThat(req.proveedor()).isEqualTo("EGSA");
     }
 
     @Test
@@ -59,7 +60,7 @@ class ProductoImporterTest {
                 .thenReturn(Optional.of(Categoria.builder().id(7L).nombre("Filtros").build()));
 
         importer.importar(new ProductoImporter.FilaProducto(
-                null, "Bosch", "Filtros", "Filtro", null, null));
+                null, "Bosch", "Filtros", "Filtro", null, null, null));
 
         verify(marcaRepository, never()).save(any());
         verify(categoriaRepository, never()).save(any());
@@ -70,7 +71,7 @@ class ProductoImporterTest {
     @Test
     void importar_sinMarcaCategoriaNiCodigo() {
         importer.importar(new ProductoImporter.FilaProducto(
-                null, null, null, "Repuesto suelto", null, null));
+                null, null, null, "Repuesto suelto", null, null, null));
 
         verify(marcaRepository, never()).findByNombreIgnoreCase(any());
         verify(categoriaRepository, never()).findByNombreIgnoreCaseAndParentIsNull(any());

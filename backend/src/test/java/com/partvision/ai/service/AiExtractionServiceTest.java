@@ -58,12 +58,12 @@ class AiExtractionServiceTest {
     }
 
     private ProductoRequest productoReq() {
-        return new ProductoRequest(null, null, null, "Filtro de aceite", null, null, null);
+        return new ProductoRequest(null, null, null, "Filtro de aceite", null, null, null, null);
     }
 
     private ProductoResponse productoResp() {
         return new ProductoResponse(50L, null, null, null, null, null, "Filtro de aceite",
-                ProductoEstado.ACTIVO, Map.of(), List.of());
+                ProductoEstado.ACTIVO, Map.of(), List.of(), null);
     }
 
     @Test

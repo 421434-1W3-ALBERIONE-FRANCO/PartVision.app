@@ -19,6 +19,7 @@ public record ProductoRequest(
         @NotBlank @Size(max = 500) String descripcion,
         ProductoEstado estado,
         Map<String, Object> detallesExtra,
-        @Valid List<ProductoCodigoRequest> codigos
+        @Valid List<ProductoCodigoRequest> codigos,
+        @Size(max = 150) String proveedor
 ) {
 }
