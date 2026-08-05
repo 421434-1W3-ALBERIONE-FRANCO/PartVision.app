@@ -26,4 +26,18 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
     @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
     @Query("select distinct p from Producto p left join p.codigos c where c.codigo = :codigo or p.sku = :codigo")
     Optional<Producto> findByCodigo(@Param("codigo") String codigo);
+
+    // Busqueda por texto parcial (case-insensitive) sobre descripcion, SKU, marca y
+    // categoria: el operario tipea "bujia", "volkswagen" o el codigo y filtra por lista.
+    @EntityGraph(attributePaths = {"marca", "categoria"})
+    @Query("""
+            select p from Producto p
+            left join p.marca m
+            left join p.categoria c
+            where lower(p.descripcion) like lower(concat('%', :q, '%'))
+               or lower(p.sku) like lower(concat('%', :q, '%'))
+               or lower(m.nombre) like lower(concat('%', :q, '%'))
+               or lower(c.nombre) like lower(concat('%', :q, '%'))
+            """)
+    Page<Producto> buscarPorTexto(@Param("q") String q, Pageable pageable);
 }

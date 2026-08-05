@@ -45,4 +45,11 @@ public class ProductoController {
     public ResponseEntity<ProductoResponse> buscarPorCodigo(@RequestParam String codigo) {
         return ResponseEntity.ok(productoService.buscarPorCodigo(codigo));
     }
+
+    /** Busqueda por texto parcial (descripcion, SKU, marca, categoria). Paginada. */
+    @GetMapping("/buscar-texto")
+    public ResponseEntity<Page<ProductoListItemResponse>> buscarPorTexto(
+            @RequestParam String q, Pageable pageable) {
+        return ResponseEntity.ok(productoService.buscarPorTexto(q, pageable));
+    }
 }

@@ -73,6 +73,12 @@ public class ProductoService {
         return productoRepository.findAllBy(pageable).map(ProductoListItemResponse::from);
     }
 
+    /** Busqueda por texto parcial (descripcion, SKU, marca, categoria). Paginada. */
+    @Transactional(readOnly = true)
+    public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
+        return productoRepository.buscarPorTexto(q, pageable).map(ProductoListItemResponse::from);
+    }
+
     @Transactional(readOnly = true)
     public ProductoResponse buscarPorCodigo(String codigo) {
         Producto producto = productoRepository.findByCodigo(codigo)

@@ -113,6 +113,17 @@ class ProductoControllerTest {
     }
 
     @Test
+    void buscarPorTexto_devuelve200() throws Exception {
+        var item = new ProductoListItemResponse(1L, "VW-1", "Aros Volkswagen",
+                ProductoEstado.ACTIVO, "Power Engine", "Aros");
+        when(productoService.buscarPorTexto(any(), any())).thenReturn(new PageImpl<>(List.of(item)));
+
+        mvc.perform(get("/api/v1/productos/buscar-texto").param("q", "volks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].descripcion").value("Aros Volkswagen"));
+    }
+
+    @Test
     void buscarPorCodigo_inexistente_devuelve404() throws Exception {
         when(productoService.buscarPorCodigo("nope"))
                 .thenThrow(new ResourceNotFoundException("No existe un producto con el codigo: nope"));

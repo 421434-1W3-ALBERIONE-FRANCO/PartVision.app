@@ -170,4 +170,17 @@ class ProductoServiceTest {
 
         assertThatThrownBy(() -> service().buscarPorCodigo("nope")).isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void buscarPorTexto_mapeaAListItem() {
+        Producto p = Producto.builder().id(1L).sku("VW-1").descripcion("Aros Volkswagen")
+                .estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.buscarPorTexto("volks", PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(p)));
+
+        var page = service().buscarPorTexto("volks", PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).descripcion()).isEqualTo("Aros Volkswagen");
+    }
 }
