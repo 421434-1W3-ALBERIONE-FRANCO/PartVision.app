@@ -18,6 +18,7 @@ class AiService {
     required int extraccionId,
     String? sku,
     int? marcaId,
+    String? marcaNombre,
     required String descripcion,
     List<ProductoCodigo> codigos = const [],
     int? ubicacionId,
@@ -27,6 +28,7 @@ class AiService {
       'producto': {
         if (sku != null && sku.isNotEmpty) 'sku': sku,
         if (marcaId != null) 'marcaId': marcaId,
+        if (marcaNombre != null && marcaNombre.isNotEmpty) 'marcaNombre': marcaNombre,
         'descripcion': descripcion,
         if (codigos.isNotEmpty) 'codigos': codigos.map((c) => c.toJson()).toList(),
       },

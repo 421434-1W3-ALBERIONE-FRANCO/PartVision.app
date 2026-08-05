@@ -16,6 +16,7 @@ class AiCaptureScreen extends StatefulWidget {
 
 class _AiCaptureScreenState extends State<AiCaptureScreen> {
   final _descripcion = TextEditingController();
+  final _marca = TextEditingController();
   final _sku = TextEditingController();
   final _codigo = TextEditingController();
   final _cantidad = TextEditingController();
@@ -28,6 +29,7 @@ class _AiCaptureScreenState extends State<AiCaptureScreen> {
   @override
   void dispose() {
     _descripcion.dispose();
+    _marca.dispose();
     _sku.dispose();
     _codigo.dispose();
     _cantidad.dispose();
@@ -58,6 +60,7 @@ class _AiCaptureScreenState extends State<AiCaptureScreen> {
       setState(() {
         _extraccion = extraccion;
         _descripcion.text = extraccion.sugeridoDescripcion ?? '';
+        _marca.text = extraccion.sugeridoMarca ?? '';
         _sku.text = extraccion.sugeridoCodigoPieza ?? '';
         _codigo.text = extraccion.sugeridoCodigoBarras ?? '';
       });
@@ -90,6 +93,7 @@ class _AiCaptureScreenState extends State<AiCaptureScreen> {
       final Producto producto = await context.read<AiService>().confirmar(
             extraccionId: _extraccion!.id,
             descripcion: _descripcion.text.trim(),
+            marcaNombre: _marca.text.trim(),
             sku: _sku.text.trim(),
             codigos: codigo.isEmpty ? const [] : [ProductoCodigo(codigo: codigo)],
             cantidad: cantidad,
@@ -150,6 +154,8 @@ class _AiCaptureScreenState extends State<AiCaptureScreen> {
             style: const TextStyle(fontStyle: FontStyle.italic)),
         const SizedBox(height: 12),
         TextField(controller: _descripcion, decoration: const InputDecoration(labelText: 'Descripción *', border: OutlineInputBorder())),
+        const SizedBox(height: 12),
+        TextField(controller: _marca, decoration: const InputDecoration(labelText: 'Marca', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         TextField(controller: _sku, decoration: const InputDecoration(labelText: 'SKU / código de pieza', border: OutlineInputBorder())),
         const SizedBox(height: 12),

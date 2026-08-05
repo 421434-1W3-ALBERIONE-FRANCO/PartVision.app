@@ -25,16 +25,89 @@ import { ProductoService } from '../core/producto.service';
           </p>
         </div>
 
-        <button
-          (click)="mostrarNuevo.set(!mostrarNuevo())"
-          class="px-5 py-2.5 rounded-xl font-semibold text-sm neon-button-primary flex items-center gap-2 self-start md:self-auto cursor-pointer"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{{ mostrarNuevo() ? 'Cerrar Formulario' : 'Nuevo Producto' }}</span>
-        </button>
+        <div class="flex gap-2 self-start md:self-auto">
+          <button
+            (click)="toggleMarcas()"
+            class="px-5 py-2.5 rounded-xl font-semibold text-sm bg-dark-surface border border-dark-border hover:border-neon-cyan text-gray-200 flex items-center gap-2 cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            <span>{{ mostrarMarcas() ? 'Cerrar Marcas' : 'Marcas' }}</span>
+          </button>
+
+          <button
+            (click)="mostrarNuevo.set(!mostrarNuevo())"
+            class="px-5 py-2.5 rounded-xl font-semibold text-sm neon-button-primary flex items-center gap-2 cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>{{ mostrarNuevo() ? 'Cerrar Formulario' : 'Nuevo Producto' }}</span>
+          </button>
+        </div>
       </div>
+
+      <!-- Panel: Gestión de Marcas -->
+      @if (mostrarMarcas()) {
+        <div class="glass-panel p-6 rounded-2xl border border-neon-purple/40 shadow-neon animate-slide-in">
+          <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            Gestión de Marcas
+          </h3>
+
+          <!-- Alta rápida -->
+          <div class="flex gap-2 mb-5">
+            <input
+              [(ngModel)]="nuevaMarcaNombre"
+              type="text"
+              placeholder="Nueva marca..."
+              (keyup.enter)="crearMarca()"
+              class="flex-1 min-w-0 px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
+            />
+            <button
+              [disabled]="marcaGuardando()"
+              (click)="crearMarca()"
+              class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 whitespace-nowrap"
+            >
+              Agregar
+            </button>
+          </div>
+
+          @if (marcaError()) {
+            <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+              {{ marcaError() }}
+            </div>
+          }
+
+          @if (marcas().length === 0) {
+            <p class="text-gray-500 text-sm py-4 text-center">No hay marcas cargadas todavía.</p>
+          } @else {
+            <ul class="divide-y divide-dark-border/50 max-h-80 overflow-y-auto">
+              @for (m of marcas(); track m.id) {
+                <li class="flex items-center gap-3 py-2.5">
+                  @if (editandoMarcaId() === m.id) {
+                    <input
+                      [(ngModel)]="editandoMarcaNombre"
+                      type="text"
+                      (keyup.enter)="guardarEdicionMarca(m.id)"
+                      class="flex-1 min-w-0 px-3 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
+                    />
+                    <button (click)="guardarEdicionMarca(m.id)" class="text-xs font-semibold text-neon-green hover:underline cursor-pointer">Guardar</button>
+                    <button (click)="cancelarEdicionMarca()" class="text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
+                  } @else {
+                    <span class="flex-1 min-w-0 truncate text-white text-sm">{{ m.nombre }}</span>
+                    <button (click)="iniciarEdicionMarca(m)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">Editar</button>
+                    <button (click)="eliminarMarca(m)" class="text-xs font-semibold text-red-400 hover:underline cursor-pointer">Eliminar</button>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
 
       <!-- Form: Crear Producto -->
       @if (mostrarNuevo()) {
@@ -60,18 +133,47 @@ import { ProductoService } from '../core/producto.service';
             </div>
 
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
-                Marca *
-              </label>
-              <select
-                [(ngModel)]="marcaId"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm"
-              >
-                <option [ngValue]="null">Seleccionar marca...</option>
-                @for (m of marcas(); track m.id) {
-                  <option [ngValue]="m.id">{{ m.nombre }}</option>
-                }
-              </select>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300">
+                  Marca
+                </label>
+                <button
+                  type="button"
+                  (click)="mostrarNuevaMarca.set(!mostrarNuevaMarca())"
+                  class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer"
+                >
+                  {{ mostrarNuevaMarca() ? 'Cancelar' : '+ Nueva marca' }}
+                </button>
+              </div>
+              @if (mostrarNuevaMarca()) {
+                <div class="flex gap-2">
+                  <input
+                    [(ngModel)]="nuevaMarcaNombre"
+                    type="text"
+                    placeholder="Nombre de la marca"
+                    (keyup.enter)="crearMarca()"
+                    class="flex-1 min-w-0 px-3.5 py-2.5 bg-dark-surface border border-neon-cyan/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+                  />
+                  <button
+                    type="button"
+                    [disabled]="marcaGuardando()"
+                    (click)="crearMarca()"
+                    class="px-3 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  >
+                    Crear
+                  </button>
+                </div>
+              } @else {
+                <select
+                  [(ngModel)]="marcaId"
+                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm"
+                >
+                  <option [ngValue]="null">Seleccionar marca...</option>
+                  @for (m of marcas(); track m.id) {
+                    <option [ngValue]="m.id">{{ m.nombre }}</option>
+                  }
+                </select>
+              }
             </div>
 
             <div>
@@ -226,9 +328,87 @@ export class Productos implements OnInit {
   guardando = signal(false);
   error = signal<string | null>(null);
 
+  // Gestión de marcas
+  mostrarMarcas = signal(false);
+  mostrarNuevaMarca = signal(false);
+  nuevaMarcaNombre = '';
+  marcaGuardando = signal(false);
+  marcaError = signal<string | null>(null);
+  editandoMarcaId = signal<number | null>(null);
+  editandoMarcaNombre = '';
+
   ngOnInit(): void {
     this.cargar();
+    this.cargarMarcas();
+  }
+
+  cargarMarcas(): void {
     this.marcaService.listar().subscribe((list) => this.marcas.set(list));
+  }
+
+  toggleMarcas(): void {
+    this.mostrarMarcas.update((v) => !v);
+    this.marcaError.set(null);
+    this.editandoMarcaId.set(null);
+  }
+
+  crearMarca(): void {
+    const nombre = this.nuevaMarcaNombre.trim();
+    if (!nombre) {
+      this.marcaError.set('El nombre de la marca es obligatorio');
+      return;
+    }
+    this.marcaError.set(null);
+    this.marcaGuardando.set(true);
+    this.marcaService.crear(nombre).subscribe({
+      next: (marca) => {
+        this.nuevaMarcaNombre = '';
+        this.marcaGuardando.set(false);
+        this.mostrarNuevaMarca.set(false);
+        this.cargarMarcas();
+        // Si venía del formulario de producto, la deja seleccionada.
+        this.marcaId = marca.id;
+      },
+      error: (e) => {
+        this.marcaError.set(e?.error?.message ?? 'No se pudo crear la marca');
+        this.marcaGuardando.set(false);
+      },
+    });
+  }
+
+  iniciarEdicionMarca(m: Marca): void {
+    this.editandoMarcaId.set(m.id);
+    this.editandoMarcaNombre = m.nombre;
+    this.marcaError.set(null);
+  }
+
+  cancelarEdicionMarca(): void {
+    this.editandoMarcaId.set(null);
+    this.editandoMarcaNombre = '';
+  }
+
+  guardarEdicionMarca(id: number): void {
+    const nombre = this.editandoMarcaNombre.trim();
+    if (!nombre) {
+      this.marcaError.set('El nombre de la marca es obligatorio');
+      return;
+    }
+    this.marcaService.editar(id, nombre).subscribe({
+      next: () => {
+        this.cancelarEdicionMarca();
+        this.cargarMarcas();
+      },
+      error: (e) => this.marcaError.set(e?.error?.message ?? 'No se pudo actualizar la marca'),
+    });
+  }
+
+  eliminarMarca(m: Marca): void {
+    if (!confirm(`¿Eliminar la marca "${m.nombre}"?`)) return;
+    this.marcaError.set(null);
+    this.marcaService.eliminar(m.id).subscribe({
+      next: () => this.cargarMarcas(),
+      error: (e) => this.marcaError.set(e?.error?.message ?? 'No se pudo eliminar la marca'),
+    });
   }
 
   cargar(): void {

@@ -1,11 +1,9 @@
 package com.partvision.imports.service;
 
 import com.partvision.catalog.domain.Categoria;
-import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.dto.ProductoCodigoRequest;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.repository.CategoriaRepository;
-import com.partvision.catalog.repository.MarcaRepository;
 import com.partvision.catalog.service.ProductoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,13 +24,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductoImporter {
 
-    private final MarcaRepository marcaRepository;
     private final CategoriaRepository categoriaRepository;
     private final ProductoService productoService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void importar(FilaProducto fila) {
-        Long marcaId = fila.marca() == null ? null : resolverOCrearMarca(fila.marca()).getId();
+        // La marca se resuelve/crea por nombre dentro del catalogo (ProductoRequest.marcaNombre).
         Long categoriaId = fila.categoria() == null ? null : resolverOCrearCategoria(fila.categoria()).getId();
 
         List<ProductoCodigoRequest> codigos = fila.codigo() == null
@@ -40,12 +37,7 @@ public class ProductoImporter {
                 : List.of(new ProductoCodigoRequest(fila.codigo(), fila.tipoCodigo()));
 
         productoService.create(new ProductoRequest(
-                fila.sku(), marcaId, categoriaId, fila.descripcion(), null, null, codigos, fila.proveedor()));
-    }
-
-    private Marca resolverOCrearMarca(String nombre) {
-        return marcaRepository.findByNombreIgnoreCase(nombre)
-                .orElseGet(() -> marcaRepository.save(Marca.builder().nombre(nombre).build()));
+                fila.sku(), null, fila.marca(), categoriaId, fila.descripcion(), null, null, codigos, fila.proveedor()));
     }
 
     private Categoria resolverOCrearCategoria(String nombre) {

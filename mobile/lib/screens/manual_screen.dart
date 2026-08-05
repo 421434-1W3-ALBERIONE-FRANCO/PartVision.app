@@ -18,6 +18,7 @@ class ManualScreen extends StatefulWidget {
 class _ManualScreenState extends State<ManualScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descripcion = TextEditingController();
+  final _marca = TextEditingController();
   final _sku = TextEditingController();
   late final TextEditingController _codigo;
   bool _guardando = false;
@@ -32,6 +33,7 @@ class _ManualScreenState extends State<ManualScreen> {
   @override
   void dispose() {
     _descripcion.dispose();
+    _marca.dispose();
     _sku.dispose();
     _codigo.dispose();
     super.dispose();
@@ -47,6 +49,7 @@ class _ManualScreenState extends State<ManualScreen> {
       final codigo = _codigo.text.trim();
       final producto = await context.read<ProductoService>().crear(
             descripcion: _descripcion.text.trim(),
+            marcaNombre: _marca.text.trim(),
             sku: _sku.text.trim(),
             codigos: codigo.isEmpty ? const [] : [ProductoCodigo(codigo: codigo)],
           );
@@ -78,6 +81,11 @@ class _ManualScreenState extends State<ManualScreen> {
                 controller: _descripcion,
                 decoration: const InputDecoration(labelText: 'Descripción *', border: OutlineInputBorder()),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'La descripción es obligatoria' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _marca,
+                decoration: const InputDecoration(labelText: 'Marca', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextFormField(

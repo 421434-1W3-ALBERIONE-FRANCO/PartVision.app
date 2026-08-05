@@ -1,10 +1,8 @@
 package com.partvision.imports.service;
 
 import com.partvision.catalog.domain.Categoria;
-import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.repository.CategoriaRepository;
-import com.partvision.catalog.repository.MarcaRepository;
 import com.partvision.catalog.service.ProductoService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +22,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProductoImporterTest {
 
-    @Mock private MarcaRepository marcaRepository;
     @Mock private CategoriaRepository categoriaRepository;
     @Mock private ProductoService productoService;
     @InjectMocks private ProductoImporter importer;
@@ -32,9 +29,7 @@ class ProductoImporterTest {
     private final ArgumentCaptor<ProductoRequest> captor = ArgumentCaptor.forClass(ProductoRequest.class);
 
     @Test
-    void importar_creaMarcaYCategoriaNuevasYElCodigo() {
-        when(marcaRepository.findByNombreIgnoreCase("Bosch")).thenReturn(Optional.empty());
-        when(marcaRepository.save(any(Marca.class))).thenReturn(Marca.builder().id(5L).nombre("Bosch").build());
+    void importar_pasaMarcaPorNombreYCreaCategoriaNuevaYElCodigo() {
         when(categoriaRepository.findByNombreIgnoreCaseAndParentIsNull("Filtros")).thenReturn(Optional.empty());
         when(categoriaRepository.save(any(Categoria.class)))
                 .thenReturn(Categoria.builder().id(7L).nombre("Filtros").build());
@@ -44,7 +39,9 @@ class ProductoImporterTest {
 
         verify(productoService).create(captor.capture());
         ProductoRequest req = captor.getValue();
-        assertThat(req.marcaId()).isEqualTo(5L);
+        // La marca viaja como texto: el catalogo la resuelve o la crea.
+        assertThat(req.marcaId()).isNull();
+        assertThat(req.marcaNombre()).isEqualTo("Bosch");
         assertThat(req.categoriaId()).isEqualTo(7L);
         assertThat(req.descripcion()).isEqualTo("Filtro de aceite");
         assertThat(req.codigos()).hasSize(1);
@@ -53,19 +50,16 @@ class ProductoImporterTest {
     }
 
     @Test
-    void importar_reutilizaMarcaYCategoriaExistentes() {
-        when(marcaRepository.findByNombreIgnoreCase("Bosch"))
-                .thenReturn(Optional.of(Marca.builder().id(5L).nombre("Bosch").build()));
+    void importar_reutilizaCategoriaExistente() {
         when(categoriaRepository.findByNombreIgnoreCaseAndParentIsNull("Filtros"))
                 .thenReturn(Optional.of(Categoria.builder().id(7L).nombre("Filtros").build()));
 
         importer.importar(new ProductoImporter.FilaProducto(
                 null, "Bosch", "Filtros", "Filtro", null, null, null));
 
-        verify(marcaRepository, never()).save(any());
         verify(categoriaRepository, never()).save(any());
         verify(productoService).create(captor.capture());
-        assertThat(captor.getValue().marcaId()).isEqualTo(5L);
+        assertThat(captor.getValue().marcaNombre()).isEqualTo("Bosch");
     }
 
     @Test
@@ -73,11 +67,11 @@ class ProductoImporterTest {
         importer.importar(new ProductoImporter.FilaProducto(
                 null, null, null, "Repuesto suelto", null, null, null));
 
-        verify(marcaRepository, never()).findByNombreIgnoreCase(any());
         verify(categoriaRepository, never()).findByNombreIgnoreCaseAndParentIsNull(any());
         verify(productoService).create(captor.capture());
         ProductoRequest req = captor.getValue();
         assertThat(req.marcaId()).isNull();
+        assertThat(req.marcaNombre()).isNull();
         assertThat(req.categoriaId()).isNull();
         assertThat(req.codigos()).isEmpty();
     }

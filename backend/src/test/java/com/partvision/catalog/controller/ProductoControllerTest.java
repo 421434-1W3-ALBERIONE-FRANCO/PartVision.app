@@ -76,6 +76,37 @@ class ProductoControllerTest {
     }
 
     @Test
+    void agregarCodigo_devuelve201() throws Exception {
+        when(productoService.agregarCodigo(org.mockito.ArgumentMatchers.eq(1L), any()))
+                .thenReturn(sampleProducto());
+
+        mvc.perform(post("/api/v1/productos/1/codigos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigo\":\"7791234567890\",\"tipo\":\"BARRA\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void agregarCodigo_codigoVacio_devuelve400() throws Exception {
+        mvc.perform(post("/api/v1/productos/1/codigos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigo\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void agregarCodigo_duplicado_devuelve409() throws Exception {
+        when(productoService.agregarCodigo(org.mockito.ArgumentMatchers.eq(1L), any()))
+                .thenThrow(new DuplicateResourceException("El codigo ya esta registrado"));
+
+        mvc.perform(post("/api/v1/productos/1/codigos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigo\":\"7791234567890\",\"tipo\":\"BARRA\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void findById_devuelve200() throws Exception {
         when(productoService.findById(1L)).thenReturn(sampleProducto());
 

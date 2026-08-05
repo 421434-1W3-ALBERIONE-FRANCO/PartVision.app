@@ -9,6 +9,7 @@ import '../services/producto_service.dart';
 import '../services/stock_service.dart';
 import '../widgets/producto_card.dart';
 import 'ai_capture_screen.dart';
+import 'asociar_codigo_screen.dart';
 import 'manual_screen.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -112,6 +113,18 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
+  Future<void> _asociarACatalogo() async {
+    final codigo = _codigo;
+    if (codigo == null) return;
+    final asociado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AsociarCodigoScreen(codigo: codigo)),
+    );
+    // Si se asoció, vuelvo a buscar: ahora el código matchea y aparece el form de entrada.
+    if (asociado == true && mounted) {
+      await _buscar(codigo);
+    }
+  }
+
   void _reiniciar() {
     setState(() {
       _procesando = false;
@@ -179,6 +192,15 @@ class _ScanScreenState extends State<ScanScreen> {
                   if (_noExiste) ...[
                     Text('No existe un producto con el código "$_codigo".'),
                     const SizedBox(height: 12),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.link),
+                      label: const Text('Asociar a un producto existente'),
+                      onPressed: _asociarACatalogo,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('¿Es un producto nuevo, fuera del catálogo?',
+                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const SizedBox(height: 4),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.photo_camera),
                       label: const Text('Crear con IA'),

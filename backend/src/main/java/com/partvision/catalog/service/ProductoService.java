@@ -33,7 +33,7 @@ public class ProductoService {
 
     @Transactional
     public ProductoResponse create(ProductoRequest request) {
-        Marca marca = request.marcaId() == null ? null : marcaService.getEntity(request.marcaId());
+        Marca marca = resolverMarca(request);
         Categoria categoria = request.categoriaId() == null ? null : categoriaService.getEntity(request.categoriaId());
 
         validarSkuUnico(request, marca);
@@ -61,6 +61,21 @@ public class ProductoService {
         return ProductoResponse.from(getEntity(id));
     }
 
+    /**
+     * Asocia un codigo (ej: el codigo de barras fisico escaneado) a un producto que
+     * ya existe en el catalogo. Uso tipico: el catalogo importado no trae el EAN, y
+     * el operario lo vincula escaneando la caja en el deposito.
+     */
+    @Transactional
+    public ProductoResponse agregarCodigo(Long productoId, ProductoCodigoRequest request) {
+        Producto producto = getEntity(productoId);
+        if (productoCodigoRepository.existsByCodigo(request.codigo())) {
+            throw new DuplicateResourceException("El codigo ya esta registrado: " + request.codigo());
+        }
+        producto.addCodigo(ProductoCodigo.builder().codigo(request.codigo()).tipo(request.tipo()).build());
+        return ProductoResponse.from(productoRepository.save(producto));
+    }
+
     /** Uso interno de otros modulos (ej: inventario). */
     @Transactional(readOnly = true)
     public Producto getEntity(Long id) {
@@ -84,6 +99,20 @@ public class ProductoService {
         Producto producto = productoRepository.findByCodigo(codigo)
                 .orElseThrow(() -> new ResourceNotFoundException("No existe un producto con el codigo: " + codigo));
         return ProductoResponse.from(producto);
+    }
+
+    /**
+     * Marca por id (existente) o por nombre (texto libre → resuelve o crea).
+     * El id tiene prioridad; si no hay ninguno, el producto queda sin marca.
+     */
+    private Marca resolverMarca(ProductoRequest request) {
+        if (request.marcaId() != null) {
+            return marcaService.getEntity(request.marcaId());
+        }
+        if (request.marcaNombre() != null && !request.marcaNombre().isBlank()) {
+            return marcaService.getOrCreateByNombre(request.marcaNombre());
+        }
+        return null;
     }
 
     private void validarSkuUnico(ProductoRequest request, Marca marca) {

@@ -17,4 +17,12 @@ export class MarcaService {
   crear(nombre: string): Observable<Marca> {
     return this.http.post<Marca>(this.base, { nombre });
   }
+
+  editar(id: number, nombre: string): Observable<Marca> {
+    return this.http.put<Marca>(`${this.base}/${id}`, { nombre });
+  }
+
+  eliminar(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}`);
+  }
 }

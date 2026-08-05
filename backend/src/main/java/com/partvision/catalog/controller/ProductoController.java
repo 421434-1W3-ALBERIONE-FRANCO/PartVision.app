@@ -1,5 +1,6 @@
 package com.partvision.catalog.controller;
 
+import com.partvision.catalog.dto.ProductoCodigoRequest;
 import com.partvision.catalog.dto.ProductoListItemResponse;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
@@ -33,6 +34,13 @@ public class ProductoController {
     @GetMapping("/{id}")
     public ResponseEntity<ProductoResponse> findById(@PathVariable Long id) {
         return ResponseEntity.ok(productoService.findById(id));
+    }
+
+    /** Asocia un codigo (ej: codigo de barras escaneado) a un producto existente. */
+    @PostMapping("/{id}/codigos")
+    public ResponseEntity<ProductoResponse> agregarCodigo(
+            @PathVariable Long id, @Valid @RequestBody ProductoCodigoRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(productoService.agregarCodigo(id, request));
     }
 
     @GetMapping

@@ -53,7 +53,7 @@ class ProductoServiceTest {
         });
 
         ProductoResponse response = service().create(
-                new ProductoRequest(null, null, null, "Filtro generico", null, null, null, null));
+                new ProductoRequest(null, null, null, null, "Filtro generico", null, null, null, null));
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.estado()).isEqualTo(ProductoEstado.ACTIVO);
@@ -77,7 +77,7 @@ class ProductoServiceTest {
         });
 
         ProductoResponse response = service().create(new ProductoRequest(
-                "ABC-123", 5L, 7L, "Filtro de aceite", ProductoEstado.BORRADOR,
+                "ABC-123", 5L, null, 7L, "Filtro de aceite", ProductoEstado.BORRADOR,
                 Map.of("origen", "Argentina"),
                 List.of(new ProductoCodigoRequest("7791234567890", "EAN13")), "Autopartes SA"));
 
@@ -97,8 +97,56 @@ class ProductoServiceTest {
         when(productoRepository.existsByMarcaAndSku(marca, "ABC-123")).thenReturn(true);
 
         assertThatThrownBy(() -> service().create(
-                new ProductoRequest("ABC-123", 5L, null, "Filtro", null, null, null, null)))
+                new ProductoRequest("ABC-123", 5L, null, null, "Filtro", null, null, null, null)))
                 .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void create_marcaPorNombre_resuelveOCrea() {
+        Marca marca = Marca.builder().id(8L).nombre("Fram").build();
+        when(marcaService.getOrCreateByNombre("Fram")).thenReturn(marca);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> {
+            Producto p = inv.getArgument(0);
+            p.setId(3L);
+            return p;
+        });
+
+        ProductoResponse response = service().create(new ProductoRequest(
+                null, null, "Fram", null, "Filtro detectado por IA", null, null, null, null));
+
+        assertThat(response.marcaId()).isEqualTo(8L);
+        assertThat(response.marcaNombre()).isEqualTo("Fram");
+    }
+
+    @Test
+    void create_marcaIdTienePrioridadSobreNombre() {
+        Marca marca = Marca.builder().id(5L).nombre("Bosch").build();
+        when(marcaService.getEntity(5L)).thenReturn(marca);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> {
+            Producto p = inv.getArgument(0);
+            p.setId(4L);
+            return p;
+        });
+
+        ProductoResponse response = service().create(new ProductoRequest(
+                null, 5L, "Fram", null, "Filtro", null, null, null, null));
+
+        assertThat(response.marcaId()).isEqualTo(5L);
+        assertThat(response.marcaNombre()).isEqualTo("Bosch");
+    }
+
+    @Test
+    void create_marcaNombreEnBlanco_quedaSinMarca() {
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> {
+            Producto p = inv.getArgument(0);
+            p.setId(5L);
+            return p;
+        });
+
+        ProductoResponse response = service().create(new ProductoRequest(
+                null, null, "   ", null, "Repuesto", null, null, null, null));
+
+        assertThat(response.marcaId()).isNull();
     }
 
     @Test
@@ -110,7 +158,7 @@ class ProductoServiceTest {
         });
 
         ProductoResponse response = service().create(
-                new ProductoRequest("SUELTO-1", null, null, "Repuesto sin marca", null, null, null, null));
+                new ProductoRequest("SUELTO-1", null, null, null, "Repuesto sin marca", null, null, null, null));
 
         assertThat(response.sku()).isEqualTo("SUELTO-1");
         assertThat(response.marcaId()).isNull();
@@ -121,9 +169,40 @@ class ProductoServiceTest {
         when(productoCodigoRepository.existsByCodigo("DUP")).thenReturn(true);
 
         assertThatThrownBy(() -> service().create(new ProductoRequest(
-                null, null, null, "Filtro", null, null,
+                null, null, null, null, "Filtro", null, null,
                 List.of(new ProductoCodigoRequest("DUP", null)), null)))
                 .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void agregarCodigo_aProductoExistente() {
+        Producto producto = Producto.builder().id(1L).descripcion("Filtro").estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.findWithDetallesById(1L)).thenReturn(Optional.of(producto));
+        when(productoCodigoRepository.existsByCodigo("7791234567890")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoResponse response = service().agregarCodigo(
+                1L, new ProductoCodigoRequest("7791234567890", "BARRA"));
+
+        assertThat(response.codigos()).extracting(c -> c.codigo()).containsExactly("7791234567890");
+    }
+
+    @Test
+    void agregarCodigo_duplicado_lanza409() {
+        Producto producto = Producto.builder().id(1L).descripcion("Filtro").estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.findWithDetallesById(1L)).thenReturn(Optional.of(producto));
+        when(productoCodigoRepository.existsByCodigo("DUP")).thenReturn(true);
+
+        assertThatThrownBy(() -> service().agregarCodigo(1L, new ProductoCodigoRequest("DUP", "BARRA")))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void agregarCodigo_productoInexistente_lanza404() {
+        when(productoRepository.findWithDetallesById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().agregarCodigo(99L, new ProductoCodigoRequest("X", "BARRA")))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

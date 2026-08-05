@@ -12,6 +12,15 @@ class ProductoService {
     return Producto.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Asocia un codigo (ej: codigo de barras escaneado) a un producto existente.
+  Future<Producto> agregarCodigo(int productoId, String codigo, {String tipo = 'BARRA'}) async {
+    final json = await api.post('/productos/$productoId/codigos', {
+      'codigo': codigo,
+      'tipo': tipo,
+    });
+    return Producto.fromJson(json as Map<String, dynamic>);
+  }
+
   /// Busqueda por texto parcial (nombre, marca, SKU, categoria). Devuelve una lista.
   Future<List<Producto>> buscarPorTexto(String q, {int size = 50}) async {
     final json = await api.get(
@@ -23,6 +32,7 @@ class ProductoService {
   Future<Producto> crear({
     String? sku,
     int? marcaId,
+    String? marcaNombre,
     int? categoriaId,
     required String descripcion,
     List<ProductoCodigo> codigos = const [],
@@ -30,6 +40,7 @@ class ProductoService {
     final json = await api.post('/productos', {
       if (sku != null && sku.isNotEmpty) 'sku': sku,
       if (marcaId != null) 'marcaId': marcaId,
+      if (marcaNombre != null && marcaNombre.isNotEmpty) 'marcaNombre': marcaNombre,
       if (categoriaId != null) 'categoriaId': categoriaId,
       'descripcion': descripcion,
       if (codigos.isNotEmpty) 'codigos': codigos.map((c) => c.toJson()).toList(),

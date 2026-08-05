@@ -15,6 +15,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
 
     boolean existsByMarcaAndSku(Marca marca, String sku);
 
+    boolean existsByMarca(Marca marca);
+
     @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
     Optional<Producto> findWithDetallesById(Long id);
 
