@@ -1,6 +1,9 @@
 package com.partvision.inventory.controller;
 
 import com.partvision.inventory.dto.AjusteRequest;
+import com.partvision.inventory.dto.ConteoLoteRequest;
+import com.partvision.inventory.dto.ConteoRequest;
+import com.partvision.inventory.dto.ConteoResponse;
 import com.partvision.inventory.dto.EntradaRequest;
 import com.partvision.inventory.dto.MovimientoResponse;
 import com.partvision.inventory.dto.SalidaRequest;
@@ -17,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/stock")
@@ -43,6 +48,18 @@ public class StockController {
     @PostMapping("/transferencias")
     public ResponseEntity<MovimientoResponse> transferencia(@Valid @RequestBody TransferenciaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.transferir(request));
+    }
+
+    /** Conteo físico: fija la cantidad real de un producto en una ubicación. */
+    @PostMapping("/conteos")
+    public ResponseEntity<ConteoResponse> conteo(@Valid @RequestBody ConteoRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(stockService.registrarConteo(request));
+    }
+
+    /** Conteo físico en lote (carga de existencias reales de varias líneas). */
+    @PostMapping("/conteos/lote")
+    public ResponseEntity<List<ConteoResponse>> conteoLote(@Valid @RequestBody ConteoLoteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(stockService.registrarConteoLote(request));
     }
 
     @GetMapping

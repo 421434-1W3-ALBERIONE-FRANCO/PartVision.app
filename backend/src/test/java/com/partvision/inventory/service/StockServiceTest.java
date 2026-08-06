@@ -7,6 +7,9 @@ import com.partvision.inventory.domain.MovimientoStock;
 import com.partvision.inventory.domain.Stock;
 import com.partvision.inventory.domain.TipoMovimiento;
 import com.partvision.inventory.dto.AjusteRequest;
+import com.partvision.inventory.dto.ConteoLoteRequest;
+import com.partvision.inventory.dto.ConteoRequest;
+import com.partvision.inventory.dto.ConteoResponse;
 import com.partvision.inventory.dto.EntradaRequest;
 import com.partvision.inventory.dto.MovimientoResponse;
 import com.partvision.inventory.dto.SalidaRequest;
@@ -172,6 +175,81 @@ class StockServiceTest {
         assertThatThrownBy(() -> service.ajustar(
                 new AjusteRequest(1L, 10L, TipoMovimiento.ENTRADA, 5, "x")))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // ---------- CONTEO ----------
+
+    @Test
+    void conteo_masQueLoRegistrado_generaAjustePositivo() {
+        Ubicacion u = ubicacion(10L, "A");
+        when(ubicacionService.getEntity(10L)).thenReturn(u);
+        when(stockRepository.lockByProductoAndUbicacion(1L, 10L)).thenReturn(Optional.of(stock(u, 8)));
+
+        ConteoResponse r = service.registrarConteo(new ConteoRequest(1L, 10L, 12, null));
+
+        assertThat(r.cantidadAnterior()).isEqualTo(8);
+        assertThat(r.cantidadNueva()).isEqualTo(12);
+        assertThat(r.movimiento().tipo()).isEqualTo(TipoMovimiento.AJUSTE_POSITIVO);
+        assertThat(r.movimiento().cantidad()).isEqualTo(4);
+        assertThat(r.movimiento().motivo()).isEqualTo("Conteo fisico");
+    }
+
+    @Test
+    void conteo_menosQueLoRegistrado_generaAjusteNegativo() {
+        Ubicacion u = ubicacion(10L, "A");
+        when(ubicacionService.getEntity(10L)).thenReturn(u);
+        when(stockRepository.lockByProductoAndUbicacion(1L, 10L)).thenReturn(Optional.of(stock(u, 10)));
+
+        ConteoResponse r = service.registrarConteo(new ConteoRequest(1L, 10L, 3, "recuento anual"));
+
+        assertThat(r.cantidadNueva()).isEqualTo(3);
+        assertThat(r.movimiento().tipo()).isEqualTo(TipoMovimiento.AJUSTE_NEGATIVO);
+        assertThat(r.movimiento().cantidad()).isEqualTo(7);
+        assertThat(r.movimiento().motivo()).isEqualTo("recuento anual");
+    }
+
+    @Test
+    void conteo_igualALoRegistrado_noGeneraMovimiento() {
+        Ubicacion u = ubicacion(10L, "A");
+        when(ubicacionService.getEntity(10L)).thenReturn(u);
+        when(stockRepository.lockByProductoAndUbicacion(1L, 10L)).thenReturn(Optional.of(stock(u, 5)));
+
+        ConteoResponse r = service.registrarConteo(new ConteoRequest(1L, 10L, 5, null));
+
+        assertThat(r.cantidadNueva()).isEqualTo(5);
+        assertThat(r.movimiento()).isNull();
+    }
+
+    @Test
+    void conteo_sinStockPrevio_creaYAjusta() {
+        Ubicacion u = ubicacion(10L, "A");
+        when(ubicacionService.getEntity(10L)).thenReturn(u);
+        when(stockRepository.lockByProductoAndUbicacion(1L, 10L)).thenReturn(Optional.empty());
+
+        ConteoResponse r = service.registrarConteo(new ConteoRequest(1L, 10L, 15, null));
+
+        assertThat(r.cantidadAnterior()).isZero();
+        assertThat(r.cantidadNueva()).isEqualTo(15);
+        assertThat(r.movimiento().tipo()).isEqualTo(TipoMovimiento.AJUSTE_POSITIVO);
+        assertThat(r.movimiento().cantidad()).isEqualTo(15);
+    }
+
+    @Test
+    void conteoLote_procesaTodasLasLineas() {
+        Ubicacion a = ubicacion(10L, "A");
+        Ubicacion b = ubicacion(11L, "B");
+        when(ubicacionService.getEntity(10L)).thenReturn(a);
+        when(ubicacionService.getEntity(11L)).thenReturn(b);
+        when(stockRepository.lockByProductoAndUbicacion(1L, 10L)).thenReturn(Optional.of(stock(a, 2)));
+        when(stockRepository.lockByProductoAndUbicacion(1L, 11L)).thenReturn(Optional.empty());
+
+        List<ConteoResponse> r = service.registrarConteoLote(new ConteoLoteRequest(List.of(
+                new ConteoRequest(1L, 10L, 5, null),
+                new ConteoRequest(1L, 11L, 9, null))));
+
+        assertThat(r).hasSize(2);
+        assertThat(r.get(0).cantidadNueva()).isEqualTo(5);
+        assertThat(r.get(1).cantidadNueva()).isEqualTo(9);
     }
 
     // ---------- TRANSFERENCIA ----------

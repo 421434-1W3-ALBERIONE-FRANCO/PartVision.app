@@ -27,10 +27,16 @@ export class ProductoService {
   crear(req: {
     sku?: string;
     marcaId?: number;
+    marcaNombre?: string;
     categoriaId?: number;
     descripcion: string;
     codigos?: ProductoCodigo[];
   }): Observable<Producto> {
     return this.http.post<Producto>(this.base, req);
+  }
+
+  /** Asocia un código (ej: código de barras) a un producto existente. */
+  agregarCodigo(productoId: number, codigo: string, tipo = 'BARRA'): Observable<Producto> {
+    return this.http.post<Producto>(`${this.base}/${productoId}/codigos`, { codigo, tipo });
   }
 }

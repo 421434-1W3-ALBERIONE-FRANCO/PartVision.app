@@ -43,8 +43,9 @@ import { ImportService } from '../core/import.service';
                 {{ archivo() ? archivo()!.name : 'Hacé clic para seleccionar tu archivo CSV' }}
               </p>
               <p class="text-xs text-gray-400 mt-1">
-                Formato esperado: <code class="text-neon-cyan bg-dark-surface px-1.5 py-0.5 rounded font-mono">codigo_pieza,marca,descripcion,codigo_barras</code>
+                Columnas (solo <span class="text-neon-cyan">descripcion</span> es obligatoria): <code class="text-neon-cyan bg-dark-surface px-1.5 py-0.5 rounded font-mono">sku,marca,categoria,descripcion,codigo,tipoCodigo,proveedor</code>
               </p>
+              <p class="text-xs text-gray-500 mt-1">Los duplicados (en el archivo o ya cargados) se omiten automáticamente.</p>
             </div>
           </div>
         </div>
@@ -77,7 +78,7 @@ import { ImportService } from '../core/import.service';
             Resumen de la Importación
           </h3>
 
-          <div class="grid grid-cols-3 gap-4 text-center">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div class="bg-dark-surface p-4 rounded-xl border border-dark-border">
               <span class="text-xs text-gray-400 uppercase font-mono block">Procesadas</span>
               <span class="text-2xl font-extrabold text-white font-mono">{{ resultado()!.totalFilas }}</span>
@@ -85,6 +86,10 @@ import { ImportService } from '../core/import.service';
             <div class="bg-green-500/10 p-4 rounded-xl border border-green-500/30">
               <span class="text-xs text-green-400 uppercase font-mono block">Exitosas</span>
               <span class="text-2xl font-extrabold text-green-400 font-mono">{{ resultado()!.importados }}</span>
+            </div>
+            <div class="bg-amber-500/10 p-4 rounded-xl border border-amber-500/30">
+              <span class="text-xs text-amber-400 uppercase font-mono block">Omitidas (dup.)</span>
+              <span class="text-2xl font-extrabold text-amber-400 font-mono">{{ resultado()!.omitidos }}</span>
             </div>
             <div class="bg-red-500/10 p-4 rounded-xl border border-red-500/30">
               <span class="text-xs text-red-400 uppercase font-mono block">Con Error</span>

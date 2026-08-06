@@ -247,6 +247,7 @@ import { ProductoService } from '../core/producto.service';
                   <th class="py-3 px-4">Marca</th>
                   <th class="py-3 px-4">Categoría</th>
                   <th class="py-3 px-4">Estado</th>
+                  <th class="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-dark-border/50">
@@ -276,7 +277,36 @@ import { ProductoService } from '../core/producto.service';
                         {{ p.estado }}
                       </span>
                     </td>
+                    <td class="py-3.5 px-4 text-right">
+                      <button
+                        (click)="abrirCodigo(p.id)"
+                        class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Código
+                      </button>
+                    </td>
                   </tr>
+                  @if (agregandoCodigoId() === p.id) {
+                    <tr class="bg-dark-surface/40">
+                      <td colspan="7" class="py-3 px-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-xs text-gray-400">Código de barras para <span class="text-white font-semibold">{{ p.descripcion }}</span>:</span>
+                          <input
+                            [(ngModel)]="nuevoCodigo"
+                            type="text"
+                            placeholder="Escaneá o escribí el código"
+                            (keyup.enter)="guardarCodigo(p.id)"
+                            class="flex-1 min-w-48 px-3 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-neon-cyan"
+                          />
+                          <button [disabled]="codigoGuardando()" (click)="guardarCodigo(p.id)" class="px-3 py-1.5 rounded-lg text-xs font-semibold neon-button-primary cursor-pointer disabled:opacity-50">Asociar</button>
+                          <button (click)="cerrarCodigo()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
+                          @if (codigoError()) {
+                            <span class="text-xs text-red-400 w-full">{{ codigoError() }}</span>
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -336,6 +366,12 @@ export class Productos implements OnInit {
   marcaError = signal<string | null>(null);
   editandoMarcaId = signal<number | null>(null);
   editandoMarcaNombre = '';
+
+  // Asociar código a producto existente
+  agregandoCodigoId = signal<number | null>(null);
+  nuevoCodigo = '';
+  codigoGuardando = signal(false);
+  codigoError = signal<string | null>(null);
 
   ngOnInit(): void {
     this.cargar();
@@ -408,6 +444,38 @@ export class Productos implements OnInit {
     this.marcaService.eliminar(m.id).subscribe({
       next: () => this.cargarMarcas(),
       error: (e) => this.marcaError.set(e?.error?.message ?? 'No se pudo eliminar la marca'),
+    });
+  }
+
+  abrirCodigo(productoId: number): void {
+    this.agregandoCodigoId.set(productoId);
+    this.nuevoCodigo = '';
+    this.codigoError.set(null);
+  }
+
+  cerrarCodigo(): void {
+    this.agregandoCodigoId.set(null);
+    this.nuevoCodigo = '';
+  }
+
+  guardarCodigo(productoId: number): void {
+    const codigo = this.nuevoCodigo.trim();
+    if (!codigo) {
+      this.codigoError.set('Ingresá un código');
+      return;
+    }
+    this.codigoError.set(null);
+    this.codigoGuardando.set(true);
+    this.service.agregarCodigo(productoId, codigo).subscribe({
+      next: () => {
+        this.codigoGuardando.set(false);
+        this.cerrarCodigo();
+        this.cargar();
+      },
+      error: (e) => {
+        this.codigoError.set(e?.error?.message ?? 'No se pudo asociar el código');
+        this.codigoGuardando.set(false);
+      },
     });
   }
 

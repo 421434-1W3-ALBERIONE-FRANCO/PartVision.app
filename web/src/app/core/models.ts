@@ -58,6 +58,14 @@ export interface StockResumen {
   ubicaciones: StockLinea[];
 }
 
+export interface ConteoResponse {
+  productoId: number;
+  ubicacionId: number;
+  cantidadAnterior: number;
+  cantidadNueva: number;
+  movimiento: Movimiento | null;
+}
+
 export interface Movimiento {
   id: number;
   productoId: number;
@@ -91,6 +99,7 @@ export interface AiExtraction {
 export interface ImportResult {
   totalFilas: number;
   importados: number;
+  omitidos: number;
   errores: { fila: number; mensaje: string }[];
 }
 

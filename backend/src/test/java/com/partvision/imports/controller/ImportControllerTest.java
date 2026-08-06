@@ -34,16 +34,17 @@ class ImportControllerTest {
     @Test
     void importarProductos_devuelve200ConResumen() throws Exception {
         when(importService.importarCsv(any()))
-                .thenReturn(new ImportResultResponse(2, 1,
-                        List.of(new ImportResultResponse.FilaError(3, "El codigo ya esta registrado"))));
+                .thenReturn(new ImportResultResponse(3, 1, 1,
+                        List.of(new ImportResultResponse.FilaError(3, "La descripcion es obligatoria"))));
 
         MockMultipartFile archivo = new MockMultipartFile("archivo", "productos.csv", "text/csv",
                 "descripcion\nFiltro".getBytes(StandardCharsets.UTF_8));
 
         mvc.perform(multipart("/api/v1/importaciones/productos").file(archivo))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalFilas").value(2))
+                .andExpect(jsonPath("$.totalFilas").value(3))
                 .andExpect(jsonPath("$.importados").value(1))
+                .andExpect(jsonPath("$.omitidos").value(1))
                 .andExpect(jsonPath("$.errores[0].fila").value(3));
     }
 }

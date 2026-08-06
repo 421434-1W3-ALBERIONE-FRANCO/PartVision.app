@@ -74,7 +74,7 @@ class ImportServiceTest {
     }
 
     @Test
-    void importar_errorDelImporter_seReportaYSigue() {
+    void importar_duplicadoEnBd_seOmiteNoEsError() {
         doThrow(new DuplicateResourceException("El codigo ya esta registrado: 779100"))
                 .when(productoImporter).importar(any());
         String contenido = """
@@ -85,8 +85,43 @@ class ImportServiceTest {
         ImportResultResponse r = importService.importarCsv(csv(contenido));
 
         assertThat(r.importados()).isZero();
+        assertThat(r.omitidos()).isEqualTo(1);
+        assertThat(r.errores()).isEmpty();
+    }
+
+    @Test
+    void importar_duplicadoEnArchivo_seOmiteYNoLlamaAlImporter() {
+        String contenido = """
+                sku,marca,categoria,descripcion,codigo,tipoCodigo
+                ,Bosch,Filtros,Filtro de aceite,779100,EAN13
+                ,Bosch,Filtros,Filtro de aceite (repetido),779100,EAN13
+                """;
+
+        ImportResultResponse r = importService.importarCsv(csv(contenido));
+
+        assertThat(r.totalFilas()).isEqualTo(2);
+        assertThat(r.importados()).isEqualTo(1);
+        assertThat(r.omitidos()).isEqualTo(1);
+        assertThat(r.errores()).isEmpty();
+        // El duplicado se salta antes de tocar la BD: el importer se llama una sola vez.
+        verify(productoImporter, org.mockito.Mockito.times(1)).importar(any());
+    }
+
+    @Test
+    void importar_errorRealDelImporter_seReportaComoError() {
+        doThrow(new BusinessException("fallo raro"))
+                .when(productoImporter).importar(any());
+        String contenido = """
+                descripcion,codigo
+                Filtro,779100
+                """;
+
+        ImportResultResponse r = importService.importarCsv(csv(contenido));
+
+        assertThat(r.importados()).isZero();
+        assertThat(r.omitidos()).isZero();
         assertThat(r.errores()).hasSize(1);
-        assertThat(r.errores().get(0).mensaje()).contains("ya esta registrado");
+        assertThat(r.errores().get(0).mensaje()).contains("fallo raro");
     }
 
     @Test

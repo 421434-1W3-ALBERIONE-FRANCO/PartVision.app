@@ -4,6 +4,7 @@ import com.partvision.auth.security.JwtService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.inventory.domain.TipoMovimiento;
+import com.partvision.inventory.dto.ConteoResponse;
 import com.partvision.inventory.dto.MovimientoResponse;
 import com.partvision.inventory.dto.StockResumenResponse;
 import com.partvision.inventory.service.StockService;
@@ -102,6 +103,47 @@ class StockControllerTest {
                         .content("{\"productoId\":1,\"ubicacionOrigenId\":1,\"ubicacionDestinoId\":2,\"cantidad\":3}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tipo").value("TRANSFERENCIA"));
+    }
+
+    @Test
+    void conteo_devuelve201() throws Exception {
+        when(stockService.registrarConteo(any())).thenReturn(
+                new ConteoResponse(1L, 10L, 8, 12, movimiento(TipoMovimiento.AJUSTE_POSITIVO)));
+
+        mvc.perform(post("/api/v1/stock/conteos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":1,\"ubicacionId\":10,\"cantidadReal\":12}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.cantidadAnterior").value(8))
+                .andExpect(jsonPath("$.cantidadNueva").value(12));
+    }
+
+    @Test
+    void conteo_cantidadNegativa_devuelve400() throws Exception {
+        mvc.perform(post("/api/v1/stock/conteos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":1,\"ubicacionId\":10,\"cantidadReal\":-1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void conteoLote_devuelve201() throws Exception {
+        when(stockService.registrarConteoLote(any())).thenReturn(List.of(
+                new ConteoResponse(1L, 10L, 0, 5, movimiento(TipoMovimiento.AJUSTE_POSITIVO))));
+
+        mvc.perform(post("/api/v1/stock/conteos/lote")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conteos\":[{\"productoId\":1,\"ubicacionId\":10,\"cantidadReal\":5}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].cantidadNueva").value(5));
+    }
+
+    @Test
+    void conteoLote_vacio_devuelve400() throws Exception {
+        mvc.perform(post("/api/v1/stock/conteos/lote")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conteos\":[]}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

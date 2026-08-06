@@ -7,6 +7,9 @@ import com.partvision.inventory.domain.MovimientoStock;
 import com.partvision.inventory.domain.Stock;
 import com.partvision.inventory.domain.TipoMovimiento;
 import com.partvision.inventory.dto.AjusteRequest;
+import com.partvision.inventory.dto.ConteoLoteRequest;
+import com.partvision.inventory.dto.ConteoRequest;
+import com.partvision.inventory.dto.ConteoResponse;
 import com.partvision.inventory.dto.EntradaRequest;
 import com.partvision.inventory.dto.MovimientoResponse;
 import com.partvision.inventory.dto.SalidaRequest;
@@ -19,6 +22,8 @@ import com.partvision.location.service.UbicacionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -76,6 +81,39 @@ public class StockService {
 
         return registrarMovimiento(request.tipo(), producto, request.cantidad(),
                 null, ubicacion, request.motivo());
+    }
+
+    /**
+     * Fija la cantidad real de un producto en una ubicacion (conteo fisico) y genera
+     * el ajuste por la diferencia. Si la cantidad ya coincidia, no crea movimiento.
+     */
+    @Transactional
+    public ConteoResponse registrarConteo(ConteoRequest request) {
+        Producto producto = productoService.getEntity(request.productoId());
+        Ubicacion ubicacion = ubicacionService.getEntity(request.ubicacionId());
+
+        Stock stock = obtenerOCrear(producto, ubicacion);
+        int anterior = stock.getCantidad();
+        int real = request.cantidadReal();
+        int delta = real - anterior;
+
+        stock.setCantidad(real);
+        stockRepository.save(stock);
+
+        MovimientoResponse movimiento = null;
+        if (delta != 0) {
+            TipoMovimiento tipo = delta > 0 ? TipoMovimiento.AJUSTE_POSITIVO : TipoMovimiento.AJUSTE_NEGATIVO;
+            String motivo = request.motivo() == null || request.motivo().isBlank()
+                    ? "Conteo fisico" : request.motivo();
+            movimiento = registrarMovimiento(tipo, producto, Math.abs(delta), null, ubicacion, motivo);
+        }
+        return new ConteoResponse(producto.getId(), ubicacion.getId(), anterior, real, movimiento);
+    }
+
+    /** Conteo de varias lineas en una sola transaccion (todo o nada). */
+    @Transactional
+    public List<ConteoResponse> registrarConteoLote(ConteoLoteRequest request) {
+        return request.conteos().stream().map(this::registrarConteo).toList();
     }
 
     @Transactional

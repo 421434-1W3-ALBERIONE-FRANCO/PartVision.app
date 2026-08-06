@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { Movimiento, StockResumen } from '../core/models';
-import { StockService } from '../core/stock.service';
+import { ConteoLinea, StockService } from '../core/stock.service';
 
 @Component({
   selector: 'app-stock',
@@ -87,6 +87,52 @@ import { StockService } from '../core/stock.service';
         </div>
       }
 
+      <!-- Conteo físico / carga de cantidades reales -->
+      <div class="glass-panel rounded-2xl p-6 border border-neon-cyan/40 shadow-neon-cyan space-y-4">
+        <div class="flex items-center justify-between border-b border-dark-border pb-3">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            Conteo físico (carga de cantidades reales)
+          </h3>
+          <button (click)="agregarLinea()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border hover:border-neon-cyan text-gray-200 cursor-pointer">
+            + Línea
+          </button>
+        </div>
+        <p class="text-xs text-gray-400">
+          Ingresá la cantidad <span class="text-white font-semibold">real</span> que hay del producto en la ubicación. El sistema calcula el ajuste automáticamente.
+        </p>
+
+        <div class="space-y-2">
+          @for (l of lineasConteo(); track $index) {
+            <div class="grid grid-cols-12 gap-2 items-center">
+              <input [(ngModel)]="l.productoId" type="number" placeholder="ID Producto"
+                class="col-span-4 md:col-span-3 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
+              <input [(ngModel)]="l.ubicacionId" type="number" placeholder="ID Ubicación"
+                class="col-span-4 md:col-span-3 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
+              <input [(ngModel)]="l.cantidadReal" type="number" placeholder="Cant. real"
+                class="col-span-3 md:col-span-2 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
+              <button (click)="quitarLinea($index)" class="col-span-1 text-red-400 hover:text-red-300 cursor-pointer text-lg" title="Quitar">×</button>
+            </div>
+          }
+        </div>
+
+        @if (conteoError()) {
+          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ conteoError() }}</div>
+        }
+        @if (conteoOk()) {
+          <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ conteoOk() }}</div>
+        }
+
+        <div class="flex justify-end">
+          <button [disabled]="guardandoConteo()" (click)="guardarConteo()"
+            class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+            {{ guardandoConteo() ? 'Guardando...' : 'Registrar conteo' }}
+          </button>
+        </div>
+      </div>
+
       <!-- Movimientos Table -->
       <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card space-y-4">
         <h3 class="text-lg font-bold text-white flex items-center gap-2">
@@ -160,6 +206,55 @@ export class Stock {
   resumen = signal<StockResumen | null>(null);
   movimientos = signal<Movimiento[]>([]);
   cargando = signal(false);
+
+  // Conteo físico
+  lineasConteo = signal<ConteoLinea[]>([
+    { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
+  ]);
+  guardandoConteo = signal(false);
+  conteoError = signal<string | null>(null);
+  conteoOk = signal<string | null>(null);
+
+  agregarLinea(): void {
+    this.lineasConteo.update((ls) => [
+      ...ls,
+      { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
+    ]);
+  }
+
+  quitarLinea(i: number): void {
+    this.lineasConteo.update((ls) => ls.filter((_, idx) => idx !== i));
+  }
+
+  guardarConteo(): void {
+    const validas = this.lineasConteo().filter(
+      (l) => l.productoId != null && l.ubicacionId != null && l.cantidadReal != null && l.cantidadReal >= 0,
+    );
+    if (validas.length === 0) {
+      this.conteoError.set('Completá al menos una línea (producto, ubicación y cantidad real).');
+      this.conteoOk.set(null);
+      return;
+    }
+    this.conteoError.set(null);
+    this.conteoOk.set(null);
+    this.guardandoConteo.set(true);
+    this.service.conteoLote(validas).subscribe({
+      next: (res) => {
+        const ajustados = res.filter((r) => r.movimiento != null).length;
+        this.conteoOk.set(`Conteo registrado: ${res.length} línea(s), ${ajustados} con ajuste.`);
+        this.guardandoConteo.set(false);
+        this.lineasConteo.set([
+          { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
+        ]);
+        // Si estaba consultando un producto, refresca el resumen.
+        if (this.productoIdInput) this.consultar();
+      },
+      error: (e) => {
+        this.conteoError.set(e?.error?.message ?? 'No se pudo registrar el conteo.');
+        this.guardandoConteo.set(false);
+      },
+    });
+  }
 
   consultar(): void {
     if (!this.productoIdInput) return;
