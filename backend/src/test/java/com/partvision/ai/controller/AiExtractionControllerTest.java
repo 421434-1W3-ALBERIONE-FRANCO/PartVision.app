@@ -1,8 +1,10 @@
 package com.partvision.ai.controller;
 
 import com.partvision.ai.domain.EstadoExtraccion;
+import com.partvision.ai.dto.AccionSugerida;
 import com.partvision.ai.dto.AiExtractionResponse;
 import com.partvision.ai.dto.ConfirmacionResponse;
+import com.partvision.ai.dto.SugerenciaAccionResponse;
 import com.partvision.ai.service.AiExtractionService;
 import com.partvision.auth.security.JwtService;
 import com.partvision.catalog.domain.ProductoEstado;
@@ -74,6 +76,38 @@ class AiExtractionControllerTest {
     @Test
     void confirmar_bodySinProducto_devuelve400() throws Exception {
         mvc.perform(post("/api/v1/extracciones/1/confirmar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void sugerencia_devuelve200() throws Exception {
+        when(aiExtractionService.analizar(1L)).thenReturn(new SugerenciaAccionResponse(
+                AccionSugerida.AGREGAR_CODIGO, 50L, "Filtro", "779100", "ya existe pero le falta el codigo"));
+
+        mvc.perform(get("/api/v1/extracciones/1/sugerencia"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accion").value("AGREGAR_CODIGO"))
+                .andExpect(jsonPath("$.productoExistenteId").value(50));
+    }
+
+    @Test
+    void asociarCodigo_devuelve200() throws Exception {
+        when(aiExtractionService.asociarCodigo(eq(1L), eq(50L)))
+                .thenReturn(new AiExtractionResponse(1L, "k.jpg", "stub-vision", EstadoExtraccion.CONFIRMADA, Map.of(), 50L));
+
+        mvc.perform(post("/api/v1/extracciones/1/asociar-codigo")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":50}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("CONFIRMADA"))
+                .andExpect(jsonPath("$.productoId").value(50));
+    }
+
+    @Test
+    void asociarCodigo_sinProductoId_devuelve400() throws Exception {
+        mvc.perform(post("/api/v1/extracciones/1/asociar-codigo")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());

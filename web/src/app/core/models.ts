@@ -96,6 +96,16 @@ export interface AiExtraction {
   productoId: number | null;
 }
 
+export type AccionSugerida = 'NUEVO' | 'YA_EXISTE' | 'AGREGAR_CODIGO';
+
+export interface SugerenciaAccion {
+  accion: AccionSugerida;
+  productoExistenteId: number | null;
+  productoExistenteDescripcion: string | null;
+  codigoBarras: string | null;
+  mensaje: string;
+}
+
 export interface ImportResult {
   totalFilas: number;
   importados: number;

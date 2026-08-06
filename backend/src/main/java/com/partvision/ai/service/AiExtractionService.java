@@ -2,17 +2,22 @@ package com.partvision.ai.service;
 
 import com.partvision.ai.domain.AiExtraction;
 import com.partvision.ai.domain.EstadoExtraccion;
+import com.partvision.ai.dto.AccionSugerida;
 import com.partvision.ai.dto.AiExtractionResponse;
 import com.partvision.ai.dto.ConfirmacionResponse;
 import com.partvision.ai.dto.ConfirmarExtraccionRequest;
+import com.partvision.ai.dto.SugerenciaAccionResponse;
 import com.partvision.ai.repository.AiExtractionRepository;
 import com.partvision.ai.storage.StorageService;
 import com.partvision.ai.vision.ExtraccionIA;
 import com.partvision.ai.vision.VisionExtractor;
+import com.partvision.catalog.dto.ProductoCodigoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.service.ProductoService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.ResourceNotFoundException;
+
+import java.util.Optional;
 import com.partvision.inventory.dto.EntradaRequest;
 import com.partvision.inventory.dto.MovimientoResponse;
 import com.partvision.inventory.service.StockService;
@@ -94,6 +99,68 @@ public class AiExtractionService {
         return new ConfirmacionResponse(id, producto, movimiento);
     }
 
+    /**
+     * Analiza la extraccion contra el catalogo para sugerir que hacer: crear nuevo,
+     * omitir por duplicado, o agregar el codigo de barras a un producto existente.
+     */
+    @Transactional(readOnly = true)
+    public SugerenciaAccionResponse analizar(Long id) {
+        AiExtraction extraccion = getEntity(id);
+        String barcode = texto(extraccion.getDatosSugeridos().get("codigo_barras"));
+        String sku = texto(extraccion.getDatosSugeridos().get("codigo_pieza"));
+
+        // 1. El codigo de barras ya esta registrado en algun producto -> ya cargado.
+        if (barcode != null) {
+            Optional<ProductoResponse> porBarcode = productoService.buscarOpcionalPorCodigo(barcode);
+            if (porBarcode.isPresent()) {
+                ProductoResponse p = porBarcode.get();
+                return new SugerenciaAccionResponse(AccionSugerida.YA_EXISTE, p.id(), p.descripcion(), barcode,
+                        "El código de barras ya está registrado en '" + p.descripcion() + "'. No se vuelve a cargar.");
+            }
+        }
+
+        // 2. El producto es identificable por SKU -> existe; ver si le falta el codigo detectado.
+        if (sku != null) {
+            Optional<ProductoResponse> porSku = productoService.buscarOpcionalPorCodigo(sku);
+            if (porSku.isPresent()) {
+                ProductoResponse p = porSku.get();
+                boolean yaTieneBarcode = barcode != null && p.codigos().stream()
+                        .anyMatch(c -> barcode.equalsIgnoreCase(c.codigo()));
+                if (barcode != null && !yaTieneBarcode) {
+                    return new SugerenciaAccionResponse(AccionSugerida.AGREGAR_CODIGO, p.id(), p.descripcion(), barcode,
+                            "'" + p.descripcion() + "' ya existe pero no tiene este código de barras. ¿Agregarlo?");
+                }
+                return new SugerenciaAccionResponse(AccionSugerida.YA_EXISTE, p.id(), p.descripcion(), barcode,
+                        "El producto '" + p.descripcion() + "' ya está cargado.");
+            }
+        }
+
+        // 3. No matchea nada -> producto nuevo.
+        return new SugerenciaAccionResponse(AccionSugerida.NUEVO, null, null, barcode,
+                "Producto nuevo: se puede crear.");
+    }
+
+    /**
+     * Asocia el codigo de barras detectado por la extraccion a un producto existente
+     * (caso "semi-cargado") y marca la extraccion como CONFIRMADA contra ese producto.
+     */
+    @Transactional
+    public AiExtractionResponse asociarCodigo(Long id, Long productoId) {
+        AiExtraction extraccion = getEntity(id);
+        exigirPendiente(extraccion);
+        String barcode = texto(extraccion.getDatosSugeridos().get("codigo_barras"));
+        if (barcode == null) {
+            throw new BusinessException("La extracción no tiene un código de barras detectado para asociar");
+        }
+        productoService.agregarCodigo(productoId, new ProductoCodigoRequest(barcode, "BARRA"));
+
+        extraccion.setEstado(EstadoExtraccion.CONFIRMADA);
+        extraccion.setProductoId(productoId);
+        extraccion.setUsuarioConfirmadorId(auditorAware.getCurrentAuditor().orElse(null));
+        extraccion.setConfirmadoEn(Instant.now());
+        return AiExtractionResponse.from(extractionRepository.save(extraccion));
+    }
+
     @Transactional
     public AiExtractionResponse descartar(Long id) {
         AiExtraction extraccion = getEntity(id);
@@ -125,6 +192,15 @@ public class AiExtractionService {
         } catch (IOException ex) {
             throw new BusinessException("No se pudo leer la imagen: " + ex.getMessage());
         }
+    }
+
+    /** Lee un dato sugerido como texto no vacío, o null. */
+    private String texto(Object valor) {
+        if (valor == null) {
+            return null;
+        }
+        String s = valor.toString().trim();
+        return s.isEmpty() ? null : s;
     }
 
     private Map<String, Object> aDatosSugeridos(ExtraccionIA r) {

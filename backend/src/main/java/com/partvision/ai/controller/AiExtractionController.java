@@ -2,8 +2,10 @@ package com.partvision.ai.controller;
 
 import com.partvision.ai.domain.EstadoExtraccion;
 import com.partvision.ai.dto.AiExtractionResponse;
+import com.partvision.ai.dto.AsociarCodigoExtraccionRequest;
 import com.partvision.ai.dto.ConfirmacionResponse;
 import com.partvision.ai.dto.ConfirmarExtraccionRequest;
+import com.partvision.ai.dto.SugerenciaAccionResponse;
 import com.partvision.ai.service.AiExtractionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +51,19 @@ public class AiExtractionController {
     public ResponseEntity<ConfirmacionResponse> confirmar(@PathVariable Long id,
                                                           @Valid @RequestBody ConfirmarExtraccionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(aiExtractionService.confirmar(id, request));
+    }
+
+    /** Sugerencia de accion (nuevo / ya existe / agregar codigo) segun el catalogo actual. */
+    @GetMapping("/{id}/sugerencia")
+    public ResponseEntity<SugerenciaAccionResponse> sugerencia(@PathVariable Long id) {
+        return ResponseEntity.ok(aiExtractionService.analizar(id));
+    }
+
+    /** Asocia el codigo de barras detectado a un producto existente (caso semi-cargado). */
+    @PostMapping("/{id}/asociar-codigo")
+    public ResponseEntity<AiExtractionResponse> asociarCodigo(
+            @PathVariable Long id, @Valid @RequestBody AsociarCodigoExtraccionRequest request) {
+        return ResponseEntity.ok(aiExtractionService.asociarCodigo(id, request.productoId()));
     }
 
     @PostMapping("/{id}/descartar")

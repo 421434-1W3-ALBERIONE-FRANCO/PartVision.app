@@ -101,6 +101,12 @@ public class ProductoService {
         return ProductoResponse.from(producto);
     }
 
+    /** Igual que {@link #buscarPorCodigo} pero sin lanzar 404: para analisis/decisiones. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<ProductoResponse> buscarOpcionalPorCodigo(String codigo) {
+        return productoRepository.findByCodigo(codigo).map(ProductoResponse::from);
+    }
+
     /**
      * Marca por id (existente) o por nombre (texto libre → resuelve o crea).
      * El id tiene prioridad; si no hay ninguno, el producto queda sin marca.

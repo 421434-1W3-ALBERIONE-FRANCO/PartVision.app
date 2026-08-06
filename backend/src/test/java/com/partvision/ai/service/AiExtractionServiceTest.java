@@ -2,14 +2,17 @@ package com.partvision.ai.service;
 
 import com.partvision.ai.domain.AiExtraction;
 import com.partvision.ai.domain.EstadoExtraccion;
+import com.partvision.ai.dto.AccionSugerida;
 import com.partvision.ai.dto.AiExtractionResponse;
 import com.partvision.ai.dto.ConfirmacionResponse;
 import com.partvision.ai.dto.ConfirmarExtraccionRequest;
+import com.partvision.ai.dto.SugerenciaAccionResponse;
 import com.partvision.ai.repository.AiExtractionRepository;
 import com.partvision.ai.storage.StorageService;
 import com.partvision.ai.vision.ExtraccionIA;
 import com.partvision.ai.vision.VisionExtractor;
 import com.partvision.catalog.domain.ProductoEstado;
+import com.partvision.catalog.dto.ProductoCodigoResponse;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.service.ProductoService;
@@ -151,6 +154,92 @@ class AiExtractionServiceTest {
 
         assertThatThrownBy(() -> service.confirmar(1L, new ConfirmarExtraccionRequest(productoReq(), null, null)))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    private AiExtraction pendienteCon(String barcode, String sku) {
+        return AiExtraction.builder().id(1L).imagenKey("k.jpg").modelo("stub-vision")
+                .estado(EstadoExtraccion.PENDIENTE)
+                .datosSugeridos(new java.util.HashMap<>(Map.of(
+                        "codigo_barras", barcode == null ? "" : barcode,
+                        "codigo_pieza", sku == null ? "" : sku)))
+                .build();
+    }
+
+    private ProductoResponse productoConCodigos(Long id, String desc, String... codigos) {
+        List<ProductoCodigoResponse> cs = java.util.Arrays.stream(codigos)
+                .map(c -> new ProductoCodigoResponse(1L, c, "BARRA")).toList();
+        return new ProductoResponse(id, null, null, null, null, null, desc,
+                ProductoEstado.ACTIVO, Map.of(), cs, null);
+    }
+
+    @Test
+    void analizar_barcodeYaRegistrado_yaExiste() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", null)));
+        when(productoService.buscarOpcionalPorCodigo("779100"))
+                .thenReturn(Optional.of(productoConCodigos(50L, "Filtro", "779100")));
+
+        SugerenciaAccionResponse r = service.analizar(1L);
+
+        assertThat(r.accion()).isEqualTo(AccionSugerida.YA_EXISTE);
+        assertThat(r.productoExistenteId()).isEqualTo(50L);
+    }
+
+    @Test
+    void analizar_skuExisteSinEseBarcode_agregarCodigo() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
+        when(productoService.buscarOpcionalPorCodigo("779100")).thenReturn(Optional.empty());
+        when(productoService.buscarOpcionalPorCodigo("ABC-1"))
+                .thenReturn(Optional.of(productoConCodigos(50L, "Filtro"))); // sin codigos
+
+        SugerenciaAccionResponse r = service.analizar(1L);
+
+        assertThat(r.accion()).isEqualTo(AccionSugerida.AGREGAR_CODIGO);
+        assertThat(r.productoExistenteId()).isEqualTo(50L);
+        assertThat(r.codigoBarras()).isEqualTo("779100");
+    }
+
+    @Test
+    void analizar_skuExisteYaConEseBarcode_yaExiste() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
+        when(productoService.buscarOpcionalPorCodigo("779100")).thenReturn(Optional.empty());
+        when(productoService.buscarOpcionalPorCodigo("ABC-1"))
+                .thenReturn(Optional.of(productoConCodigos(50L, "Filtro", "779100")));
+
+        SugerenciaAccionResponse r = service.analizar(1L);
+
+        assertThat(r.accion()).isEqualTo(AccionSugerida.YA_EXISTE);
+    }
+
+    @Test
+    void analizar_noMatchea_nuevo() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
+        when(productoService.buscarOpcionalPorCodigo(any())).thenReturn(Optional.empty());
+
+        SugerenciaAccionResponse r = service.analizar(1L);
+
+        assertThat(r.accion()).isEqualTo(AccionSugerida.NUEVO);
+        assertThat(r.productoExistenteId()).isNull();
+    }
+
+    @Test
+    void asociarCodigo_agregaYConfirma() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
+        when(auditorAware.getCurrentAuditor()).thenReturn(Optional.of(9L));
+        when(extractionRepository.save(any(AiExtraction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AiExtractionResponse r = service.asociarCodigo(1L, 50L);
+
+        assertThat(r.estado()).isEqualTo(EstadoExtraccion.CONFIRMADA);
+        assertThat(r.productoId()).isEqualTo(50L);
+        verify(productoService).agregarCodigo(org.mockito.ArgumentMatchers.eq(50L), any());
+    }
+
+    @Test
+    void asociarCodigo_sinBarcode_lanza422() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon(null, "ABC-1")));
+
+        assertThatThrownBy(() -> service.asociarCodigo(1L, 50L)).isInstanceOf(BusinessException.class);
+        verify(productoService, never()).agregarCodigo(any(), any());
     }
 
     @Test
