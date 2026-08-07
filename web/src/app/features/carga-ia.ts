@@ -125,7 +125,31 @@ const MAX_IMAGENES = 6;
                       {{ item.sugerencia.mensaje }}
                     </div>
 
-                    @if (item.sugerencia.accion === 'NUEVO') {
+                    @if (item.sugerencia.accion === 'POSIBLES_COINCIDENCIAS') {
+                      <div class="space-y-2">
+                        <p class="text-xs uppercase tracking-wider text-gray-400">Productos parecidos ya cargados</p>
+                        @for (c of item.sugerencia.candidatos; track c.id) {
+                          <div class="flex items-center gap-3 p-3 rounded-xl bg-dark-surface/60 border border-dark-border">
+                            <div class="min-w-0 flex-1">
+                              <p class="text-sm text-white truncate">{{ c.descripcion }}</p>
+                              <p class="text-xs text-gray-400 font-mono truncate">
+                                @if (c.sku) { <span class="text-neon-cyan">{{ c.sku }}</span> }
+                                @if (c.marca) { · {{ c.marca }} }
+                                @if (c.proveedor) { · {{ c.proveedor }} }
+                              </p>
+                            </div>
+                            <button (click)="asociarA(item, c.id)" [disabled]="item.trabajando"
+                              class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer disabled:opacity-50"
+                              [title]="item.sugerencia.codigoBarras ? 'Adjunta el código de barras y el código detectado a este producto' : 'Adjunta el código detectado a este producto'">
+                              Es este → completar
+                            </button>
+                          </div>
+                        }
+                        <p class="text-xs text-gray-500 pt-1">¿Ninguno es el mismo? Cargalo como producto nuevo:</p>
+                      </div>
+                    }
+
+                    @if (item.sugerencia.accion === 'NUEVO' || item.sugerencia.accion === 'POSIBLES_COINCIDENCIAS') {
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <label class="block md:col-span-2">
                           <span class="text-xs uppercase text-gray-400">Descripción *</span>
@@ -165,7 +189,7 @@ const MAX_IMAGENES = 6;
                           class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white cursor-pointer disabled:opacity-50">Descartar</button>
                         <button (click)="asociar(item)" [disabled]="item.trabajando"
                           class="px-5 py-2 rounded-lg text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
-                          {{ item.trabajando ? 'Agregando…' : 'Agregar código al producto' }}
+                          {{ item.trabajando ? 'Completando…' : 'Completar producto (agregar código)' }}
                         </button>
                       </div>
                     } @else {
@@ -280,12 +304,18 @@ export class CargaIa {
   }
 
   asociar(item: ItemCarga): void {
-    if (!item.extraccionId || !item.sugerencia?.productoExistenteId) return;
+    if (!item.sugerencia?.productoExistenteId) return;
+    this.asociarA(item, item.sugerencia.productoExistenteId);
+  }
+
+  /** Asocia el código detectado al producto elegido (match único o candidato escogido). */
+  asociarA(item: ItemCarga, productoId: number): void {
+    if (!item.extraccionId) return;
     item.trabajando = true;
     this.refrescar();
-    this.service.asociarCodigo(item.extraccionId, item.sugerencia.productoExistenteId).subscribe({
-      next: () => this.marcarHecho(item, 'Código asociado al producto existente'),
-      error: (e) => this.marcarError(item, e?.error?.message ?? 'No se pudo asociar el código'),
+    this.service.asociarCodigo(item.extraccionId, productoId).subscribe({
+      next: () => this.marcarHecho(item, 'Producto completado con los códigos detectados'),
+      error: (e) => this.marcarError(item, e?.error?.message ?? 'No se pudo completar el producto'),
     });
   }
 
@@ -310,6 +340,7 @@ export class CargaIa {
       case 'NUEVO': return 'Producto nuevo';
       case 'AGREGAR_CODIGO': return 'Agregar código';
       case 'YA_EXISTE': return 'Ya cargado';
+      case 'POSIBLES_COINCIDENCIAS': return 'Revisar parecidos';
       default: return '';
     }
   }
@@ -319,6 +350,7 @@ export class CargaIa {
       case 'NUEVO': return 'bg-green-500/10 text-green-400 border-green-500/30';
       case 'AGREGAR_CODIGO': return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
       case 'YA_EXISTE': return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
+      case 'POSIBLES_COINCIDENCIAS': return 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30';
       default: return 'bg-dark-surface text-gray-300 border-dark-border';
     }
   }

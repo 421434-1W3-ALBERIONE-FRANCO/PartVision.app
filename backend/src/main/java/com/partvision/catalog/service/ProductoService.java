@@ -15,12 +15,14 @@ import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +32,10 @@ public class ProductoService {
     private final ProductoCodigoRepository productoCodigoRepository;
     private final MarcaService marcaService;
     private final CategoriaService categoriaService;
+    private final ProductoMatcher matcher;
+
+    /** Cuantos candidatos parecidos traer/mostrar como maximo. */
+    private static final int MAX_CANDIDATOS = 8;
 
     @Transactional
     public ProductoResponse create(ProductoRequest request) {
@@ -103,8 +109,52 @@ public class ProductoService {
 
     /** Igual que {@link #buscarPorCodigo} pero sin lanzar 404: para analisis/decisiones. */
     @Transactional(readOnly = true)
-    public java.util.Optional<ProductoResponse> buscarOpcionalPorCodigo(String codigo) {
+    public Optional<ProductoResponse> buscarOpcionalPorCodigo(String codigo) {
         return productoRepository.findByCodigo(codigo).map(ProductoResponse::from);
+    }
+
+    /**
+     * Busca el producto que matchea con CERTEZA un codigo de pieza, tolerando el ruido
+     * de formato (espacios, mayusculas, parentesis) pero sin colapsar variantes: el SKU
+     * debe coincidir normalizado (la medida/sobremedida sobrevive) y la marca no debe
+     * entrar en conflicto. Devuelve el match solo si es UNICO; si hay cero o varios, se
+     * considera ambiguo (usar {@link #candidatosSimilares} para que el humano decida).
+     */
+    @Transactional(readOnly = true)
+    public Optional<ProductoResponse> matchNormalizado(String codigo, String marcaNombre) {
+        String ancla = matcher.anclaBusqueda(codigo);
+        if (ancla.isBlank()) {
+            return Optional.empty();
+        }
+        List<ProductoResponse> fuertes = productoRepository
+                .buscarPorSkuPrefijo(ancla, PageRequest.of(0, 30)).stream()
+                .map(ProductoResponse::from)
+                .filter(p -> matcher.coincideExacto(codigo, p.sku()))
+                .filter(p -> matcher.marcaCompatible(marcaNombre, p.marcaNombre()))
+                .toList();
+        return fuertes.size() == 1 ? Optional.of(fuertes.get(0)) : Optional.empty();
+    }
+
+    /**
+     * Productos con el mismo prefijo de SKU (misma base de codigo) para mostrar como
+     * posibles coincidencias cuando no hay un match unico: tipicamente variantes que
+     * difieren en la medida o el proveedor. El revisor decide si alguno es el mismo.
+     */
+    @Transactional(readOnly = true)
+    public List<ProductoResponse> candidatosSimilares(String codigo) {
+        String ancla = matcher.anclaBusqueda(codigo);
+        if (ancla.isBlank()) {
+            return List.of();
+        }
+        return productoRepository.buscarPorSkuPrefijo(ancla, PageRequest.of(0, MAX_CANDIDATOS)).stream()
+                .map(ProductoResponse::from)
+                .toList();
+    }
+
+    /** Si un codigo (barras/referencia) ya esta registrado en algun producto. */
+    @Transactional(readOnly = true)
+    public boolean existeCodigo(String codigo) {
+        return codigo != null && productoCodigoRepository.existsByCodigo(codigo);
     }
 
     /**

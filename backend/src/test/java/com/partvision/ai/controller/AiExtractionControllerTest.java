@@ -84,7 +84,8 @@ class AiExtractionControllerTest {
     @Test
     void sugerencia_devuelve200() throws Exception {
         when(aiExtractionService.analizar(1L)).thenReturn(new SugerenciaAccionResponse(
-                AccionSugerida.AGREGAR_CODIGO, 50L, "Filtro", "779100", "ya existe pero le falta el codigo"));
+                AccionSugerida.AGREGAR_CODIGO, 50L, "Filtro", "779100", "ya existe pero le falta el codigo",
+                java.util.List.of()));
 
         mvc.perform(get("/api/v1/extracciones/1/sugerencia"))
                 .andExpect(status().isOk())

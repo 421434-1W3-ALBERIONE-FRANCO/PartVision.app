@@ -96,7 +96,15 @@ export interface AiExtraction {
   productoId: number | null;
 }
 
-export type AccionSugerida = 'NUEVO' | 'YA_EXISTE' | 'AGREGAR_CODIGO';
+export type AccionSugerida = 'NUEVO' | 'YA_EXISTE' | 'AGREGAR_CODIGO' | 'POSIBLES_COINCIDENCIAS';
+
+export interface CandidatoCoincidencia {
+  id: number;
+  sku: string | null;
+  descripcion: string;
+  marca: string | null;
+  proveedor: string | null;
+}
 
 export interface SugerenciaAccion {
   accion: AccionSugerida;
@@ -104,6 +112,7 @@ export interface SugerenciaAccion {
   productoExistenteDescripcion: string | null;
   codigoBarras: string | null;
   mensaje: string;
+  candidatos: CandidatoCoincidencia[];
 }
 
 export interface ImportResult {

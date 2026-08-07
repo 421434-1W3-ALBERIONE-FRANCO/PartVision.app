@@ -4,6 +4,7 @@ import com.partvision.ai.domain.AiExtraction;
 import com.partvision.ai.domain.EstadoExtraccion;
 import com.partvision.ai.dto.AccionSugerida;
 import com.partvision.ai.dto.AiExtractionResponse;
+import com.partvision.ai.dto.CandidatoCoincidencia;
 import com.partvision.ai.dto.ConfirmacionResponse;
 import com.partvision.ai.dto.ConfirmarExtraccionRequest;
 import com.partvision.ai.dto.SugerenciaAccionResponse;
@@ -32,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -106,8 +108,10 @@ public class AiExtractionService {
     @Transactional(readOnly = true)
     public SugerenciaAccionResponse analizar(Long id) {
         AiExtraction extraccion = getEntity(id);
-        String barcode = texto(extraccion.getDatosSugeridos().get("codigo_barras"));
-        String sku = texto(extraccion.getDatosSugeridos().get("codigo_pieza"));
+        Map<String, Object> datos = extraccion.getDatosSugeridos();
+        String barcode = texto(datos.get("codigo_barras"));
+        String sku = texto(datos.get("codigo_pieza"));
+        String marca = texto(datos.get("marca"));
 
         // 1. El codigo de barras ya esta registrado en algun producto -> ya cargado.
         if (barcode != null) {
@@ -115,44 +119,73 @@ public class AiExtractionService {
             if (porBarcode.isPresent()) {
                 ProductoResponse p = porBarcode.get();
                 return new SugerenciaAccionResponse(AccionSugerida.YA_EXISTE, p.id(), p.descripcion(), barcode,
-                        "El código de barras ya está registrado en '" + p.descripcion() + "'. No se vuelve a cargar.");
+                        "El código de barras ya está registrado en '" + p.descripcion() + "'. No se vuelve a cargar.",
+                        List.of());
             }
         }
 
-        // 2. El producto es identificable por SKU -> existe; ver si le falta el codigo detectado.
+        // 2. Match por SKU normalizado (tolera formato, respeta medida y marca).
         if (sku != null) {
-            Optional<ProductoResponse> porSku = productoService.buscarOpcionalPorCodigo(sku);
-            if (porSku.isPresent()) {
-                ProductoResponse p = porSku.get();
+            Optional<ProductoResponse> match = productoService.matchNormalizado(sku, marca);
+            if (match.isPresent()) {
+                ProductoResponse p = match.get();
                 boolean yaTieneBarcode = barcode != null && p.codigos().stream()
                         .anyMatch(c -> barcode.equalsIgnoreCase(c.codigo()));
                 if (barcode != null && !yaTieneBarcode) {
                     return new SugerenciaAccionResponse(AccionSugerida.AGREGAR_CODIGO, p.id(), p.descripcion(), barcode,
-                            "'" + p.descripcion() + "' ya existe pero no tiene este código de barras. ¿Agregarlo?");
+                            "'" + p.descripcion() + "' ya existe pero no tiene este código de barras. ¿Agregarlo?",
+                            List.of());
                 }
                 return new SugerenciaAccionResponse(AccionSugerida.YA_EXISTE, p.id(), p.descripcion(), barcode,
-                        "El producto '" + p.descripcion() + "' ya está cargado.");
+                        "El producto '" + p.descripcion() + "' ya está cargado.", List.of());
+            }
+            // Sin match unico: mostrar variantes con la misma base (ej: otra medida) a revisar.
+            List<ProductoResponse> similares = productoService.candidatosSimilares(sku);
+            if (!similares.isEmpty()) {
+                return posiblesCoincidencias(similares, barcode);
             }
         }
 
-        // 3. No matchea nada -> producto nuevo.
+        // 3. No matchea ni comparte base de codigo -> producto nuevo.
+        // (No se busca por descripcion: palabras como "SPARK"/"FOX"/"GOL" son nombres de
+        //  modelos y generan falsos parecidos; el operario tiene la busqueda de texto manual.)
         return new SugerenciaAccionResponse(AccionSugerida.NUEVO, null, null, barcode,
-                "Producto nuevo: se puede crear.");
+                "Producto nuevo: se puede crear.", List.of());
+    }
+
+    private SugerenciaAccionResponse posiblesCoincidencias(List<ProductoResponse> productos, String barcode) {
+        List<CandidatoCoincidencia> candidatos = productos.stream()
+                .map(p -> new CandidatoCoincidencia(p.id(), p.sku(), p.descripcion(), p.marcaNombre(), p.proveedor()))
+                .toList();
+        String mensaje = candidatos.size() == 1
+                ? "Puede que ya exista un producto parecido. Revisá si es el mismo antes de crear uno nuevo."
+                : "Hay " + candidatos.size() + " productos parecidos. Revisá si alguno es el mismo antes de crear uno nuevo.";
+        return new SugerenciaAccionResponse(AccionSugerida.POSIBLES_COINCIDENCIAS, null, null, barcode,
+                mensaje, candidatos);
     }
 
     /**
-     * Asocia el codigo de barras detectado por la extraccion a un producto existente
-     * (caso "semi-cargado") y marca la extraccion como CONFIRMADA contra ese producto.
+     * "Completa" un producto existente con los codigos que detecto la extraccion y la
+     * marca como CONFIRMADA contra ese producto (evita el duplicado). Adjunta lo que
+     * haya y sea nuevo: el codigo de barras (tipo BARRA) y/o el codigo de pieza leido
+     * en la etiqueta (tipo REF, como codigo alternativo de busqueda). Asi sirve tanto
+     * para "rellenar el barcode" como para el caso sin barcode (solo nro de parte).
      */
     @Transactional
     public AiExtractionResponse asociarCodigo(Long id, Long productoId) {
         AiExtraction extraccion = getEntity(id);
         exigirPendiente(extraccion);
         String barcode = texto(extraccion.getDatosSugeridos().get("codigo_barras"));
-        if (barcode == null) {
-            throw new BusinessException("La extracción no tiene un código de barras detectado para asociar");
+        String sku = texto(extraccion.getDatosSugeridos().get("codigo_pieza"));
+        if (barcode == null && sku == null) {
+            throw new BusinessException("La extracción no tiene códigos detectados para asociar");
         }
-        productoService.agregarCodigo(productoId, new ProductoCodigoRequest(barcode, "BARRA"));
+        if (barcode != null && !productoService.existeCodigo(barcode)) {
+            productoService.agregarCodigo(productoId, new ProductoCodigoRequest(barcode, "BARRA"));
+        }
+        if (sku != null && !productoService.existeCodigo(sku)) {
+            productoService.agregarCodigo(productoId, new ProductoCodigoRequest(sku, "REF"));
+        }
 
         extraccion.setEstado(EstadoExtraccion.CONFIRMADA);
         extraccion.setProductoId(productoId);

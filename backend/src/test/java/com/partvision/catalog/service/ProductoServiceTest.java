@@ -41,7 +41,8 @@ class ProductoServiceTest {
     private CategoriaService categoriaService;
 
     private ProductoService service() {
-        return new ProductoService(productoRepository, productoCodigoRepository, marcaService, categoriaService);
+        return new ProductoService(productoRepository, productoCodigoRepository, marcaService, categoriaService,
+                new ProductoMatcher());
     }
 
     @Test

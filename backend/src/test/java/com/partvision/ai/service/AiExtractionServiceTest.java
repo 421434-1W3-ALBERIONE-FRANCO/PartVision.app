@@ -188,7 +188,7 @@ class AiExtractionServiceTest {
     void analizar_skuExisteSinEseBarcode_agregarCodigo() {
         when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
         when(productoService.buscarOpcionalPorCodigo("779100")).thenReturn(Optional.empty());
-        when(productoService.buscarOpcionalPorCodigo("ABC-1"))
+        when(productoService.matchNormalizado("ABC-1", null))
                 .thenReturn(Optional.of(productoConCodigos(50L, "Filtro"))); // sin codigos
 
         SugerenciaAccionResponse r = service.analizar(1L);
@@ -202,7 +202,7 @@ class AiExtractionServiceTest {
     void analizar_skuExisteYaConEseBarcode_yaExiste() {
         when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
         when(productoService.buscarOpcionalPorCodigo("779100")).thenReturn(Optional.empty());
-        when(productoService.buscarOpcionalPorCodigo("ABC-1"))
+        when(productoService.matchNormalizado("ABC-1", null))
                 .thenReturn(Optional.of(productoConCodigos(50L, "Filtro", "779100")));
 
         SugerenciaAccionResponse r = service.analizar(1L);
@@ -211,9 +211,26 @@ class AiExtractionServiceTest {
     }
 
     @Test
+    void analizar_baseParecidaSinMatchUnico_posiblesCoincidencias() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon(null, "813667+0.5")));
+        when(productoService.matchNormalizado("813667+0.5", null)).thenReturn(Optional.empty());
+        when(productoService.candidatosSimilares("813667+0.5")).thenReturn(List.of(
+                productoConCodigos(70L, "AROS RECTIFICACION 813667 STD"),
+                productoConCodigos(71L, "AROS RECTIFICACION 813667 0.50")));
+
+        SugerenciaAccionResponse r = service.analizar(1L);
+
+        assertThat(r.accion()).isEqualTo(AccionSugerida.POSIBLES_COINCIDENCIAS);
+        assertThat(r.productoExistenteId()).isNull();
+        assertThat(r.candidatos()).extracting(c -> c.id()).containsExactly(70L, 71L);
+    }
+
+    @Test
     void analizar_noMatchea_nuevo() {
         when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
         when(productoService.buscarOpcionalPorCodigo(any())).thenReturn(Optional.empty());
+        when(productoService.matchNormalizado(any(), any())).thenReturn(Optional.empty());
+        when(productoService.candidatosSimilares(any())).thenReturn(List.of());
 
         SugerenciaAccionResponse r = service.analizar(1L);
 
@@ -222,8 +239,9 @@ class AiExtractionServiceTest {
     }
 
     @Test
-    void asociarCodigo_agregaYConfirma() {
+    void asociarCodigo_agregaBarcodeYReferenciaYConfirma() {
         when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", "ABC-1")));
+        when(productoService.existeCodigo(any())).thenReturn(false);
         when(auditorAware.getCurrentAuditor()).thenReturn(Optional.of(9L));
         when(extractionRepository.save(any(AiExtraction.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -231,12 +249,43 @@ class AiExtractionServiceTest {
 
         assertThat(r.estado()).isEqualTo(EstadoExtraccion.CONFIRMADA);
         assertThat(r.productoId()).isEqualTo(50L);
-        verify(productoService).agregarCodigo(org.mockito.ArgumentMatchers.eq(50L), any());
+        // Adjunta el barcode (BARRA) y el codigo de pieza (REF).
+        verify(productoService).agregarCodigo(org.mockito.ArgumentMatchers.eq(50L),
+                org.mockito.ArgumentMatchers.argThat(c -> "779100".equals(c.codigo()) && "BARRA".equals(c.tipo())));
+        verify(productoService).agregarCodigo(org.mockito.ArgumentMatchers.eq(50L),
+                org.mockito.ArgumentMatchers.argThat(c -> "ABC-1".equals(c.codigo()) && "REF".equals(c.tipo())));
     }
 
     @Test
-    void asociarCodigo_sinBarcode_lanza422() {
+    void asociarCodigo_soloSkuSinBarcode_adjuntaReferencia() {
         when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon(null, "ABC-1")));
+        when(productoService.existeCodigo("ABC-1")).thenReturn(false);
+        when(auditorAware.getCurrentAuditor()).thenReturn(Optional.of(9L));
+        when(extractionRepository.save(any(AiExtraction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AiExtractionResponse r = service.asociarCodigo(1L, 50L);
+
+        assertThat(r.estado()).isEqualTo(EstadoExtraccion.CONFIRMADA);
+        verify(productoService).agregarCodigo(org.mockito.ArgumentMatchers.eq(50L),
+                org.mockito.ArgumentMatchers.argThat(c -> "ABC-1".equals(c.codigo()) && "REF".equals(c.tipo())));
+    }
+
+    @Test
+    void asociarCodigo_codigoYaRegistrado_noDuplica() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon("779100", null)));
+        when(productoService.existeCodigo("779100")).thenReturn(true);
+        when(auditorAware.getCurrentAuditor()).thenReturn(Optional.of(9L));
+        when(extractionRepository.save(any(AiExtraction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AiExtractionResponse r = service.asociarCodigo(1L, 50L);
+
+        assertThat(r.estado()).isEqualTo(EstadoExtraccion.CONFIRMADA);
+        verify(productoService, never()).agregarCodigo(any(), any());
+    }
+
+    @Test
+    void asociarCodigo_sinCodigos_lanza422() {
+        when(extractionRepository.findById(1L)).thenReturn(Optional.of(pendienteCon(null, null)));
 
         assertThatThrownBy(() -> service.asociarCodigo(1L, 50L)).isInstanceOf(BusinessException.class);
         verify(productoService, never()).agregarCodigo(any(), any());

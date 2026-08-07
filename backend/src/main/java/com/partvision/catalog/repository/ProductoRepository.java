@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ProductoRepository extends JpaRepository<Producto, Long> {
@@ -42,4 +43,11 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
                or lower(c.nombre) like lower(concat('%', :q, '%'))
             """)
     Page<Producto> buscarPorTexto(@Param("q") String q, Pageable pageable);
+
+    // Recall de candidatos para la deteccion de duplicados: productos cuyo SKU empieza con
+    // el ancla (ej: "813667" trae "813667(05)" y "813667(STD)"). Trae de mas a proposito;
+    // el match fino (normalizado + medida + marca) se resuelve en la capa de servicio.
+    @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
+    @Query("select p from Producto p where upper(p.sku) like upper(concat(:ancla, '%'))")
+    List<Producto> buscarPorSkuPrefijo(@Param("ancla") String ancla, Pageable pageable);
 }
