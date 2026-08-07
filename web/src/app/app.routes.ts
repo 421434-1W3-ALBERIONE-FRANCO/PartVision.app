@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard } from './core/auth.guard';
+import { adminGuard, authGuard } from './core/auth.guard';
 import { Layout } from './features/layout';
 import { Login } from './features/login';
 import { Productos } from './features/productos';
@@ -24,8 +24,8 @@ export const routes: Routes = [
       { path: 'ubicaciones', component: Ubicaciones },
       { path: 'carga-ia', component: CargaIa },
       { path: 'extracciones', component: Extracciones },
-      { path: 'importacion', component: Importacion },
-      { path: 'usuarios', component: Usuarios },
+      { path: 'importacion', component: Importacion, canActivate: [adminGuard] },
+      { path: 'usuarios', component: Usuarios, canActivate: [adminGuard] },
     ],
   },
   { path: '**', redirectTo: '' },

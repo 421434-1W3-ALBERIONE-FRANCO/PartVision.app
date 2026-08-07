@@ -1,75 +1,56 @@
-package com.partvision.imports.controller;
+package com.partvision.catalog.controller;
 
 import com.partvision.auth.security.JwtAuthenticationFilter;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.RestAuthenticationEntryPoint;
 import com.partvision.auth.security.SecurityConfig;
+import com.partvision.catalog.service.MarcaService;
 import com.partvision.common.security.AuthenticatedUser;
-import com.partvision.imports.dto.ImportResultResponse;
-import com.partvision.imports.service.ImportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = ImportController.class)
+@WebMvcTest(controllers = MarcaController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtService.class, RestAuthenticationEntryPoint.class})
 @TestPropertySource(properties = {
         "security.jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
         "security.jwt.expiration-ms=3600000"
 })
-class ImportControllerTest {
+class MarcaControllerSecurityTest {
 
     @Autowired
     private MockMvc mvc;
     @MockBean
-    private ImportService importService;
+    private MarcaService marcaService;
 
     private UsernamePasswordAuthenticationToken auth(String rol) {
         return new UsernamePasswordAuthenticationToken(
                 new AuthenticatedUser(1L, "u"), null, List.of(new SimpleGrantedAuthority("ROLE_" + rol)));
     }
 
-    private MockMultipartFile csv() {
-        return new MockMultipartFile("archivo", "productos.csv", "text/csv",
-                "descripcion\nFiltro".getBytes(StandardCharsets.UTF_8));
-    }
-
     @Test
-    void importarProductos_comoAdmin_devuelve200ConResumen() throws Exception {
-        when(importService.importarCsv(any()))
-                .thenReturn(new ImportResultResponse(3, 1, 1,
-                        List.of(new ImportResultResponse.FilaError(3, "La descripcion es obligatoria"))));
-
-        mvc.perform(multipart("/api/v1/importaciones/productos").file(csv()).with(authentication(auth("ADMIN"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalFilas").value(3))
-                .andExpect(jsonPath("$.importados").value(1))
-                .andExpect(jsonPath("$.omitidos").value(1))
-                .andExpect(jsonPath("$.errores[0].fila").value(3));
+    void eliminarMarca_comoAdmin_devuelve204() throws Exception {
+        mvc.perform(delete("/api/v1/marcas/5").with(authentication(auth("ADMIN"))))
+                .andExpect(status().isNoContent());
     }
 
     @Test
     @WithMockUser(roles = "OPERARIO")
-    void importarProductos_comoOperario_devuelve403() throws Exception {
-        mvc.perform(multipart("/api/v1/importaciones/productos").file(csv()))
+    void eliminarMarca_comoOperario_devuelve403() throws Exception {
+        mvc.perform(delete("/api/v1/marcas/5"))
                 .andExpect(status().isForbidden());
     }
 }

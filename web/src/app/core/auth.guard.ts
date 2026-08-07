@@ -12,3 +12,14 @@ export const authGuard: CanActivateFn = () => {
   router.navigate(['/login']);
   return false;
 };
+
+/** Rutas solo para administradores (import masivo, gestion de usuarios). */
+export const adminGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (auth.autenticado && auth.esAdmin) {
+    return true;
+  }
+  router.navigate([auth.autenticado ? '/productos' : '/login']);
+  return false;
+};

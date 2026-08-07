@@ -27,4 +27,20 @@ export class AuthService {
   get autenticado(): boolean {
     return this.token !== null;
   }
+
+  /** Roles del usuario, leidos del payload del JWT (claim "roles"). */
+  get roles(): string[] {
+    const token = this.token;
+    if (!token) return [];
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return Array.isArray(payload.roles) ? payload.roles : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get esAdmin(): boolean {
+    return this.roles.includes('ADMIN');
+  }
 }

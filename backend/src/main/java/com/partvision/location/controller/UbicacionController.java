@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +25,7 @@ public class UbicacionController {
     private final UbicacionService ubicacionService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')") // Alta de ubicaciones: administracion del deposito.
     public ResponseEntity<UbicacionResponse> create(@Valid @RequestBody UbicacionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ubicacionService.create(request));
     }

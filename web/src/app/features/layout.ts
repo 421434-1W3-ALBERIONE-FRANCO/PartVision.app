@@ -91,6 +91,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               </span>
             </a>
 
+            @if (esAdmin) {
             <a
               routerLink="/importacion"
               routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
@@ -112,6 +113,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               </svg>
               <span>Usuarios</span>
             </a>
+            }
           </nav>
         </div>
 
@@ -153,6 +155,10 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
 export class Layout {
   private auth = inject(AuthService);
   private router = inject(Router);
+
+  get esAdmin(): boolean {
+    return this.auth.esAdmin;
+  }
 
   salir(): void {
     this.auth.logout();
