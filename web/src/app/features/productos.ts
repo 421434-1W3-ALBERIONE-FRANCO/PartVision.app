@@ -116,7 +116,7 @@ import { ProductoService } from '../core/producto.service';
             <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
-            Alta Manual de Producto
+            {{ editandoId() ? 'Editar Producto #' + editandoId() : 'Alta Manual de Producto' }}
           </h3>
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -176,6 +176,7 @@ import { ProductoService } from '../core/producto.service';
               }
             </div>
 
+            @if (!editandoId()) {
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
                 Código de Barras
@@ -187,6 +188,7 @@ import { ProductoService } from '../core/producto.service';
                 class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
               />
             </div>
+            }
 
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
@@ -210,13 +212,18 @@ import { ProductoService } from '../core/producto.service';
             </div>
           }
 
-          <div class="mt-5 flex justify-end">
+          <div class="mt-5 flex justify-end gap-2">
+            @if (editandoId()) {
+              <button (click)="cancelarEdicion()" class="px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-400 hover:text-white cursor-pointer">
+                Cancelar
+              </button>
+            }
             <button
               [disabled]="guardando()"
-              (click)="crear()"
+              (click)="guardar()"
               class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50"
             >
-              {{ guardando() ? 'Guardando...' : 'Guardar Producto' }}
+              {{ guardando() ? 'Guardando...' : (editandoId() ? 'Guardar Cambios' : 'Guardar Producto') }}
             </button>
           </div>
         </div>
@@ -298,10 +305,16 @@ import { ProductoService } from '../core/producto.service';
                         {{ p.estado }}
                       </span>
                     </td>
-                    <td class="py-3.5 px-4 text-right">
+                    <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                      <button
+                        (click)="iniciarEdicion(p)"
+                        class="text-xs font-semibold text-gray-300 hover:text-white hover:underline cursor-pointer mr-3"
+                      >
+                        Editar
+                      </button>
                       <button
                         (click)="abrirCodigo(p.id)"
-                        class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer whitespace-nowrap"
+                        class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer"
                       >
                         + Código
                       </button>
@@ -373,6 +386,7 @@ export class Productos implements OnInit {
   q = '';
 
   mostrarNuevo = signal(false);
+  editandoId = signal<number | null>(null);
   sku = '';
   marcaId: number | null = null;
   codigoBarras = '';
@@ -538,6 +552,66 @@ export class Productos implements OnInit {
   cambiarPagina(delta: number): void {
     this.pagina.update((p) => Math.max(0, p + delta));
     this.cargar();
+  }
+
+  guardar(): void {
+    if (this.editandoId()) {
+      this.actualizar();
+    } else {
+      this.crear();
+    }
+  }
+
+  iniciarEdicion(p: ProductoListItem): void {
+    this.error.set(null);
+    this.service.getById(p.id).subscribe((full) => {
+      this.editandoId.set(full.id);
+      this.sku = full.sku ?? '';
+      this.marcaId = full.marcaId ?? null;
+      this.descripcion = full.descripcion;
+      this.codigoBarras = '';
+      this.mostrarNuevaMarca.set(false);
+      this.mostrarNuevo.set(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  cancelarEdicion(): void {
+    this.editandoId.set(null);
+    this.sku = '';
+    this.marcaId = null;
+    this.descripcion = '';
+    this.codigoBarras = '';
+    this.mostrarNuevo.set(false);
+    this.error.set(null);
+  }
+
+  private actualizar(): void {
+    const id = this.editandoId();
+    if (!id) return;
+    if (!this.descripcion.trim()) {
+      this.error.set('La descripción es obligatoria');
+      return;
+    }
+    this.error.set(null);
+    this.guardando.set(true);
+    this.service
+      .editar(id, {
+        sku: this.sku.trim() || undefined,
+        marcaId: this.marcaId || undefined,
+        descripcion: this.descripcion.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.guardando.set(false);
+          this.cancelarEdicion();
+          this.cargar();
+        },
+        error: (e) => {
+          this.error.set(e?.error?.message ?? 'No se pudo actualizar el producto');
+          this.guardando.set(false);
+        },
+      });
   }
 
   crear(): void {

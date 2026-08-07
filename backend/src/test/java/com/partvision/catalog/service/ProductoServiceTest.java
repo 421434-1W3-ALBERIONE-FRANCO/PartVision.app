@@ -92,6 +92,37 @@ class ProductoServiceTest {
     }
 
     @Test
+    void update_modificaCamposDeCatalogo() {
+        Producto existente = Producto.builder().id(4L).descripcion("viejo").estado(ProductoEstado.ACTIVO).build();
+        Marca marca = Marca.builder().id(5L).nombre("Bosch").build();
+        when(productoRepository.findWithDetallesById(4L)).thenReturn(Optional.of(existente));
+        when(marcaService.getEntity(5L)).thenReturn(marca);
+        when(productoRepository.existsByMarcaAndSkuAndIdNot(marca, "SKU-9", 4L)).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoResponse r = service().update(4L, new ProductoRequest(
+                "SKU-9", 5L, null, null, "nuevo", null, null, null, "Prov"));
+
+        assertThat(r.descripcion()).isEqualTo("nuevo");
+        assertThat(r.sku()).isEqualTo("SKU-9");
+        assertThat(r.marcaNombre()).isEqualTo("Bosch");
+        assertThat(r.proveedor()).isEqualTo("Prov");
+    }
+
+    @Test
+    void update_skuDuplicadoEnOtroProducto_lanza409() {
+        Producto existente = Producto.builder().id(4L).descripcion("x").estado(ProductoEstado.ACTIVO).build();
+        Marca marca = Marca.builder().id(5L).nombre("Bosch").build();
+        when(productoRepository.findWithDetallesById(4L)).thenReturn(Optional.of(existente));
+        when(marcaService.getEntity(5L)).thenReturn(marca);
+        when(productoRepository.existsByMarcaAndSkuAndIdNot(marca, "DUP", 4L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service().update(4L, new ProductoRequest(
+                "DUP", 5L, null, null, "x", null, null, null, null)))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
     void create_skuDuplicadoParaMarca_lanza409() {
         Marca marca = Marca.builder().id(5L).nombre("Bosch").build();
         when(marcaService.getEntity(5L)).thenReturn(marca);

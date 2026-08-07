@@ -68,6 +68,34 @@ public class ProductoService {
     }
 
     /**
+     * Edita los campos de catálogo de un producto (sku, marca, categoría, descripción,
+     * proveedor). Los códigos se gestionan aparte ({@link #agregarCodigo}).
+     */
+    @Transactional
+    public ProductoResponse update(Long id, ProductoRequest request) {
+        Producto producto = getEntity(id);
+        Marca marca = resolverMarca(request);
+        Categoria categoria = request.categoriaId() == null ? null : categoriaService.getEntity(request.categoriaId());
+        if (request.sku() != null && marca != null
+                && productoRepository.existsByMarcaAndSkuAndIdNot(marca, request.sku(), id)) {
+            throw new DuplicateResourceException(
+                    "Ya existe un producto con SKU '" + request.sku() + "' para esa marca");
+        }
+        producto.setSku(request.sku());
+        producto.setMarca(marca);
+        producto.setCategoria(categoria);
+        producto.setDescripcion(request.descripcion());
+        producto.setProveedor(request.proveedor());
+        if (request.estado() != null) {
+            producto.setEstado(request.estado());
+        }
+        if (request.detallesExtra() != null) {
+            producto.setDetallesExtra(new HashMap<>(request.detallesExtra()));
+        }
+        return ProductoResponse.from(productoRepository.save(producto));
+    }
+
+    /**
      * Asocia un codigo (ej: el codigo de barras fisico escaneado) a un producto que
      * ya existe en el catalogo. Uso tipico: el catalogo importado no trae el EAN, y
      * el operario lo vincula escaneando la caja en el deposito.

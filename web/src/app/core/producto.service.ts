@@ -41,6 +41,17 @@ export class ProductoService {
     return this.http.post<Producto>(this.base, req);
   }
 
+  /** Edita los campos de catálogo de un producto existente. */
+  editar(id: number, req: {
+    sku?: string;
+    marcaId?: number;
+    marcaNombre?: string;
+    categoriaId?: number;
+    descripcion: string;
+  }): Observable<Producto> {
+    return this.http.put<Producto>(`${this.base}/${id}`, req);
+  }
+
   /** Asocia un código (ej: código de barras) a un producto existente. */
   agregarCodigo(productoId: number, codigo: string, tipo = 'BARRA'): Observable<Producto> {
     return this.http.post<Producto>(`${this.base}/${productoId}/codigos`, { codigo, tipo });
