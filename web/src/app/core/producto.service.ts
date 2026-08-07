@@ -15,6 +15,12 @@ export class ProductoService {
     return this.http.get<Page<ProductoListItem>>(this.base, { params });
   }
 
+  /** Búsqueda multi-característica: matchea descripción, SKU, marca o categoría. */
+  buscarTexto(q: string, page = 0, size = 10): Observable<Page<ProductoListItem>> {
+    const params = new HttpParams().set('q', q).set('page', page).set('size', size);
+    return this.http.get<Page<ProductoListItem>>(`${this.base}/buscar-texto`, { params });
+  }
+
   getById(id: number): Observable<Producto> {
     return this.http.get<Producto>(`${this.base}/${id}`);
   }

@@ -224,6 +224,27 @@ import { ProductoService } from '../core/producto.service';
 
       <!-- Products Table -->
       <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card">
+        <!-- Buscador multi-característico -->
+        <div class="flex items-center gap-2 mb-5">
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              [(ngModel)]="q"
+              type="text"
+              placeholder="Buscar por código, SKU, marca, categoría o descripción…"
+              (keyup.enter)="buscar()"
+              (input)="onQueryInput()"
+              class="w-full pl-9 pr-3 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+            />
+          </div>
+          <button (click)="buscar()" class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer">Buscar</button>
+          @if (q.trim()) {
+            <button (click)="limpiarBusqueda()" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-400 hover:text-white cursor-pointer">Limpiar</button>
+          }
+        </div>
+
         @if (cargando()) {
           <div class="py-12 text-center text-gray-400 font-mono">
             <svg class="animate-spin h-8 w-8 text-neon-purple mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -349,6 +370,7 @@ export class Productos implements OnInit {
   totalPaginas = signal(1);
   totalElements = signal(0);
   cargando = signal(true);
+  q = '';
 
   mostrarNuevo = signal(false);
   sku = '';
@@ -481,7 +503,11 @@ export class Productos implements OnInit {
 
   cargar(): void {
     this.cargando.set(true);
-    this.service.listar(this.pagina()).subscribe({
+    const term = this.q.trim();
+    const req = term
+      ? this.service.buscarTexto(term, this.pagina())
+      : this.service.listar(this.pagina());
+    req.subscribe({
       next: (res) => {
         this.productos.set(res.content);
         this.totalPaginas.set(res.totalPages);
@@ -490,6 +516,23 @@ export class Productos implements OnInit {
       },
       error: () => this.cargando.set(false),
     });
+  }
+
+  buscar(): void {
+    this.pagina.set(0);
+    this.cargar();
+  }
+
+  /** Si borran el término, vuelve al listado completo automáticamente. */
+  onQueryInput(): void {
+    if (!this.q.trim()) {
+      this.buscar();
+    }
+  }
+
+  limpiarBusqueda(): void {
+    this.q = '';
+    this.buscar();
   }
 
   cambiarPagina(delta: number): void {
