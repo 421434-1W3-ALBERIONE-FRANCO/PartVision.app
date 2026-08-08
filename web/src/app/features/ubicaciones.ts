@@ -20,7 +20,7 @@ import { UbicacionService } from '../core/ubicacion.service';
             </span>
           </h2>
           <p class="text-sm text-gray-400 mt-1">
-            Gestión jerárquica de depósitos, pasillos, estantes, cajones y pallets.
+            Define <span class="text-gray-200">dónde</span> se guarda físicamente el stock en el depósito.
           </p>
         </div>
 
@@ -33,6 +33,26 @@ import { UbicacionService } from '../core/ubicacion.service';
           </svg>
           <span>{{ mostrarForm() ? 'Ocultar Formulario' : 'Nueva Ubicación' }}</span>
         </button>
+      </div>
+
+      <!-- Leyenda: qué es y cómo se usa -->
+      <div class="glass-panel p-4 rounded-2xl border border-dark-border text-sm text-gray-300 space-y-2">
+        <p>
+          <span class="text-neon-cyan font-semibold">¿Para qué sirve?</span>
+          Cada producto en Stock se guarda en una <span class="text-white">ubicación</span> (una posición física del galpón).
+          Acá las creás y organizás; después, al cargar stock, elegís en qué ubicación va cada cosa.
+        </p>
+        <p>
+          <span class="text-neon-cyan font-semibold">Jerarquía:</span>
+          las ubicaciones se anidan (una adentro de otra). Convención sugerida:
+          <span class="font-mono text-white">Pasillo → Fila → Altura</span>. Ej. código
+          <span class="font-mono text-white">010306</span> = pasillo <span class="text-white">01</span>,
+          fila <span class="text-white">03</span>, altura <span class="text-white">06</span>.
+        </p>
+        <p class="text-xs text-gray-500">
+          La tabla de abajo muestra las ubicaciones <span class="text-gray-300">raíz</span> (sin padre). Para anidar una
+          adentro de otra, indicá el <span class="text-gray-300">ID Padre</span> al crearla.
+        </p>
       </div>
 
       <!-- Form: Crear Ubicación -->
@@ -54,9 +74,10 @@ import { UbicacionService } from '../core/ubicacion.service';
               <input
                 [(ngModel)]="codigo"
                 type="text"
-                placeholder="Ej: A-01-E3"
+                placeholder="Ej: 010306"
                 class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
               />
+              <p class="mt-1 text-[11px] text-gray-500">Identificador de la posición (ej: pasillo+fila+altura).</p>
             </div>
 
             <div>
@@ -71,6 +92,7 @@ import { UbicacionService } from '../core/ubicacion.service';
                   <option [value]="t">{{ t }}</option>
                 }
               </select>
+              <p class="mt-1 text-[11px] text-gray-500">Nivel: depósito, pasillo, estante…</p>
             </div>
 
             <div>
@@ -80,9 +102,10 @@ import { UbicacionService } from '../core/ubicacion.service';
               <input
                 [(ngModel)]="parentId"
                 type="number"
-                placeholder="ID de ubicación contenedora"
+                placeholder="Vacío = ubicación raíz"
                 class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
               />
+              <p class="mt-1 text-[11px] text-gray-500">ID de la ubicación que la contiene (para anidar).</p>
             </div>
           </div>
 
