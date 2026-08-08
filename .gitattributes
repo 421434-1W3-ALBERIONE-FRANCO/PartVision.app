@@ -1,0 +1,5 @@
+# Scripts y Dockerfiles SIEMPRE con LF: si quedan con CRLF, el shell del
+# contenedor Linux falla al interpretar el shebang / los comandos.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerignore  text eol=lf
