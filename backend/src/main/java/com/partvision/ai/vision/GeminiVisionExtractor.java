@@ -31,6 +31,11 @@ public class GeminiVisionExtractor implements VisionExtractor {
             estas claves: codigo_pieza, marca, descripcion, codigo_barras, detalles_extra. \
             Reglas estrictas: si un dato no se ve con claridad en la imagen, poné null. \
             No inventes datos. No deduzcas compatibilidad con vehiculos. \
+            'marca' es la MARCA FABRICANTE del repuesto (ej: POWER ENGINE, Bosch, NGK, Toyota), \
+            NO la marca ni el modelo del vehiculo al que aplica. Si ves un vehiculo en la etiqueta \
+            (ej: 'Volkswagen Golf 1.8', 'Ford Focus'), eso es la aplicacion/compatibilidad: ponela \
+            en detalles_extra como 'aplicacion', nunca en 'marca'. Si no distinguis la marca del \
+            fabricante con seguridad, poné null. \
             detalles_extra es un objeto con atributos sueltos que veas (voltaje, medidas, \
             origen, material, etc.) o {} si no hay ninguno. Si en la imagen hay varias cajas o \
             etiquetas, extrae SOLO la del producto central o mas prominente. \

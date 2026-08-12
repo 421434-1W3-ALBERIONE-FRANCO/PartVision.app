@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../core/auth.service';
@@ -10,9 +10,17 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, ThreeLogoComponent],
   template: `
     <div class="flex h-screen bg-dark text-gray-100 overflow-hidden font-sans selection:bg-neon-purple selection:text-white">
-      
-      <!-- Sidebar Nav -->
-      <aside class="w-64 bg-dark-card border-r border-dark-border flex flex-col justify-between p-5 relative z-20 shrink-0 shadow-2xl">
+
+      <!-- Backdrop (mobile) -->
+      @if (sidebarOpen()) {
+        <div class="fixed inset-0 bg-black/60 z-30 md:hidden" (click)="sidebarOpen.set(false)"></div>
+      }
+
+      <!-- Sidebar Nav (drawer en mobile, fijo en desktop) -->
+      <aside
+        class="fixed md:static inset-y-0 left-0 w-64 bg-dark-card border-r border-dark-border flex flex-col justify-between p-5 z-40 shrink-0 shadow-2xl transition-transform duration-200 md:translate-x-0"
+        [class.-translate-x-full]="!sidebarOpen()"
+      >
         <div>
           <!-- Logo & Brand Header -->
           <div class="flex items-center gap-3 px-2 py-3 mb-8 border-b border-dark-border/60">
@@ -28,7 +36,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
           </div>
 
           <!-- Navigation Links -->
-          <nav class="space-y-1.5">
+          <nav class="space-y-1.5" (click)="sidebarOpen.set(false)">
             <a
               routerLink="/productos"
               routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
@@ -143,11 +151,29 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
       </aside>
 
       <!-- Main Content Stage -->
-      <main class="flex-1 overflow-y-auto bg-dark p-8 relative z-10">
-        <!-- Ambient top light -->
-        <div class="absolute top-0 right-1/4 w-96 h-32 bg-neon-purple/10 rounded-full blur-[90px] pointer-events-none"></div>
-        <router-outlet />
-      </main>
+      <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+        <!-- Barra superior (solo mobile) -->
+        <header class="md:hidden flex items-center gap-3 px-4 py-3 border-b border-dark-border bg-dark-card z-20 shrink-0">
+          <button
+            (click)="sidebarOpen.set(true)"
+            class="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-dark-surface cursor-pointer"
+            title="Menú"
+          >
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span class="text-lg font-bold bg-gradient-to-r from-white to-neon-cyan bg-clip-text text-transparent">
+            PartVision
+          </span>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-dark p-4 md:p-8 relative z-10">
+          <!-- Ambient top light -->
+          <div class="absolute top-0 right-1/4 w-96 h-32 bg-neon-purple/10 rounded-full blur-[90px] pointer-events-none"></div>
+          <router-outlet />
+        </main>
+      </div>
 
     </div>
   `,
@@ -155,6 +181,8 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
 export class Layout {
   private auth = inject(AuthService);
   private router = inject(Router);
+
+  sidebarOpen = signal(false);
 
   get esAdmin(): boolean {
     return this.auth.esAdmin;
