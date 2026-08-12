@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { Marca, ProductoListItem } from '../core/models';
+import { AuthService } from '../core/auth.service';
 import { MarcaService } from '../core/marca.service';
 import { ProductoService } from '../core/producto.service';
 
@@ -269,11 +270,12 @@ import { ProductoService } from '../core/producto.service';
             <table class="w-full text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                  <th class="py-3 px-4">ID</th>
                   <th class="py-3 px-4">SKU</th>
                   <th class="py-3 px-4">Descripción</th>
                   <th class="py-3 px-4">Marca</th>
                   <th class="py-3 px-4">Categoría</th>
+                  <th class="py-3 px-4">Ubicación</th>
+                  <th class="py-3 px-4 text-right">Cantidad</th>
                   <th class="py-3 px-4">Estado</th>
                   <th class="py-3 px-4 text-right">Acciones</th>
                 </tr>
@@ -281,7 +283,6 @@ import { ProductoService } from '../core/producto.service';
               <tbody class="divide-y divide-dark-border/50">
                 @for (p of productos(); track p.id) {
                   <tr class="hover:bg-dark-surface/40 transition-colors">
-                    <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">#{{ p.id }}</td>
                     <td class="py-3.5 px-4 font-mono font-bold text-neon-purple">
                       {{ p.sku ?? '-' }}
                     </td>
@@ -301,28 +302,39 @@ import { ProductoService } from '../core/producto.service';
                       {{ p.categoriaNombre ?? '-' }}
                     </td>
                     <td class="py-3.5 px-4">
-                      <span class="neon-badge-green px-2.5 py-1 rounded-md text-xs font-semibold">
+                      @if (p.ubicaciones && p.ubicaciones.length > 0) {
+                        <div class="flex flex-wrap gap-1">
+                          @for (u of p.ubicaciones; track u.codigo) {
+                            <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ u.codigo }} ({{ u.cantidad }})</span>
+                          }
+                        </div>
+                      } @else {
+                        <span class="text-gray-500 text-xs">—</span>
+                      }
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-mono font-bold"
+                        [class]="p.stockTotal > 0 ? 'text-neon-green' : 'text-gray-500'">
+                      {{ p.stockTotal }}
+                    </td>
+                    <td class="py-3.5 px-4">
+                      <span class="px-2.5 py-1 rounded-md text-xs font-semibold"
+                            [class]="p.estado === 'ACTIVO' ? 'neon-badge-green' : 'bg-gray-500/15 text-gray-400 border border-gray-500/30'">
                         {{ p.estado }}
                       </span>
                     </td>
-                    <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                    <td class="py-3.5 px-4 text-right">
                       <button
-                        (click)="iniciarEdicion(p)"
-                        class="text-xs font-semibold text-gray-300 hover:text-white hover:underline cursor-pointer mr-3"
+                        (click)="abrirMenu(p)"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-dark-surface border border-dark-border hover:border-neon-cyan text-neon-cyan text-lg font-bold cursor-pointer"
+                        title="Acciones"
                       >
-                        Editar
-                      </button>
-                      <button
-                        (click)="abrirCodigo(p.id)"
-                        class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer"
-                      >
-                        + Código
+                        +
                       </button>
                     </td>
                   </tr>
                   @if (agregandoCodigoId() === p.id) {
                     <tr class="bg-dark-surface/40">
-                      <td colspan="7" class="py-3 px-4">
+                      <td colspan="8" class="py-3 px-4">
                         <div class="flex flex-wrap items-center gap-2">
                           <span class="text-xs text-gray-400">Código de barras para <span class="text-white font-semibold">{{ p.descripcion }}</span>:</span>
                           <input
@@ -371,11 +383,67 @@ import { ProductoService } from '../core/producto.service';
         }
       </div>
     </div>
+
+    <!-- Menú de acciones -->
+    @if (menu(); as p) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarMenu()">
+        <div class="glass-panel w-full max-w-xs p-4 rounded-2xl border border-neon-cyan/40 shadow-neon-cyan" (click)="$event.stopPropagation()">
+          <p class="text-xs uppercase tracking-wider text-gray-400 mb-1">Acciones</p>
+          <p class="text-sm font-semibold text-white mb-4 truncate">{{ p.descripcion }}</p>
+          <div class="space-y-2">
+            <button (click)="modificar(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-cyan transition-colors cursor-pointer">Modificar</button>
+            <button (click)="agregarCodigoDe(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-cyan transition-colors cursor-pointer">Agregar código</button>
+            @if (esAdmin) {
+              <button (click)="pedirBaja(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-red-400 bg-dark-surface border border-dark-border hover:border-red-500/50 transition-colors cursor-pointer">Eliminar (dar de baja)</button>
+            }
+          </div>
+          <button (click)="cerrarMenu()" class="mt-4 w-full px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white cursor-pointer">Cancelar</button>
+        </div>
+      </div>
+    }
+
+    <!-- Confirmación de baja -->
+    @if (aEliminar(); as p) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarBaja()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Dar de baja producto
+          </h3>
+          <p class="text-sm text-gray-300">
+            Estás por dar de baja <span class="font-semibold text-white">{{ p.descripcion }}</span>.
+            Dejará de figurar como activo, pero se conserva su historial. ¿Seguro?
+          </p>
+          @if (bajaError()) {
+            <div class="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ bajaError() }}</div>
+          }
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarBaja()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button [disabled]="eliminando()" (click)="confirmarBaja(p)" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
+              {{ eliminando() ? 'Procesando...' : 'Aceptar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Productos implements OnInit {
   private service = inject(ProductoService);
   private marcaService = inject(MarcaService);
+  private auth = inject(AuthService);
+
+  get esAdmin(): boolean {
+    return this.auth.esAdmin;
+  }
+
+  // Menú de acciones y baja de producto
+  menu = signal<ProductoListItem | null>(null);
+  aEliminar = signal<ProductoListItem | null>(null);
+  eliminando = signal(false);
+  bajaError = signal<string | null>(null);
 
   productos = signal<ProductoListItem[]>([]);
   marcas = signal<Marca[]>([]);
@@ -648,5 +716,50 @@ export class Productos implements OnInit {
           this.guardando.set(false);
         },
       });
+  }
+
+  // --- Menú de acciones "+" ---
+  abrirMenu(p: ProductoListItem): void {
+    this.menu.set(p);
+  }
+
+  cerrarMenu(): void {
+    this.menu.set(null);
+  }
+
+  modificar(p: ProductoListItem): void {
+    this.cerrarMenu();
+    this.iniciarEdicion(p);
+  }
+
+  agregarCodigoDe(p: ProductoListItem): void {
+    this.cerrarMenu();
+    this.abrirCodigo(p.id);
+  }
+
+  pedirBaja(p: ProductoListItem): void {
+    this.cerrarMenu();
+    this.bajaError.set(null);
+    this.aEliminar.set(p);
+  }
+
+  cancelarBaja(): void {
+    this.aEliminar.set(null);
+    this.bajaError.set(null);
+  }
+
+  confirmarBaja(p: ProductoListItem): void {
+    this.eliminando.set(true);
+    this.service.darDeBaja(p.id).subscribe({
+      next: () => {
+        this.eliminando.set(false);
+        this.aEliminar.set(null);
+        this.cargar();
+      },
+      error: (e) => {
+        this.bajaError.set(e?.error?.message ?? 'No se pudo dar de baja el producto');
+        this.eliminando.set(false);
+      },
+    });
   }
 }

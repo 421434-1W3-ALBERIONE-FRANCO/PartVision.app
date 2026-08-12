@@ -56,4 +56,9 @@ export class ProductoService {
   agregarCodigo(productoId: number, codigo: string, tipo = 'BARRA'): Observable<Producto> {
     return this.http.post<Producto>(`${this.base}/${productoId}/codigos`, { codigo, tipo });
   }
+
+  /** Baja lógica: marca el producto como INACTIVO (conserva el historial). */
+  darDeBaja(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}`);
+  }
 }

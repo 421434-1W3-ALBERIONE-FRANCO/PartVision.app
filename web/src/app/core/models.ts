@@ -37,6 +37,11 @@ export interface Producto {
   codigos: ProductoCodigo[];
 }
 
+export interface ProductoStockUbicacion {
+  codigo: string;
+  cantidad: number;
+}
+
 export interface ProductoListItem {
   id: number;
   sku: string | null;
@@ -44,6 +49,8 @@ export interface ProductoListItem {
   estado: string;
   marcaNombre: string | null;
   categoriaNombre: string | null;
+  stockTotal: number;
+  ubicaciones: ProductoStockUbicacion[];
 }
 
 export interface StockLinea {
