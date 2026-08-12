@@ -2,8 +2,10 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { Movimiento, StockResumen } from '../core/models';
-import { ConteoLinea, StockService } from '../core/stock.service';
+import { Movimiento, ProductoListItem, StockResumen, Ubicacion } from '../core/models';
+import { StockService } from '../core/stock.service';
+import { ProductoService } from '../core/producto.service';
+import { UbicacionService } from '../core/ubicacion.service';
 
 @Component({
   selector: 'app-stock',
@@ -12,72 +14,197 @@ import { ConteoLinea, StockService } from '../core/stock.service';
   template: `
     <div class="space-y-8 animate-fade-in max-w-7xl mx-auto">
       <!-- Header -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-dark-border pb-6">
-        <div>
-          <h2 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            <span>Control de Stock e Inventario</span>
-            <span class="text-xs font-mono bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-2 py-0.5 rounded-full uppercase">
-              DEPOSITO REAL
-            </span>
-          </h2>
-          <p class="text-sm text-gray-400 mt-1">
-            Consultas de posiciones físicas y auditoría de movimientos de entrada y salida.
+      <div class="border-b border-dark-border pb-6">
+        <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-3">
+          <span>Control de Stock e Inventario</span>
+          <span class="text-xs font-mono bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-2 py-0.5 rounded-full uppercase">
+            DEPOSITO REAL
+          </span>
+        </h2>
+        <p class="text-sm text-gray-400 mt-1">
+          Buscá un producto, mirá dónde está y cuánto hay, y cargá stock en una ubicación.
+        </p>
+      </div>
+
+      <!-- Buscador de producto -->
+      <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300">Buscar producto</label>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            [(ngModel)]="q"
+            (keyup.enter)="buscar()"
+            type="text"
+            placeholder="SKU, descripción o marca..."
+            class="flex-1 px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
+          />
+          <button (click)="buscar()" class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer">
+            Buscar
+          </button>
+        </div>
+
+        @if (buscando()) {
+          <p class="text-xs text-gray-500 font-mono">Buscando...</p>
+        } @else if (resultados().length > 0) {
+          <div class="divide-y divide-dark-border/50 border border-dark-border rounded-xl overflow-hidden">
+            @for (p of resultados(); track p.id) {
+              <button
+                (click)="seleccionar(p)"
+                class="w-full text-left px-4 py-3 hover:bg-dark-surface/60 transition-colors cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1"
+              >
+                <span class="font-mono font-bold text-neon-cyan text-sm">{{ p.sku || '—' }}</span>
+                <span class="text-gray-200 text-sm">{{ p.descripcion }}</span>
+                @if (p.marcaNombre) {
+                  <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
+                }
+              </button>
+            }
+          </div>
+        } @else if (buscoSinResultados()) {
+          <p class="text-xs text-gray-500">No se encontraron productos para "{{ q }}".</p>
+        }
+      </div>
+
+      @if (productoSel(); as p) {
+        <!-- Producto seleccionado -->
+        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-cyan/40 shadow-neon-cyan space-y-1">
+          <p class="text-xs uppercase tracking-wider text-gray-400">Producto seleccionado</p>
+          <p class="text-lg font-bold text-white">{{ p.descripcion }}</p>
+          <p class="text-sm font-mono text-neon-cyan">
+            SKU {{ p.sku || '—' }}
+            @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
           </p>
         </div>
 
-        <div class="flex gap-3 items-center">
-          <input
-            [(ngModel)]="productoIdInput"
-            type="number"
-            placeholder="ID de Producto..."
-            class="px-3.5 py-2 bg-dark-surface border border-dark-border rounded-xl text-white text-xs w-36 focus:outline-none focus:border-neon-purple"
-          />
-          <button
-            (click)="consultar()"
-            class="px-4 py-2 rounded-xl text-xs font-semibold neon-button-primary cursor-pointer"
-          >
-            Consultar
-          </button>
-        </div>
-      </div>
+        <!-- Cargar stock -->
+        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-purple/40 shadow-neon space-y-4">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Cargar stock
+          </h3>
 
-      <!-- Resumen de Stock -->
-      @if (resumen()) {
-        <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card space-y-4">
-          <div class="flex items-center justify-between border-b border-dark-border pb-3">
-            <h3 class="text-lg font-bold text-white flex items-center gap-2">
-              <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              Stock del Producto #{{ resumen()!.productoId }}
-            </h3>
-            <span class="text-xl font-extrabold text-neon-green font-mono">
-              Total: {{ resumen()!.total }} u.
-            </span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-1">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
+              <select
+                [(ngModel)]="entradaUbicacionId"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm"
+              >
+                <option [ngValue]="null" disabled>Elegí una ubicación…</option>
+                @for (u of ubicaciones(); track u.id) {
+                  <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                }
+              </select>
+              @if (ubicaciones().length === 0) {
+                <p class="mt-1 text-[11px] text-amber-400">No hay ubicaciones. Creá una en la sección Ubicaciones.</p>
+              }
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+              <input
+                [(ngModel)]="entradaCantidad"
+                type="number"
+                min="1"
+                placeholder="0"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+              <input
+                [(ngModel)]="entradaMotivo"
+                type="text"
+                placeholder="Ej: ingreso de mercadería"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+              />
+            </div>
           </div>
 
-          @if (resumen()!.ubicaciones.length === 0) {
-            <p class="text-xs text-gray-500 py-4 text-center">Este producto no cuenta con existencias registradas en ubicaciones.</p>
+          @if (entradaError()) {
+            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ entradaError() }}</div>
+          }
+          @if (entradaOk()) {
+            <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ entradaOk() }}</div>
+          }
+
+          <div class="flex justify-end">
+            <button [disabled]="guardandoEntrada()" (click)="cargarStock()"
+              class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+              {{ guardandoEntrada() ? 'Guardando...' : 'Cargar stock' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Stock actual -->
+        @if (resumen(); as r) {
+          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+            <div class="flex items-center justify-between border-b border-dark-border pb-3">
+              <h3 class="text-lg font-bold text-white">Stock actual</h3>
+              <span class="text-xl font-extrabold text-neon-green font-mono">Total: {{ r.total }} u.</span>
+            </div>
+            @if (r.ubicaciones.length === 0) {
+              <p class="text-xs text-gray-500 py-4 text-center">Este producto todavía no tiene existencias en ninguna ubicación.</p>
+            } @else {
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm border-collapse min-w-[360px]">
+                  <thead>
+                    <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                      <th class="py-3 px-4">Ubicación</th>
+                      <th class="py-3 px-4 text-right">Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-dark-border/50">
+                    @for (l of r.ubicaciones; track l.ubicacionId) {
+                      <tr class="hover:bg-dark-surface/40 transition-colors">
+                        <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Historial -->
+        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Historial de Movimientos
+          </h3>
+          @if (movimientos().length === 0) {
+            <div class="py-8 text-center text-gray-500 text-sm">Sin movimientos registrados para este producto.</div>
           } @else {
             <div class="overflow-x-auto">
-              <table class="w-full text-left text-sm border-collapse">
+              <table class="w-full text-left text-sm border-collapse min-w-[520px]">
                 <thead>
                   <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                    <th class="py-3 px-4">ID Ubicación</th>
-                    <th class="py-3 px-4">Ruta / Código</th>
+                    <th class="py-3 px-4">Fecha</th>
+                    <th class="py-3 px-4">Tipo</th>
                     <th class="py-3 px-4">Cantidad</th>
+                    <th class="py-3 px-4">Motivo</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-dark-border/50">
-                  @for (l of resumen()!.ubicaciones; track l.ubicacionId) {
+                  @for (m of movimientos(); track m.id) {
                     <tr class="hover:bg-dark-surface/40 transition-colors">
-                      <td class="py-3 px-4 font-mono text-xs text-gray-400">#{{ l.ubicacionId }}</td>
-                      <td class="py-3 px-4 font-mono font-semibold text-neon-purple">
-                        {{ l.ubicacionPath }}
+                      <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">
+                        {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm') : '-' }}
                       </td>
-                      <td class="py-3 px-4 font-mono font-bold text-neon-green">
-                        {{ l.cantidad }} u.
+                      <td class="py-3.5 px-4 font-semibold">
+                        <span class="px-2.5 py-1 rounded-md text-xs font-mono"
+                              [class]="m.tipo === 'ENTRADA' ? 'neon-badge-green' : m.tipo === 'SALIDA' ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'neon-badge-cyan'">
+                          {{ m.tipo }}
+                        </span>
                       </td>
+                      <td class="py-3.5 px-4 font-mono font-bold text-white">{{ m.cantidad }} u.</td>
+                      <td class="py-3.5 px-4 text-gray-400 text-xs">{{ m.motivo ?? '-' }}</td>
                     </tr>
                   }
                 </tbody>
@@ -86,194 +213,115 @@ import { ConteoLinea, StockService } from '../core/stock.service';
           }
         </div>
       }
-
-      <!-- Conteo físico / carga de cantidades reales -->
-      <div class="glass-panel rounded-2xl p-6 border border-neon-cyan/40 shadow-neon-cyan space-y-4">
-        <div class="flex items-center justify-between border-b border-dark-border pb-3">
-          <h3 class="text-lg font-bold text-white flex items-center gap-2">
-            <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-            Conteo físico (carga de cantidades reales)
-          </h3>
-          <button (click)="agregarLinea()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border hover:border-neon-cyan text-gray-200 cursor-pointer">
-            + Línea
-          </button>
-        </div>
-        <p class="text-xs text-gray-400">
-          Ingresá la cantidad <span class="text-white font-semibold">real</span> que hay del producto en la ubicación. El sistema calcula el ajuste automáticamente.
-        </p>
-
-        <div class="space-y-2">
-          @for (l of lineasConteo(); track $index) {
-            <div class="grid grid-cols-12 gap-2 items-center">
-              <input [(ngModel)]="l.productoId" type="number" placeholder="ID Producto"
-                class="col-span-4 md:col-span-3 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
-              <input [(ngModel)]="l.ubicacionId" type="number" placeholder="ID Ubicación"
-                class="col-span-4 md:col-span-3 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
-              <input [(ngModel)]="l.cantidadReal" type="number" placeholder="Cant. real"
-                class="col-span-3 md:col-span-2 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
-              <button (click)="quitarLinea($index)" class="col-span-1 text-red-400 hover:text-red-300 cursor-pointer text-lg" title="Quitar">×</button>
-            </div>
-          }
-        </div>
-
-        @if (conteoError()) {
-          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ conteoError() }}</div>
-        }
-        @if (conteoOk()) {
-          <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ conteoOk() }}</div>
-        }
-
-        <div class="flex justify-end">
-          <button [disabled]="guardandoConteo()" (click)="guardarConteo()"
-            class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
-            {{ guardandoConteo() ? 'Guardando...' : 'Registrar conteo' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Movimientos Table -->
-      <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card space-y-4">
-        <h3 class="text-lg font-bold text-white flex items-center gap-2">
-          <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Historial de Movimientos
-        </h3>
-
-        @if (cargando()) {
-          <div class="py-12 text-center text-gray-400 font-mono">
-            <svg class="animate-spin h-8 w-8 text-neon-purple mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Ingresá un ID de producto arriba para consultar su stock y movimientos.
-          </div>
-        } @else if (movimientos().length === 0) {
-          <div class="py-12 text-center text-gray-500">
-            Sin movimientos registrados para esta consulta.
-          </div>
-        } @else {
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                  <th class="py-3 px-4">ID</th>
-                  <th class="py-3 px-4">Fecha</th>
-                  <th class="py-3 px-4">Tipo</th>
-                  <th class="py-3 px-4">Cantidad</th>
-                  <th class="py-3 px-4">Origen / Destino</th>
-                  <th class="py-3 px-4">Motivo</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-dark-border/50">
-                @for (m of movimientos(); track m.id) {
-                  <tr class="hover:bg-dark-surface/40 transition-colors">
-                    <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">#{{ m.id }}</td>
-                    <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">
-                      {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm') : '-' }}
-                    </td>
-                    <td class="py-3.5 px-4 font-semibold">
-                      <span class="px-2.5 py-1 rounded-md text-xs font-mono"
-                            [class]="m.tipo === 'ENTRADA' ? 'neon-badge-green' : m.tipo === 'SALIDA' ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'neon-badge-cyan'">
-                        {{ m.tipo }}
-                      </span>
-                    </td>
-                    <td class="py-3.5 px-4 font-mono font-bold text-white">
-                      {{ m.cantidad }} u.
-                    </td>
-                    <td class="py-3.5 px-4 text-xs font-mono text-gray-300">
-                      {{ m.ubicacionOrigenId ?? '-' }} ➔ {{ m.ubicacionDestinoId ?? '-' }}
-                    </td>
-                    <td class="py-3.5 px-4 text-gray-400 text-xs">
-                      {{ m.motivo ?? '-' }}
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-      </div>
     </div>
   `,
 })
-export class Stock {
+export class Stock implements OnInit {
   private service = inject(StockService);
+  private productos = inject(ProductoService);
+  private ubicacionService = inject(UbicacionService);
 
-  productoIdInput: number | null = 1;
+  // Búsqueda
+  q = '';
+  resultados = signal<ProductoListItem[]>([]);
+  buscando = signal(false);
+  buscoSinResultados = signal(false);
+
+  // Selección
+  productoSel = signal<ProductoListItem | null>(null);
   resumen = signal<StockResumen | null>(null);
   movimientos = signal<Movimiento[]>([]);
-  cargando = signal(false);
 
-  // Conteo físico
-  lineasConteo = signal<ConteoLinea[]>([
-    { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
-  ]);
-  guardandoConteo = signal(false);
-  conteoError = signal<string | null>(null);
-  conteoOk = signal<string | null>(null);
+  // Ubicaciones (para el desplegable)
+  ubicaciones = signal<Ubicacion[]>([]);
 
-  agregarLinea(): void {
-    this.lineasConteo.update((ls) => [
-      ...ls,
-      { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
-    ]);
+  // Cargar stock
+  entradaUbicacionId: number | null = null;
+  entradaCantidad: number | null = null;
+  entradaMotivo = '';
+  guardandoEntrada = signal(false);
+  entradaError = signal<string | null>(null);
+  entradaOk = signal<string | null>(null);
+
+  ngOnInit(): void {
+    this.ubicacionService.listar().subscribe({
+      next: (list) => this.ubicaciones.set(list),
+      error: () => this.ubicaciones.set([]),
+    });
   }
 
-  quitarLinea(i: number): void {
-    this.lineasConteo.update((ls) => ls.filter((_, idx) => idx !== i));
-  }
-
-  guardarConteo(): void {
-    const validas = this.lineasConteo().filter(
-      (l) => l.productoId != null && l.ubicacionId != null && l.cantidadReal != null && l.cantidadReal >= 0,
-    );
-    if (validas.length === 0) {
-      this.conteoError.set('Completá al menos una línea (producto, ubicación y cantidad real).');
-      this.conteoOk.set(null);
-      return;
-    }
-    this.conteoError.set(null);
-    this.conteoOk.set(null);
-    this.guardandoConteo.set(true);
-    this.service.conteoLote(validas).subscribe({
-      next: (res) => {
-        const ajustados = res.filter((r) => r.movimiento != null).length;
-        this.conteoOk.set(`Conteo registrado: ${res.length} línea(s), ${ajustados} con ajuste.`);
-        this.guardandoConteo.set(false);
-        this.lineasConteo.set([
-          { productoId: null as unknown as number, ubicacionId: null as unknown as number, cantidadReal: null as unknown as number },
-        ]);
-        // Si estaba consultando un producto, refresca el resumen.
-        if (this.productoIdInput) this.consultar();
+  buscar(): void {
+    const q = this.q.trim();
+    if (!q) return;
+    this.buscando.set(true);
+    this.buscoSinResultados.set(false);
+    this.productos.buscarTexto(q, 0, 10).subscribe({
+      next: (page) => {
+        this.resultados.set(page.content);
+        this.buscoSinResultados.set(page.content.length === 0);
+        this.buscando.set(false);
       },
-      error: (e) => {
-        this.conteoError.set(e?.error?.message ?? 'No se pudo registrar el conteo.');
-        this.guardandoConteo.set(false);
+      error: () => {
+        this.resultados.set([]);
+        this.buscando.set(false);
       },
     });
   }
 
-  consultar(): void {
-    if (!this.productoIdInput) return;
-    this.cargando.set(true);
+  seleccionar(p: ProductoListItem): void {
+    this.productoSel.set(p);
+    this.resultados.set([]);
+    this.entradaOk.set(null);
+    this.entradaError.set(null);
+    this.refrescarStock(p.id);
+  }
 
-    this.service.resumen(this.productoIdInput).subscribe({
+  cargarStock(): void {
+    const p = this.productoSel();
+    if (!p) return;
+    this.entradaError.set(null);
+    this.entradaOk.set(null);
+
+    if (this.entradaUbicacionId == null) {
+      this.entradaError.set('Elegí una ubicación.');
+      return;
+    }
+    if (this.entradaCantidad == null || this.entradaCantidad < 1) {
+      this.entradaError.set('La cantidad debe ser mayor o igual a 1.');
+      return;
+    }
+
+    this.guardandoEntrada.set(true);
+    this.service
+      .entrada({
+        productoId: p.id,
+        ubicacionId: this.entradaUbicacionId,
+        cantidad: this.entradaCantidad,
+        motivo: this.entradaMotivo.trim() || undefined,
+      })
+      .subscribe({
+        next: () => {
+          this.entradaOk.set(`Se cargaron ${this.entradaCantidad} u. correctamente.`);
+          this.entradaCantidad = null;
+          this.entradaMotivo = '';
+          this.guardandoEntrada.set(false);
+          this.refrescarStock(p.id);
+        },
+        error: (e) => {
+          this.entradaError.set(e?.error?.message ?? 'No se pudo cargar el stock.');
+          this.guardandoEntrada.set(false);
+        },
+      });
+  }
+
+  private refrescarStock(productoId: number): void {
+    this.service.resumen(productoId).subscribe({
       next: (res) => this.resumen.set(res),
       error: () => this.resumen.set(null),
     });
-
-    this.service.movimientos(this.productoIdInput).subscribe({
-      next: (page) => {
-        this.movimientos.set(page.content);
-        this.cargando.set(false);
-      },
-      error: () => {
-        this.movimientos.set([]);
-        this.cargando.set(false);
-      },
+    this.service.movimientos(productoId).subscribe({
+      next: (page) => this.movimientos.set(page.content),
+      error: () => this.movimientos.set([]),
     });
   }
 }

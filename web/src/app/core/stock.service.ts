@@ -30,4 +30,9 @@ export class StockService {
   conteoLote(conteos: ConteoLinea[]): Observable<ConteoResponse[]> {
     return this.http.post<ConteoResponse[]>(`${API_BASE_URL}/stock/conteos/lote`, { conteos });
   }
+
+  /** Entrada: suma cantidad de un producto en una ubicación. */
+  entrada(req: { productoId: number; ubicacionId: number; cantidad: number; motivo?: string }): Observable<Movimiento> {
+    return this.http.post<Movimiento>(`${API_BASE_URL}/stock/entradas`, req);
+  }
 }
