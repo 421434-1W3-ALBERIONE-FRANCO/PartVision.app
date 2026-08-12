@@ -80,8 +80,9 @@ export interface Movimiento {
 
 export interface Ubicacion {
   id: number;
-  tipo: string;
+  tipo: string | null;
   codigo: string;
+  descripcion: string | null;
   path: string;
   activo: boolean;
   parentId: number | null;
