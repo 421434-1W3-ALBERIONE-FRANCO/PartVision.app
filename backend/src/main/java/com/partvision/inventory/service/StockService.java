@@ -145,6 +145,15 @@ public class StockService {
                 origen, destino, request.motivo());
     }
 
+    /** Elimina la existencia de un producto en una ubicacion (borra la fila de stock). */
+    @Transactional
+    public void eliminarStock(Long productoId, Long ubicacionId) {
+        Producto producto = productoService.getEntity(productoId);
+        Ubicacion ubicacion = ubicacionService.getEntity(ubicacionId);
+        Stock stock = lockOExcepcion(producto, ubicacion);
+        stockRepository.delete(stock);
+    }
+
     @Transactional(readOnly = true)
     public StockResumenResponse getResumen(Long productoId) {
         productoService.getEntity(productoId); // valida existencia -> 404

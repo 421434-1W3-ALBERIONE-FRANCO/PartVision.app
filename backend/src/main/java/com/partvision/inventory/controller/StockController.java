@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -65,5 +66,12 @@ public class StockController {
     @GetMapping
     public ResponseEntity<StockResumenResponse> resumen(@RequestParam Long productoId) {
         return ResponseEntity.ok(stockService.getResumen(productoId));
+    }
+
+    /** Elimina la existencia de un producto en una ubicación (borra la fila de stock). */
+    @DeleteMapping
+    public ResponseEntity<Void> eliminar(@RequestParam Long productoId, @RequestParam Long ubicacionId) {
+        stockService.eliminarStock(productoId, ubicacionId);
+        return ResponseEntity.noContent().build();
     }
 }

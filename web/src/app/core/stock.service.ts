@@ -35,4 +35,15 @@ export class StockService {
   entrada(req: { productoId: number; ubicacionId: number; cantidad: number; motivo?: string }): Observable<Movimiento> {
     return this.http.post<Movimiento>(`${API_BASE_URL}/stock/entradas`, req);
   }
+
+  /** Conteo: fija la cantidad EXACTA de un producto en una ubicación (no suma). */
+  conteo(req: { productoId: number; ubicacionId: number; cantidadReal: number; motivo?: string }): Observable<ConteoResponse> {
+    return this.http.post<ConteoResponse>(`${API_BASE_URL}/stock/conteos`, req);
+  }
+
+  /** Elimina la existencia de un producto en una ubicación. */
+  eliminar(productoId: number, ubicacionId: number): Observable<void> {
+    const params = new HttpParams().set('productoId', productoId).set('ubicacionId', ubicacionId);
+    return this.http.delete<void>(`${API_BASE_URL}/stock`, { params });
+  }
 }

@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { Movimiento, ProductoListItem, StockResumen, Ubicacion } from '../core/models';
+import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
 import { ProductoService } from '../core/producto.service';
 import { UbicacionService } from '../core/ubicacion.service';
@@ -148,19 +148,43 @@ import { UbicacionService } from '../core/ubicacion.service';
             @if (r.ubicaciones.length === 0) {
               <p class="text-xs text-gray-500 py-4 text-center">Este producto todavía no tiene existencias en ninguna ubicación.</p>
             } @else {
+              @if (stockError()) {
+                <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockError() }}</div>
+              }
               <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm border-collapse min-w-[360px]">
+                <table class="w-full text-left text-sm border-collapse min-w-[440px]">
                   <thead>
                     <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
                       <th class="py-3 px-4">Ubicación</th>
                       <th class="py-3 px-4 text-right">Cantidad</th>
+                      <th class="py-3 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-dark-border/50">
                     @for (l of r.ubicaciones; track l.ubicacionId) {
                       <tr class="hover:bg-dark-surface/40 transition-colors">
                         <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
-                        <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                        @if (editandoUbicacionId() === l.ubicacionId) {
+                          <td class="py-3 px-4 text-right">
+                            <input
+                              [(ngModel)]="editCantidad"
+                              type="number"
+                              min="0"
+                              (keyup.enter)="guardarCantidad(l.ubicacionId)"
+                              class="w-24 px-2.5 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white font-mono text-right text-sm focus:outline-none focus:border-neon-cyan"
+                            />
+                          </td>
+                          <td class="py-3 px-4 text-right whitespace-nowrap">
+                            <button [disabled]="filaGuardando()" (click)="guardarCantidad(l.ubicacionId)" class="text-xs font-semibold text-neon-green hover:underline cursor-pointer disabled:opacity-50">Guardar</button>
+                            <button (click)="cancelarEdicionCantidad()" class="ml-3 text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
+                          </td>
+                        } @else {
+                          <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                          <td class="py-3 px-4 text-right whitespace-nowrap">
+                            <button (click)="iniciarEdicionCantidad(l)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">Editar</button>
+                            <button [disabled]="filaGuardando()" (click)="eliminarUbicacion(l)" class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -243,6 +267,12 @@ export class Stock implements OnInit {
   entradaError = signal<string | null>(null);
   entradaOk = signal<string | null>(null);
 
+  // Editar / eliminar filas de stock actual
+  editandoUbicacionId = signal<number | null>(null);
+  editCantidad: number | null = null;
+  filaGuardando = signal(false);
+  stockError = signal<string | null>(null);
+
   ngOnInit(): void {
     this.ubicacionService.listar().subscribe({
       next: (list) => this.ubicaciones.set(list),
@@ -312,6 +342,59 @@ export class Stock implements OnInit {
           this.guardandoEntrada.set(false);
         },
       });
+  }
+
+  iniciarEdicionCantidad(l: StockLinea): void {
+    this.stockError.set(null);
+    this.editandoUbicacionId.set(l.ubicacionId);
+    this.editCantidad = l.cantidad;
+  }
+
+  cancelarEdicionCantidad(): void {
+    this.editandoUbicacionId.set(null);
+    this.editCantidad = null;
+  }
+
+  guardarCantidad(ubicacionId: number): void {
+    const p = this.productoSel();
+    if (!p) return;
+    if (this.editCantidad == null || this.editCantidad < 0) {
+      this.stockError.set('La cantidad debe ser 0 o mayor.');
+      return;
+    }
+    this.stockError.set(null);
+    this.filaGuardando.set(true);
+    this.service
+      .conteo({ productoId: p.id, ubicacionId, cantidadReal: this.editCantidad, motivo: 'Ajuste manual de stock' })
+      .subscribe({
+        next: () => {
+          this.filaGuardando.set(false);
+          this.cancelarEdicionCantidad();
+          this.refrescarStock(p.id);
+        },
+        error: (e) => {
+          this.stockError.set(e?.error?.message ?? 'No se pudo actualizar la cantidad.');
+          this.filaGuardando.set(false);
+        },
+      });
+  }
+
+  eliminarUbicacion(l: StockLinea): void {
+    const p = this.productoSel();
+    if (!p) return;
+    if (!confirm(`¿Eliminar la existencia en "${l.ubicacionPath}" (${l.cantidad} u.)?`)) return;
+    this.stockError.set(null);
+    this.filaGuardando.set(true);
+    this.service.eliminar(p.id, l.ubicacionId).subscribe({
+      next: () => {
+        this.filaGuardando.set(false);
+        this.refrescarStock(p.id);
+      },
+      error: (e) => {
+        this.stockError.set(e?.error?.message ?? 'No se pudo eliminar la existencia.');
+        this.filaGuardando.set(false);
+      },
+    });
   }
 
   private refrescarStock(productoId: number): void {
