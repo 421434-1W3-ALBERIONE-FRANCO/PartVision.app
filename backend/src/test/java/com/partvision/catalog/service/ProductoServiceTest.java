@@ -12,6 +12,7 @@ import com.partvision.catalog.repository.ProductoCodigoRepository;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
+import com.partvision.inventory.repository.StockRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -39,10 +40,12 @@ class ProductoServiceTest {
     private MarcaService marcaService;
     @Mock
     private CategoriaService categoriaService;
+    @Mock
+    private StockRepository stockRepository;
 
     private ProductoService service() {
         return new ProductoService(productoRepository, productoCodigoRepository, marcaService, categoriaService,
-                new ProductoMatcher());
+                new ProductoMatcher(), stockRepository);
     }
 
     @Test

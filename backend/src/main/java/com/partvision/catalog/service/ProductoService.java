@@ -13,6 +13,8 @@ import com.partvision.catalog.repository.ProductoCodigoRepository;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
+import com.partvision.inventory.domain.Stock;
+import com.partvision.inventory.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +37,7 @@ public class ProductoService {
     private final MarcaService marcaService;
     private final CategoriaService categoriaService;
     private final ProductoMatcher matcher;
+    private final StockRepository stockRepository;
 
     /** Cuantos candidatos parecidos traer/mostrar como maximo. */
     private static final int MAX_CANDIDATOS = 8;
@@ -119,13 +124,38 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> findAll(Pageable pageable) {
-        return productoRepository.findAllBy(pageable).map(ProductoListItemResponse::from);
+        return conStock(productoRepository.findAllBy(pageable));
     }
 
     /** Busqueda por texto parcial (descripcion, SKU, marca, categoria). Paginada. */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
-        return productoRepository.buscarPorTexto(q, pageable).map(ProductoListItemResponse::from);
+        return conStock(productoRepository.buscarPorTexto(q, pageable));
+    }
+
+    /** Baja logica: marca el producto como INACTIVO (conserva el historial de stock). */
+    @Transactional
+    public void darDeBaja(Long id) {
+        Producto producto = getEntity(id);
+        producto.setEstado(ProductoEstado.INACTIVO);
+        productoRepository.save(producto);
+    }
+
+    /** Enriquece una pagina de productos con su stock (total y por ubicacion), en una sola query. */
+    private Page<ProductoListItemResponse> conStock(Page<Producto> page) {
+        List<Long> ids = page.getContent().stream().map(Producto::getId).toList();
+        Map<Long, List<Stock>> porProducto = ids.isEmpty()
+                ? Map.of()
+                : stockRepository.findByProductoIdIn(ids).stream()
+                        .collect(Collectors.groupingBy(s -> s.getProducto().getId()));
+        return page.map(p -> {
+            List<Stock> stocks = porProducto.getOrDefault(p.getId(), List.of());
+            int total = stocks.stream().mapToInt(Stock::getCantidad).sum();
+            List<ProductoListItemResponse.StockUbicacion> ubicaciones = stocks.stream()
+                    .map(s -> new ProductoListItemResponse.StockUbicacion(s.getUbicacion().getCodigo(), s.getCantidad()))
+                    .toList();
+            return ProductoListItemResponse.from(p, total, ubicaciones);
+        });
     }
 
     @Transactional(readOnly = true)
