@@ -5,7 +5,8 @@ import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.RestAuthenticationEntryPoint;
 import com.partvision.auth.security.SecurityConfig;
 import com.partvision.common.security.AuthenticatedUser;
-import com.partvision.imports.dto.ImportResultResponse;
+import com.partvision.imports.service.ImportJob;
+import com.partvision.imports.service.ImportJobRegistry;
 import com.partvision.imports.service.ImportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -41,6 +42,8 @@ class ImportControllerTest {
     private MockMvc mvc;
     @MockBean
     private ImportService importService;
+    @MockBean
+    private ImportJobRegistry jobRegistry;
 
     private UsernamePasswordAuthenticationToken auth(String rol) {
         return new UsernamePasswordAuthenticationToken(
@@ -53,17 +56,13 @@ class ImportControllerTest {
     }
 
     @Test
-    void importarProductos_comoAdmin_devuelve200ConResumen() throws Exception {
-        when(importService.importarCsv(any()))
-                .thenReturn(new ImportResultResponse(3, 1, 1,
-                        List.of(new ImportResultResponse.FilaError(3, "La descripcion es obligatoria"))));
+    void importarProductos_comoAdmin_devuelve202ConJobId() throws Exception {
+        when(jobRegistry.crear(anyInt())).thenReturn(new ImportJob("job-123", 1));
 
         mvc.perform(multipart("/api/v1/importaciones/productos").file(csv()).with(authentication(auth("ADMIN"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalFilas").value(3))
-                .andExpect(jsonPath("$.importados").value(1))
-                .andExpect(jsonPath("$.omitidos").value(1))
-                .andExpect(jsonPath("$.errores[0].fila").value(3));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").value("job-123"))
+                .andExpect(jsonPath("$.estado").value("EN_CURSO"));
     }
 
     @Test

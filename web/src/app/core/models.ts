@@ -130,6 +130,18 @@ export interface ImportResult {
   errores: { fila: number; mensaje: string }[];
 }
 
+export interface ImportJob {
+  jobId: string;
+  estado: 'EN_CURSO' | 'COMPLETADO' | 'ERROR';
+  total: number;
+  procesados: number;
+  importados: number;
+  omitidos: number;
+  porcentaje: number;
+  errores: { fila: number; mensaje: string }[];
+  errorGeneral: string | null;
+}
+
 export interface Usuario {
   id: number;
   username: string;
