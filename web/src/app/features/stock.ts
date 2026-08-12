@@ -182,7 +182,7 @@ import { UbicacionService } from '../core/ubicacion.service';
                           <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
                           <td class="py-3 px-4 text-right whitespace-nowrap">
                             <button (click)="iniciarEdicionCantidad(l)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">Editar</button>
-                            <button [disabled]="filaGuardando()" (click)="eliminarUbicacion(l)" class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
+                            <button [disabled]="filaGuardando()" (click)="pedirEliminarLinea(l)" class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
                           </td>
                         }
                       </tr>
@@ -238,6 +238,35 @@ import { UbicacionService } from '../core/ubicacion.service';
         </div>
       }
     </div>
+
+    <!-- Confirmación de eliminación de existencia -->
+    @if (aEliminarLinea(); as l) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminarLinea()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Eliminar existencia
+          </h3>
+          <p class="text-sm text-gray-300">
+            Vas a eliminar la existencia de este producto en
+            <span class="font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</span>
+            (<span class="font-mono font-semibold text-neon-green">{{ l.cantidad }} u.</span>).
+            Esta ubicación dejará de figurar para el producto. ¿Seguro?
+          </p>
+          @if (stockError()) {
+            <div class="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockError() }}</div>
+          }
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarEliminarLinea()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button [disabled]="filaGuardando()" (click)="confirmarEliminarLinea(l)" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
+              {{ filaGuardando() ? 'Eliminando...' : 'Eliminar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Stock implements OnInit {
@@ -272,6 +301,7 @@ export class Stock implements OnInit {
   editCantidad: number | null = null;
   filaGuardando = signal(false);
   stockError = signal<string | null>(null);
+  aEliminarLinea = signal<StockLinea | null>(null);
 
   ngOnInit(): void {
     this.ubicacionService.listar().subscribe({
@@ -379,15 +409,26 @@ export class Stock implements OnInit {
       });
   }
 
-  eliminarUbicacion(l: StockLinea): void {
+  pedirEliminarLinea(l: StockLinea): void {
+    this.stockError.set(null);
+    this.cancelarEdicionCantidad();
+    this.aEliminarLinea.set(l);
+  }
+
+  cancelarEliminarLinea(): void {
+    this.aEliminarLinea.set(null);
+    this.stockError.set(null);
+  }
+
+  confirmarEliminarLinea(l: StockLinea): void {
     const p = this.productoSel();
     if (!p) return;
-    if (!confirm(`¿Eliminar la existencia en "${l.ubicacionPath}" (${l.cantidad} u.)?`)) return;
     this.stockError.set(null);
     this.filaGuardando.set(true);
     this.service.eliminar(p.id, l.ubicacionId).subscribe({
       next: () => {
         this.filaGuardando.set(false);
+        this.aEliminarLinea.set(null);
         this.refrescarStock(p.id);
       },
       error: (e) => {
