@@ -35,12 +35,17 @@ public class Ubicacion extends Auditable {
     @JoinColumn(name = "parent_id")
     private Ubicacion parent;
 
+    /** Opcional en el modelo plano; el cliente puede clasificar o dejarlo sin tipo. */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private TipoUbicacion tipo;
 
     @Column(nullable = false, length = 50)
     private String codigo;
+
+    /** Nota libre opcional (color, referencia fisica, etc.). */
+    @Column(length = 300)
+    private String descripcion;
 
     /** Camino materializado desde la raiz (ej "A/1/4/2"). */
     @Column(nullable = false, length = 500)

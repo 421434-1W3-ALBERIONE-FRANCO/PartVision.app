@@ -21,4 +21,6 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
 
     @EntityGraph(attributePaths = {"ubicacion"})
     List<Stock> findByProductoId(Long productoId);
+
+    boolean existsByUbicacionId(Long ubicacionId);
 }

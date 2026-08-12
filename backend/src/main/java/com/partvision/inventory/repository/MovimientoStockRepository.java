@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface MovimientoStockRepository extends JpaRepository<MovimientoStock, Long> {
 
     Page<MovimientoStock> findByProductoIdOrderByCreatedAtDesc(Long productoId, Pageable pageable);
+
+    boolean existsByUbicacionOrigenIdOrUbicacionDestinoId(Long ubicacionOrigenId, Long ubicacionDestinoId);
 }

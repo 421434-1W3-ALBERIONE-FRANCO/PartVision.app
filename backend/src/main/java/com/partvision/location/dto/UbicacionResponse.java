@@ -7,6 +7,7 @@ public record UbicacionResponse(
         Long id,
         TipoUbicacion tipo,
         String codigo,
+        String descripcion,
         String path,
         boolean activo,
         Long parentId
@@ -17,6 +18,7 @@ public record UbicacionResponse(
                 ubicacion.getId(),
                 ubicacion.getTipo(),
                 ubicacion.getCodigo(),
+                ubicacion.getDescripcion(),
                 ubicacion.getPath(),
                 ubicacion.isActivo(),
                 parent == null ? null : parent.getId());
