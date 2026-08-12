@@ -17,7 +17,7 @@ export class UsuarioService {
     return this.http.get<Usuario[]>(`${API_BASE_URL}/usuarios`);
   }
 
-  crear(req: { username: string; password: string; nombre: string }): Observable<Usuario> {
+  crear(req: { username: string; password: string; nombre: string; rol?: string }): Observable<Usuario> {
     return this.http.post<Usuario>(`${API_BASE_URL}/usuarios`, req);
   }
 

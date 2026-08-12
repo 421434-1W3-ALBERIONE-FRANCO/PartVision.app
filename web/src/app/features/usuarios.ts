@@ -46,7 +46,7 @@ import { UsuarioService } from '../core/usuario.service';
             Alta de Operador / Usuario
           </h3>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
                 Usuario *
@@ -57,6 +57,19 @@ import { UsuarioService } from '../core/usuario.service';
                 placeholder="Ej: operario1"
                 class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
               />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
+                Rol *
+              </label>
+              <select
+                [(ngModel)]="rol"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm"
+              >
+                <option value="OPERARIO">Empleado</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
             </div>
 
             <div>
@@ -98,7 +111,7 @@ import { UsuarioService } from '../core/usuario.service';
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              <span>Usuario creado correctamente con rol OPERARIO.</span>
+              <span>Usuario creado correctamente con rol {{ rolCreado() }}.</span>
             </div>
           }
 
@@ -223,9 +236,11 @@ export class Usuarios implements OnInit {
   username = '';
   nombre = '';
   password = '';
+  rol = 'OPERARIO';
   guardando = signal(false);
   error = signal<string | null>(null);
   ok = signal(false);
+  rolCreado = signal('OPERARIO');
 
   ngOnInit(): void {
     this.cargarUsuarios();
@@ -254,12 +269,14 @@ export class Usuarios implements OnInit {
     this.ok.set(false);
 
     this.service
-      .crear({ username: this.username.trim(), nombre: this.nombre.trim(), password: this.password })
+      .crear({ username: this.username.trim(), nombre: this.nombre.trim(), password: this.password, rol: this.rol })
       .subscribe({
         next: () => {
+          this.rolCreado.set(this.rol === 'ADMIN' ? 'ADMIN' : 'OPERARIO');
           this.username = '';
           this.nombre = '';
           this.password = '';
+          this.rol = 'OPERARIO';
           this.guardando.set(false);
           this.ok.set(true);
           this.cargarUsuarios();

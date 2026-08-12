@@ -9,6 +9,7 @@ import com.partvision.auth.dto.UsuarioResponse;
 import com.partvision.auth.repository.RolRepository;
 import com.partvision.auth.repository.UsuarioRepository;
 import com.partvision.auth.security.JwtService;
+import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.InvalidCredentialsException;
 import com.partvision.common.exception.ResourceNotFoundException;
@@ -44,8 +45,11 @@ public class AuthService {
         if (usuarioRepository.existsByUsername(request.username())) {
             throw new DuplicateResourceException("El username ya existe: " + request.username());
         }
-        Rol rol = rolRepository.findByNombre(DEFAULT_ROLE)
-                .orElseThrow(() -> new IllegalStateException("Rol por defecto no configurado: " + DEFAULT_ROLE));
+        String rolNombre = (request.rol() == null || request.rol().isBlank())
+                ? DEFAULT_ROLE
+                : request.rol().trim().toUpperCase();
+        Rol rol = rolRepository.findByNombre(rolNombre)
+                .orElseThrow(() -> new BusinessException("Rol invalido: " + rolNombre));
 
         Usuario usuario = Usuario.builder()
                 .username(request.username())
