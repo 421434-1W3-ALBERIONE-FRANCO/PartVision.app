@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 
 import { Marca, ProductoListItem } from '../core/models';
 import { AuthService } from '../core/auth.service';
@@ -484,10 +484,31 @@ export class Productos implements OnInit {
   ngOnInit(): void {
     this.cargar();
     this.cargarMarcas();
-    // Búsqueda en vivo: filtra el catálogo a medida que se tipea (con un pequeño retardo).
+    // Búsqueda en vivo: filtra a medida que se tipea. switchMap cancela las consultas
+    // viejas (evita que una búsqueda parcial anterior pise el resultado de la última).
     this.queryChanged
-      .pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.buscar());
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap(() => {
+          this.pagina.set(0);
+          this.cargando.set(true);
+        }),
+        switchMap((term) =>
+          (term ? this.service.buscarTexto(term, 0) : this.service.listar(0)).pipe(
+            catchError(() => of(null)),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((res) => {
+        if (res) {
+          this.productos.set(res.content);
+          this.totalPaginas.set(res.totalPages);
+          this.totalElements.set(res.totalElements);
+        }
+        this.cargando.set(false);
+      });
   }
 
   cargarMarcas(): void {

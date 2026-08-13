@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 
 import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
@@ -313,10 +313,23 @@ export class Stock implements OnInit {
       next: (list) => this.ubicaciones.set(list),
       error: () => this.ubicaciones.set([]),
     });
-    // Búsqueda en vivo: muestra candidatos a medida que se tipea (con un pequeño retardo).
+    // Búsqueda en vivo: muestra candidatos a medida que se tipea. switchMap cancela las
+    // consultas viejas para que siempre gane la última (evita el parpadeo de resultados).
     this.queryChanged
-      .pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.buscar());
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap(() => this.buscando.set(true)),
+        switchMap((term) => this.productos.buscarTexto(term, 0, 10).pipe(catchError(() => of(null)))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((page) => {
+        if (page) {
+          this.resultados.set(page.content);
+          this.buscoSinResultados.set(page.content.length === 0);
+        }
+        this.buscando.set(false);
+      });
   }
 
   /** En cada tecla dispara la búsqueda en vivo (debounced), a partir de 2 caracteres. */

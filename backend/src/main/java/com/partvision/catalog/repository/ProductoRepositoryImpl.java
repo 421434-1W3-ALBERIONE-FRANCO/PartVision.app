@@ -59,4 +59,54 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         List<Producto> contenido = data.getResultList();
         return new PageImpl<>(contenido, pageable, count.getSingleResult());
     }
+
+    @Override
+    public Page<Producto> buscarFuzzy(List<String> tokens, Pageable pageable, double umbral) {
+        StringBuilder where = new StringBuilder();      // OR de palabras (exacta o parecida)
+        StringBuilder score = new StringBuilder();      // suma de parecidos (ranking)
+        for (int i = 0; i < tokens.size(); i++) {
+            String like = "(lower(p.descripcion) like :tl" + i
+                    + " or lower(p.sku) like :tl" + i
+                    + " or lower(m.nombre) like :tl" + i
+                    + " or lower(c.nombre) like :tl" + i + ")";
+            String simDesc = "function('word_similarity', :tr" + i + ", p.descripcion)";
+            String simMarca = "function('word_similarity', :tr" + i + ", m.nombre)";
+            String simCat = "function('word_similarity', :tr" + i + ", c.nombre)";
+            String pred = "(" + like
+                    + " or " + simDesc + " >= :umbral"
+                    + " or " + simMarca + " >= :umbral"
+                    + " or " + simCat + " >= :umbral)";
+            where.append(i == 0 ? "" : " or ").append(pred);
+            score.append(i == 0 ? "" : " + ")
+                    .append("case when ").append(like).append(" then 1.0")
+                    .append(" else function('greatest', ").append(simDesc).append(", ")
+                    .append(simMarca).append(", ").append(simCat).append(") end");
+        }
+
+        TypedQuery<Producto> data = em.createQuery(
+                "select p from Producto p left join fetch p.marca m left join fetch p.categoria c"
+                        + " where " + where
+                        + " order by (" + score + ") desc, length(p.descripcion) asc, p.id asc",
+                Producto.class);
+        TypedQuery<Long> count = em.createQuery(
+                "select count(p) from Producto p left join p.marca m left join p.categoria c"
+                        + " where " + where,
+                Long.class);
+
+        for (int i = 0; i < tokens.size(); i++) {
+            String tok = tokens.get(i).toLowerCase();
+            data.setParameter("tl" + i, "%" + tok + "%");
+            data.setParameter("tr" + i, tok);
+            count.setParameter("tl" + i, "%" + tok + "%");
+            count.setParameter("tr" + i, tok);
+        }
+        data.setParameter("umbral", umbral);
+        count.setParameter("umbral", umbral);
+
+        data.setFirstResult((int) pageable.getOffset());
+        data.setMaxResults(pageable.getPageSize());
+
+        List<Producto> contenido = data.getResultList();
+        return new PageImpl<>(contenido, pageable, count.getSingleResult());
+    }
 }
