@@ -24,4 +24,8 @@ export class UsuarioService {
   toggleActivo(id: number): Observable<Usuario> {
     return this.http.patch<Usuario>(`${API_BASE_URL}/usuarios/${id}/activo`, {});
   }
+
+  cambiarRol(id: number, rol: string): Observable<Usuario> {
+    return this.http.patch<Usuario>(`${API_BASE_URL}/usuarios/${id}/rol`, { rol });
+  }
 }

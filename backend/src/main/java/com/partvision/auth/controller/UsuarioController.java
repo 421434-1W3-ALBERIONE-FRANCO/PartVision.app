@@ -1,5 +1,6 @@
 package com.partvision.auth.controller;
 
+import com.partvision.auth.dto.CambiarRolRequest;
 import com.partvision.auth.dto.RegisterRequest;
 import com.partvision.auth.dto.UsuarioResponse;
 import com.partvision.auth.service.AuthService;
@@ -48,8 +49,8 @@ public class UsuarioController {
     }
 
     /**
-     * Crea un nuevo usuario con rol OPERARIO (solo ADMIN).
-     * El endpoint público /auth/register sigue funcionando para el onboarding inicial.
+     * Crea un nuevo usuario con el rol indicado (ADMIN u OPERARIO; default OPERARIO).
+     * Solo ADMIN.
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -68,5 +69,20 @@ public class UsuarioController {
             throw new BusinessException("No podés desactivar tu propia cuenta");
         }
         return ResponseEntity.ok(authService.toggleActivo(id));
+    }
+
+    /**
+     * Cambia el rol de un usuario (ADMIN u OPERARIO). Un admin no puede cambiarse
+     * su propio rol (evita auto-degradarse y quedar sin acceso admin).
+     */
+    @PatchMapping("/{id}/rol")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UsuarioResponse> cambiarRol(@PathVariable Long id,
+            @Valid @RequestBody CambiarRolRequest request, Authentication authentication) {
+        if (authentication.getPrincipal() instanceof AuthenticatedUser principal
+                && principal.id().equals(id)) {
+            throw new BusinessException("No podés cambiar tu propio rol");
+        }
+        return ResponseEntity.ok(authService.cambiarRol(id, request.rol()));
     }
 }

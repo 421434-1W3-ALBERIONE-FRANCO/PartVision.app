@@ -70,6 +70,18 @@ public class AuthService {
                 .toList();
     }
 
+    /** Reemplaza el rol de un usuario existente. Valida que el rol exista. */
+    @Transactional
+    public UsuarioResponse cambiarRol(Long id, String rolNombre) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        String nombre = (rolNombre == null ? "" : rolNombre.trim().toUpperCase());
+        Rol rol = rolRepository.findByNombre(nombre)
+                .orElseThrow(() -> new BusinessException("Rol invalido: " + nombre));
+        usuario.setRoles(new HashSet<>(Set.of(rol)));
+        return UsuarioResponse.from(usuarioRepository.save(usuario));
+    }
+
     /** Activa o desactiva un usuario. No puede desactivarse a sí mismo (lo valida el controller). */
     @Transactional
     public UsuarioResponse toggleActivo(Long id) {

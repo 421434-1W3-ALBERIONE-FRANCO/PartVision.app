@@ -184,14 +184,28 @@ import { UsuarioService } from '../core/usuario.service';
                       {{ u.nombre }}
                     </td>
                     <td class="py-3.5 px-4">
-                      <div class="flex gap-1.5 flex-wrap">
-                        @for (rol of u.roles; track rol) {
-                          <span class="text-[10px] font-mono px-2 py-0.5 rounded-md"
-                                [class]="rol === 'ADMIN' ? 'neon-badge-purple' : 'neon-badge-cyan'">
-                            {{ rol }}
-                          </span>
-                        }
-                      </div>
+                      @if (editandoRolId() === u.id) {
+                        <div class="flex items-center gap-2">
+                          <select
+                            [(ngModel)]="rolEdit"
+                            class="px-2.5 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white text-xs focus:outline-none focus:border-neon-cyan"
+                          >
+                            <option value="OPERARIO">Empleado</option>
+                            <option value="ADMIN">Administrador</option>
+                          </select>
+                          <button [disabled]="rolGuardando()" (click)="guardarRol(u.id)" class="text-xs font-semibold text-neon-green hover:underline cursor-pointer disabled:opacity-50">Guardar</button>
+                          <button (click)="cancelarEdicionRol()" class="text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
+                        </div>
+                      } @else {
+                        <div class="flex gap-1.5 flex-wrap">
+                          @for (rol of u.roles; track rol) {
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded-md"
+                                  [class]="rol === 'ADMIN' ? 'neon-badge-purple' : 'neon-badge-cyan'">
+                              {{ rol }}
+                            </span>
+                          }
+                        </div>
+                      }
                     </td>
                     <td class="py-3.5 px-4">
                       @if (u.activo) {
@@ -206,7 +220,13 @@ import { UsuarioService } from '../core/usuario.service';
                         </span>
                       }
                     </td>
-                    <td class="py-3.5 px-4 text-right">
+                    <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                      <button
+                        (click)="iniciarEdicionRol(u)"
+                        class="px-3 py-1.5 mr-2 rounded-lg text-xs font-medium cursor-pointer transition-colors bg-dark-surface border border-dark-border hover:border-neon-cyan text-neon-cyan"
+                      >
+                        Cambiar rol
+                      </button>
                       <button
                         (click)="toggleActivo(u)"
                         class="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
@@ -241,6 +261,11 @@ export class Usuarios implements OnInit {
   error = signal<string | null>(null);
   ok = signal(false);
   rolCreado = signal('OPERARIO');
+
+  // Edición de rol de un usuario existente
+  editandoRolId = signal<number | null>(null);
+  rolEdit = 'OPERARIO';
+  rolGuardando = signal(false);
 
   ngOnInit(): void {
     this.cargarUsuarios();
@@ -292,6 +317,30 @@ export class Usuarios implements OnInit {
     this.service.toggleActivo(u.id).subscribe({
       next: () => this.cargarUsuarios(),
       error: (e) => alert(e?.error?.message ?? 'No se pudo modificar el estado del usuario'),
+    });
+  }
+
+  iniciarEdicionRol(u: Usuario): void {
+    this.editandoRolId.set(u.id);
+    this.rolEdit = u.roles.includes('ADMIN') ? 'ADMIN' : 'OPERARIO';
+  }
+
+  cancelarEdicionRol(): void {
+    this.editandoRolId.set(null);
+  }
+
+  guardarRol(id: number): void {
+    this.rolGuardando.set(true);
+    this.service.cambiarRol(id, this.rolEdit).subscribe({
+      next: () => {
+        this.rolGuardando.set(false);
+        this.editandoRolId.set(null);
+        this.cargarUsuarios();
+      },
+      error: (e) => {
+        this.rolGuardando.set(false);
+        alert(e?.error?.message ?? 'No se pudo cambiar el rol del usuario');
+      },
     });
   }
 }
