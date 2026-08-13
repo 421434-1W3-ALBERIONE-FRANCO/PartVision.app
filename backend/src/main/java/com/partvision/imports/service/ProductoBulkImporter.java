@@ -84,6 +84,7 @@ public class ProductoBulkImporter {
         Map<String, Long> marcas = resolverMarcas(filas);
         Map<String, Long> categorias = resolverCategorias(filas);
         Set<String> skusExistentes = cargarSkusExistentes();
+        Set<String> provSkusExistentes = cargarProveedorSkusExistentes();
         Set<String> codigosExistentes = cargarCodigosExistentes();
         Timestamp ahora = Timestamp.from(Instant.now());
 
@@ -96,27 +97,28 @@ public class ProductoBulkImporter {
 
             boolean dupSku = marcaId != null && fila.sku() != null
                     && skusExistentes.contains(claveSku(marcaId, fila.sku()));
+            // Dedup por proveedor+sku: cubre los catalogos SIN marca (ej. Autopartes del Sur),
+            // donde el indice unico (marca_id, sku) no aplica porque marca_id es NULL.
+            boolean dupProvSku = fila.proveedor() != null && fila.sku() != null
+                    && provSkusExistentes.contains(claveProvSku(fila.proveedor(), fila.sku()));
             boolean dupCodigo = fila.codigo() != null
                     && codigosExistentes.contains(fila.codigo().toLowerCase());
-            if (dupSku || dupCodigo) {
+            if (dupSku || dupProvSku || dupCodigo) {
                 job.marcarOmitida();
                 job.marcarProcesada();
                 continue;
             }
+            registrarClaves(fila, marcaId, skusExistentes, provSkusExistentes, codigosExistentes);
 
             // Las filas con codigo crean producto_codigos: van por el camino lento (raro en catalogos).
             if (fila.codigo() != null) {
                 importarFilaLenta(fila, job);
-                codigosExistentes.add(fila.codigo().toLowerCase());
                 continue;
             }
 
             lote.add(new Object[]{
                     fila.sku(), marcaId, categoriaId, fila.descripcion(), "ACTIVO", fila.proveedor(), ahora, ahora});
             loteFilas.add(fila);
-            if (marcaId != null && fila.sku() != null) {
-                skusExistentes.add(claveSku(marcaId, fila.sku()));
-            }
             if (lote.size() >= LOTE) {
                 insertarLote(lote, loteFilas, job);
             }
@@ -191,12 +193,35 @@ public class ProductoBulkImporter {
         return map;
     }
 
+    /** Registra las claves de una fila que se va a insertar, para dedup dentro del mismo import. */
+    private void registrarClaves(ProductoImporter.FilaProducto fila, Long marcaId,
+            Set<String> skus, Set<String> provSkus, Set<String> codigos) {
+        if (marcaId != null && fila.sku() != null) {
+            skus.add(claveSku(marcaId, fila.sku()));
+        }
+        if (fila.proveedor() != null && fila.sku() != null) {
+            provSkus.add(claveProvSku(fila.proveedor(), fila.sku()));
+        }
+        if (fila.codigo() != null) {
+            codigos.add(fila.codigo().toLowerCase());
+        }
+    }
+
     /** Set de (marca_id|sku) ya existentes en la BD, para dedup por SKU sin consultar por fila. */
     private Set<String> cargarSkusExistentes() {
         Set<String> set = new HashSet<>();
         jdbcTemplate.query(
                 "SELECT marca_id, sku FROM productos WHERE sku IS NOT NULL AND marca_id IS NOT NULL",
                 (RowCallbackHandler) rs -> set.add(claveSku(rs.getLong("marca_id"), rs.getString("sku"))));
+        return set;
+    }
+
+    /** Set de (proveedor|sku) ya existentes, para dedup de catalogos sin marca (ej. Autopartes del Sur). */
+    private Set<String> cargarProveedorSkusExistentes() {
+        Set<String> set = new HashSet<>();
+        jdbcTemplate.query(
+                "SELECT proveedor, sku FROM productos WHERE sku IS NOT NULL AND proveedor IS NOT NULL",
+                (RowCallbackHandler) rs -> set.add(claveProvSku(rs.getString("proveedor"), rs.getString("sku"))));
         return set;
     }
 
@@ -210,5 +235,9 @@ public class ProductoBulkImporter {
 
     private String claveSku(long marcaId, String sku) {
         return marcaId + "|" + sku.toLowerCase();
+    }
+
+    private String claveProvSku(String proveedor, String sku) {
+        return proveedor.toLowerCase() + "|" + sku.toLowerCase();
     }
 }

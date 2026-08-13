@@ -3,12 +3,14 @@ package com.partvision.imports.controller;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.imports.dto.ImportJobResponse;
+import com.partvision.imports.service.CatalogoMantenimientoService;
 import com.partvision.imports.service.ImportJob;
 import com.partvision.imports.service.ImportJobRegistry;
 import com.partvision.imports.service.ImportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/importaciones")
@@ -27,6 +30,7 @@ public class ImportController {
 
     private final ImportService importService;
     private final ImportJobRegistry jobRegistry;
+    private final CatalogoMantenimientoService catalogoMantenimientoService;
 
     /**
      * Inicia una importacion masiva ASINCRONA (multipart/form-data, campo "archivo").
@@ -43,6 +47,16 @@ public class ImportController {
         ImportJob job = jobRegistry.crear(contarFilasDatos(contenido));
         importService.importarAsync(contenido, job);
         return ResponseEntity.accepted().body(ImportJobResponse.from(job));
+    }
+
+    /**
+     * Vacia el catalogo (productos, codigos, stock y movimientos), PRESERVANDO ubicaciones.
+     * Uso: reiniciar una carga que quedo con duplicados para volver a importar limpio.
+     */
+    @DeleteMapping("/catalogo")
+    public ResponseEntity<Map<String, Object>> vaciarCatalogo() {
+        int borrados = catalogoMantenimientoService.vaciarCatalogo();
+        return ResponseEntity.ok(Map.of("productosBorrados", borrados));
     }
 
     /** Estado/progreso de una importacion (para el polling del panel). */

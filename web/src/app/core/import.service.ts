@@ -21,4 +21,9 @@ export class ImportService {
   estado(jobId: string): Observable<ImportJob> {
     return this.http.get<ImportJob>(`${this.base}/${jobId}`);
   }
+
+  /** Vacía el catálogo (productos/códigos/stock), preservando ubicaciones. Devuelve cuántos se borraron. */
+  vaciarCatalogo(): Observable<{ productosBorrados: number }> {
+    return this.http.delete<{ productosBorrados: number }>(`${API_BASE_URL}/importaciones/catalogo`);
+  }
 }

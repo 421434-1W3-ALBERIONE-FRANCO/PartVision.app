@@ -4,6 +4,7 @@ import { interval, switchMap, takeWhile } from 'rxjs';
 
 import { ImportJob } from '../core/models';
 import { ImportService } from '../core/import.service';
+import { AuthService } from '../core/auth.service';
 
 @Component({
   selector: 'app-importacion',
@@ -133,12 +134,72 @@ import { ImportService } from '../core/import.service';
           }
         </div>
       }
+
+      <!-- Zona de mantenimiento (solo admin) -->
+      @if (esAdmin) {
+        <div class="glass-panel p-6 rounded-2xl border border-red-500/30 shadow-card space-y-3">
+          <h3 class="text-sm font-bold text-red-300 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Zona de mantenimiento
+          </h3>
+          <p class="text-xs text-gray-400">
+            Vacía el catálogo de productos (y su stock/movimientos),
+            <span class="text-white font-semibold">conservando las ubicaciones</span>.
+            Útil para reiniciar una carga que quedó con duplicados y volver a importar limpio.
+          </p>
+          @if (vaciadoMsg()) {
+            <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ vaciadoMsg() }}</div>
+          }
+          <div class="flex justify-end">
+            <button (click)="pedirVaciar()" [disabled]="vaciando()"
+              class="px-5 py-2.5 rounded-xl font-semibold text-sm bg-red-600/90 hover:bg-red-500 text-white cursor-pointer disabled:opacity-50">
+              {{ vaciando() ? 'Vaciando…' : 'Vaciar catálogo' }}
+            </button>
+          </div>
+        </div>
+      }
     </div>
+
+    <!-- Confirmación de vaciado -->
+    @if (mostrarVaciarModal()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarVaciar()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Vaciar catálogo
+          </h3>
+          <p class="text-sm text-gray-300">
+            Vas a <span class="text-white font-semibold">borrar TODOS los productos</span> (y su stock y movimientos).
+            Las <span class="text-neon-purple font-semibold">ubicaciones se conservan</span>.
+            Esto no se puede deshacer. ¿Seguro?
+          </p>
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarVaciar()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button [disabled]="vaciando()" (click)="confirmarVaciar()" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
+              {{ vaciando() ? 'Vaciando…' : 'Vaciar catálogo' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Importacion {
   private service = inject(ImportService);
   private destroyRef = inject(DestroyRef);
+  private auth = inject(AuthService);
+
+  get esAdmin(): boolean {
+    return this.auth.esAdmin;
+  }
+
+  mostrarVaciarModal = signal(false);
+  vaciando = signal(false);
+  vaciadoMsg = signal<string | null>(null);
 
   archivo = signal<File | null>(null);
   subiendo = signal(false);
@@ -173,6 +234,35 @@ export class Importacion {
       error: (e) => {
         this.error.set(e?.error?.message ?? 'No se pudo iniciar la importación');
         this.subiendo.set(false);
+      },
+    });
+  }
+
+  pedirVaciar(): void {
+    this.vaciadoMsg.set(null);
+    this.error.set(null);
+    this.mostrarVaciarModal.set(true);
+  }
+
+  cancelarVaciar(): void {
+    this.mostrarVaciarModal.set(false);
+  }
+
+  confirmarVaciar(): void {
+    this.vaciando.set(true);
+    this.service.vaciarCatalogo().subscribe({
+      next: (r) => {
+        this.vaciando.set(false);
+        this.mostrarVaciarModal.set(false);
+        this.resultado.set(null);
+        this.vaciadoMsg.set(
+          `Catálogo vaciado: ${r.productosBorrados} productos eliminados. Las ubicaciones se conservaron.`,
+        );
+      },
+      error: (e) => {
+        this.vaciando.set(false);
+        this.mostrarVaciarModal.set(false);
+        this.error.set(e?.error?.message ?? 'No se pudo vaciar el catálogo');
       },
     });
   }
