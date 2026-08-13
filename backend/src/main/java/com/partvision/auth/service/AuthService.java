@@ -82,6 +82,17 @@ public class AuthService {
         return UsuarioResponse.from(usuarioRepository.save(usuario));
     }
 
+    /**
+     * Elimina un usuario por completo (hard delete). Sus roles se borran en cascada
+     * (FK ON DELETE CASCADE). No puede eliminarse a sí mismo (lo valida el controller).
+     */
+    @Transactional
+    public void eliminarUsuario(Long id) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        usuarioRepository.delete(usuario);
+    }
+
     /** Activa o desactiva un usuario. No puede desactivarse a sí mismo (lo valida el controller). */
     @Transactional
     public UsuarioResponse toggleActivo(Long id) {

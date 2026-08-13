@@ -28,4 +28,9 @@ export class UsuarioService {
   cambiarRol(id: number, rol: string): Observable<Usuario> {
     return this.http.patch<Usuario>(`${API_BASE_URL}/usuarios/${id}/rol`, { rol });
   }
+
+  /** Elimina un usuario por completo (hard delete). */
+  eliminar(id: number): Observable<void> {
+    return this.http.delete<void>(`${API_BASE_URL}/usuarios/${id}`);
+  }
 }

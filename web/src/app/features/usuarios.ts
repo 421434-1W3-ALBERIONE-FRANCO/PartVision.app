@@ -229,10 +229,16 @@ import { UsuarioService } from '../core/usuario.service';
                       </button>
                       <button
                         (click)="toggleActivo(u)"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                        class="px-3 py-1.5 mr-2 rounded-lg text-xs font-medium cursor-pointer transition-colors"
                         [class]="u.activo ? 'neon-button-danger' : 'neon-button-secondary'"
                       >
                         {{ u.activo ? 'Desactivar' : 'Activar' }}
+                      </button>
+                      <button
+                        (click)="pedirEliminar(u)"
+                        class="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors bg-dark-surface border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                      >
+                        Eliminar
                       </button>
                     </td>
                   </tr>
@@ -244,6 +250,35 @@ import { UsuarioService } from '../core/usuario.service';
       </div>
 
     </div>
+
+    <!-- Confirmación de eliminación de usuario -->
+    @if (aEliminar(); as u) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminar()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Eliminar usuario
+          </h3>
+          <p class="text-sm text-gray-300">
+            Vas a <span class="text-white font-semibold">eliminar por completo</span> a
+            <span class="text-white font-semibold">{{ u.nombre }}</span> ({{ u.username }}).
+            Esto no se puede deshacer. Si es un usuario real, quizá prefieras
+            <span class="text-neon-cyan">Desactivar</span> en lugar de borrar. ¿Seguro?
+          </p>
+          @if (eliminarError()) {
+            <div class="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ eliminarError() }}</div>
+          }
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarEliminar()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button [disabled]="eliminando()" (click)="confirmarEliminar(u)" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
+              {{ eliminando() ? 'Eliminando…' : 'Eliminar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Usuarios implements OnInit {
@@ -266,6 +301,11 @@ export class Usuarios implements OnInit {
   editandoRolId = signal<number | null>(null);
   rolEdit = 'OPERARIO';
   rolGuardando = signal(false);
+
+  // Eliminación (hard delete) de usuario
+  aEliminar = signal<Usuario | null>(null);
+  eliminando = signal(false);
+  eliminarError = signal<string | null>(null);
 
   ngOnInit(): void {
     this.cargarUsuarios();
@@ -327,6 +367,31 @@ export class Usuarios implements OnInit {
 
   cancelarEdicionRol(): void {
     this.editandoRolId.set(null);
+  }
+
+  pedirEliminar(u: Usuario): void {
+    this.eliminarError.set(null);
+    this.aEliminar.set(u);
+  }
+
+  cancelarEliminar(): void {
+    this.aEliminar.set(null);
+    this.eliminarError.set(null);
+  }
+
+  confirmarEliminar(u: Usuario): void {
+    this.eliminando.set(true);
+    this.service.eliminar(u.id).subscribe({
+      next: () => {
+        this.eliminando.set(false);
+        this.aEliminar.set(null);
+        this.cargarUsuarios();
+      },
+      error: (e) => {
+        this.eliminando.set(false);
+        this.eliminarError.set(e?.error?.message ?? 'No se pudo eliminar el usuario');
+      },
+    });
   }
 
   guardarRol(id: number): void {

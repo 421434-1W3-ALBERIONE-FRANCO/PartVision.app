@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +70,20 @@ public class UsuarioController {
             throw new BusinessException("No podés desactivar tu propia cuenta");
         }
         return ResponseEntity.ok(authService.toggleActivo(id));
+    }
+
+    /**
+     * Elimina un usuario por completo (hard delete). Un admin no puede eliminarse a sí mismo.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> eliminar(@PathVariable Long id, Authentication authentication) {
+        if (authentication.getPrincipal() instanceof AuthenticatedUser principal
+                && principal.id().equals(id)) {
+            throw new BusinessException("No podés eliminar tu propia cuenta");
+        }
+        authService.eliminarUsuario(id);
+        return ResponseEntity.noContent().build();
     }
 
     /**
