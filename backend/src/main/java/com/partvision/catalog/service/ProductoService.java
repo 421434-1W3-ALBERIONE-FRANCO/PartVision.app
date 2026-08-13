@@ -22,6 +22,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,10 +128,30 @@ public class ProductoService {
         return conStock(productoRepository.findAllBy(pageable));
     }
 
-    /** Busqueda por texto parcial (descripcion, SKU, marca, categoria). Paginada. */
+    /**
+     * Busqueda por texto: separa el termino en palabras y exige que TODAS aparezcan
+     * (en descripcion, SKU, marca o categoria), sin importar el orden. Asi "piston 1.5mm"
+     * encuentra "MOTOMEL piston trifasico ASD 1.5mm x 05mm". Si no hay palabras, lista todo.
+     */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
-        return conStock(productoRepository.buscarPorTexto(q, pageable));
+        List<String> tokens = tokenizar(q);
+        Page<Producto> pagina = tokens.isEmpty()
+                ? productoRepository.findAllBy(pageable)
+                : productoRepository.buscarInteligente(tokens, pageable);
+        return conStock(pagina);
+    }
+
+    /** Palabras del termino de busqueda, en minuscula, sin repetidas y acotadas a 8. */
+    private List<String> tokenizar(String q) {
+        if (q == null || q.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(q.trim().toLowerCase().split("\\s+"))
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .limit(8)
+                .toList();
     }
 
     /** Baja logica: marca el producto como INACTIVO (conserva el historial de stock). */

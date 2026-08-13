@@ -289,7 +289,7 @@ class ProductoServiceTest {
     void buscarPorTexto_mapeaAListItem() {
         Producto p = Producto.builder().id(1L).sku("VW-1").descripcion("Aros Volkswagen")
                 .estado(ProductoEstado.ACTIVO).build();
-        when(productoRepository.buscarPorTexto("volks", PageRequest.of(0, 20)))
+        when(productoRepository.buscarInteligente(List.of("volks"), PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(p)));
 
         var page = service().buscarPorTexto("volks", PageRequest.of(0, 20));

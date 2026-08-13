@@ -1,5 +1,7 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { Marca, ProductoListItem } from '../core/models';
 import { AuthService } from '../core/auth.service';
@@ -434,6 +436,8 @@ export class Productos implements OnInit {
   private service = inject(ProductoService);
   private marcaService = inject(MarcaService);
   private auth = inject(AuthService);
+  private destroyRef = inject(DestroyRef);
+  private queryChanged = new Subject<string>();
 
   get esAdmin(): boolean {
     return this.auth.esAdmin;
@@ -480,6 +484,10 @@ export class Productos implements OnInit {
   ngOnInit(): void {
     this.cargar();
     this.cargarMarcas();
+    // Búsqueda en vivo: filtra el catálogo a medida que se tipea (con un pequeño retardo).
+    this.queryChanged
+      .pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.buscar());
   }
 
   cargarMarcas(): void {
@@ -605,11 +613,16 @@ export class Productos implements OnInit {
     this.cargar();
   }
 
-  /** Si borran el término, vuelve al listado completo automáticamente. */
+  /**
+   * En cada tecla dispara la búsqueda en vivo (debounced). Con el término vacío vuelve al
+   * listado completo; con 1 sola letra espera a que haya al menos 2 caracteres.
+   */
   onQueryInput(): void {
-    if (!this.q.trim()) {
-      this.buscar();
+    const term = this.q.trim();
+    if (term.length === 1) {
+      return;
     }
+    this.queryChanged.next(term);
   }
 
   limpiarBusqueda(): void {

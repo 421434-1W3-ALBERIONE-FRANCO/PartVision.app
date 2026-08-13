@@ -1,6 +1,8 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
@@ -33,8 +35,9 @@ import { UbicacionService } from '../core/ubicacion.service';
           <input
             [(ngModel)]="q"
             (keyup.enter)="buscar()"
+            (input)="onQueryInput()"
             type="text"
-            placeholder="SKU, descripción o marca..."
+            placeholder="SKU, descripción o marca (varias palabras)..."
             class="flex-1 px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
           />
           <button (click)="buscar()" class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer">
@@ -273,6 +276,8 @@ export class Stock implements OnInit {
   private service = inject(StockService);
   private productos = inject(ProductoService);
   private ubicacionService = inject(UbicacionService);
+  private destroyRef = inject(DestroyRef);
+  private queryChanged = new Subject<string>();
 
   // Búsqueda
   q = '';
@@ -308,6 +313,24 @@ export class Stock implements OnInit {
       next: (list) => this.ubicaciones.set(list),
       error: () => this.ubicaciones.set([]),
     });
+    // Búsqueda en vivo: muestra candidatos a medida que se tipea (con un pequeño retardo).
+    this.queryChanged
+      .pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.buscar());
+  }
+
+  /** En cada tecla dispara la búsqueda en vivo (debounced), a partir de 2 caracteres. */
+  onQueryInput(): void {
+    const term = this.q.trim();
+    if (term.length === 1) {
+      return;
+    }
+    if (!term) {
+      this.resultados.set([]);
+      this.buscoSinResultados.set(false);
+      return;
+    }
+    this.queryChanged.next(term);
   }
 
   buscar(): void {
