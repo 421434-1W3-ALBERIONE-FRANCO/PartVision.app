@@ -11,44 +11,40 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
- * Busqueda por palabras, rapida y tolerante a errores de tipeo. Cada palabra debe parecerse
- * (similaridad trigram, operador {@code <%}) a la columna denormalizada 'busqueda' (descripcion
- * + sku + marca + categoria). El orden de las palabras no importa y se toleran typos:
- * "aros mahek volswagen" encuentra "MAHLE ... VOLKSWAGEN". El operador usa el indice GIN trigram
- * sobre 'busqueda', asi que es rapido (~40ms) sobre catalogos grandes. Se ordena por parecido.
+ * Busqueda "candidatos" rapida y tolerante. Compara TODO el termino (frase) contra la columna
+ * denormalizada 'busqueda' (descripcion + sku + marca + categoria) con la similaridad trigram
+ * de pg_trgm (operador {@code <%}). Al ser por parecido de la frase completa:
+ *  - no importa el orden de las palabras,
+ *  - tolera errores de tipeo ("pistpn fiat" -> PISTON FIAT, "volswagen" -> VOLKSWAGEN),
+ *  - tolera palabras de mas o de menos ("juego de aros ..." rankea igual los aros),
+ * y usa el indice GIN trigram sobre 'busqueda', asi que es rapido (~200ms) sobre 135k.
+ * Se ordena por parecido (mejor primero).
  */
 public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
-    /** Parecido minimo (0..1) por palabra. 0.4 tolera typos (mahel~MAHLE=0.5) con poco ruido. */
-    private static final String UMBRAL = "0.4";
+    /** Parecido minimo (0..1) de la frase. 0.45 tolera typos y palabras de mas con poco ruido. */
+    private static final String UMBRAL = "0.45";
 
     @PersistenceContext
     private EntityManager em;
 
     @Override
     public Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable) {
-        // Umbral de similaridad, local a la transaccion (afecta al operador <%).
+        // Umbral del operador <%, local a la transaccion.
         em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
                 .setParameter("u", UMBRAL)
                 .getSingleResult();
 
-        StringBuilder where = new StringBuilder();
-        StringBuilder score = new StringBuilder();
-        for (int i = 0; i < tokens.size(); i++) {
-            where.append(i == 0 ? "" : " and ").append(":t").append(i).append(" <% p.busqueda");
-            score.append(i == 0 ? "" : " + ").append("word_similarity(:t").append(i).append(", p.busqueda)");
-        }
+        String frase = String.join(" ", tokens);
 
-        String sql = "select p.* from productos p where " + where
-                + " order by (" + score + ") desc, char_length(p.descripcion) asc, p.id asc";
-        String countSql = "select count(*) from productos p where " + where;
-
-        Query data = em.createNativeQuery(sql, Producto.class);
-        Query count = em.createNativeQuery(countSql);
-        for (int i = 0; i < tokens.size(); i++) {
-            data.setParameter("t" + i, tokens.get(i));
-            count.setParameter("t" + i, tokens.get(i));
-        }
+        Query data = em.createNativeQuery(
+                "select p.* from productos p where :q <% p.busqueda"
+                        + " order by word_similarity(:q, p.busqueda) desc, char_length(p.descripcion) asc, p.id asc",
+                Producto.class);
+        Query count = em.createNativeQuery(
+                "select count(*) from productos p where :q <% p.busqueda");
+        data.setParameter("q", frase);
+        count.setParameter("q", frase);
 
         data.setFirstResult((int) pageable.getOffset());
         data.setMaxResults(pageable.getPageSize());
