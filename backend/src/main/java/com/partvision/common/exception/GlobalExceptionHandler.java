@@ -77,6 +77,22 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Datos de entrada invalidos", request, details);
     }
 
+    /** Ruta inexistente (no hay handler ni recurso). Devuelve 404, no 500. */
+    @ExceptionHandler({
+            org.springframework.web.servlet.NoHandlerFoundException.class,
+            org.springframework.web.servlet.resource.NoResourceFoundException.class
+    })
+    public ResponseEntity<ApiError> handleNoHandler(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "Recurso no encontrado: " + request.getRequestURI(), request, null);
+    }
+
+    /** Método HTTP no soportado por la ruta (p. ej. PATCH donde solo hay POST). Devuelve 405. */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        return build(HttpStatus.METHOD_NOT_ALLOWED, "Método no permitido: " + ex.getMethod(), request, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Error no controlado en {}", request.getRequestURI(), ex);
