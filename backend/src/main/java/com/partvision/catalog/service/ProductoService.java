@@ -134,21 +134,13 @@ public class ProductoService {
      * palabras que no aparecen no descartan la fila. Asi "juego de aros mahle 1.6 volkswagen"
      * encuentra "MAHLE ... VOLKSWAGEN 1.6 ..." aunque no diga "juego". Sin palabras, lista todo.
      */
-    /** Parecido minimo (0..1) para el fallback tolerante a errores de tipeo. */
-    private static final double UMBRAL_FUZZY = 0.4;
-
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
         List<String> tokens = tokenizar(q);
         if (tokens.isEmpty()) {
             return conStock(productoRepository.findAllBy(pageable));
         }
-        Page<Producto> pagina = productoRepository.buscarInteligente(tokens, pageable);
-        // Si la busqueda exacta no encontro nada, reintenta tolerando errores de tipeo (trigram).
-        if (pagina.isEmpty()) {
-            pagina = productoRepository.buscarFuzzy(tokens, pageable, UMBRAL_FUZZY);
-        }
-        return conStock(pagina);
+        return conStock(productoRepository.buscarInteligente(tokens, pageable));
     }
 
     /** Palabras del termino de busqueda, en minuscula, sin repetidas y acotadas a 8. */

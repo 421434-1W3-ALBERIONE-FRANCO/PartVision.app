@@ -11,12 +11,11 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
- * Implementacion de la busqueda por palabras, tipo "candidatos". Cada palabra que aparece
- * (LIKE %token%, en minuscula) en descripcion, SKU, marca o categoria suma un punto; se traen
- * las filas que coinciden en AL MENOS una palabra y se ordenan por cuantas coinciden (mejor
- * arriba). Asi "juego de aros mahle 1.6 volkswagen" encuentra "MAHLE ... VOLKSWAGEN 1.6 ..."
- * aunque no diga "juego": esa palabra simplemente no suma, pero las otras rankean la fila.
- * Trae marca y categoria con fetch join (sin N+1). El indice trigram sobre descripcion acelera.
+ * Busqueda por palabras: cada palabra debe aparecer (case-insensitive, parcial) en la
+ * descripcion, el SKU, la marca o la categoria. El orden de las palabras no importa, asi
+ * "piston 1.5mm" encuentra "MOTOMEL piston trifasico ASD 1.5mm x 05mm". Al exigir todas las
+ * palabras el conjunto resultante es chico, por lo que es rapido sobre catalogos grandes.
+ * Trae marca y categoria con fetch join para no generar N+1 al mapear.
  */
 public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
@@ -25,26 +24,21 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     @Override
     public Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable) {
-        // Predicado por palabra: coincide en descripcion, SKU, marca o categoria.
-        StringBuilder where = new StringBuilder();      // OR de todas las palabras (al menos una)
-        StringBuilder score = new StringBuilder();      // suma de palabras que coinciden (ranking)
+        StringBuilder where = new StringBuilder(" where 1 = 1");
         for (int i = 0; i < tokens.size(); i++) {
-            String pred = "(lower(p.descripcion) like :t" + i
-                    + " or lower(p.sku) like :t" + i
-                    + " or lower(m.nombre) like :t" + i
-                    + " or lower(c.nombre) like :t" + i + ")";
-            where.append(i == 0 ? "" : " or ").append(pred);
-            score.append(i == 0 ? "" : " + ").append("case when ").append(pred).append(" then 1 else 0 end");
+            where.append(" and (lower(p.descripcion) like :t").append(i)
+                    .append(" or lower(p.sku) like :t").append(i)
+                    .append(" or lower(m.nombre) like :t").append(i)
+                    .append(" or lower(c.nombre) like :t").append(i)
+                    .append(')');
         }
 
         TypedQuery<Producto> data = em.createQuery(
                 "select p from Producto p left join fetch p.marca m left join fetch p.categoria c"
-                        + " where " + where
-                        + " order by (" + score + ") desc, length(p.descripcion) asc, p.id asc",
+                        + where + " order by length(p.descripcion) asc, p.id asc",
                 Producto.class);
         TypedQuery<Long> count = em.createQuery(
-                "select count(p) from Producto p left join p.marca m left join p.categoria c"
-                        + " where " + where,
+                "select count(p) from Producto p left join p.marca m left join p.categoria c" + where,
                 Long.class);
 
         for (int i = 0; i < tokens.size(); i++) {
@@ -52,56 +46,6 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
             data.setParameter("t" + i, patron);
             count.setParameter("t" + i, patron);
         }
-
-        data.setFirstResult((int) pageable.getOffset());
-        data.setMaxResults(pageable.getPageSize());
-
-        List<Producto> contenido = data.getResultList();
-        return new PageImpl<>(contenido, pageable, count.getSingleResult());
-    }
-
-    @Override
-    public Page<Producto> buscarFuzzy(List<String> tokens, Pageable pageable, double umbral) {
-        StringBuilder where = new StringBuilder();      // OR de palabras (exacta o parecida)
-        StringBuilder score = new StringBuilder();      // suma de parecidos (ranking)
-        for (int i = 0; i < tokens.size(); i++) {
-            String like = "(lower(p.descripcion) like :tl" + i
-                    + " or lower(p.sku) like :tl" + i
-                    + " or lower(m.nombre) like :tl" + i
-                    + " or lower(c.nombre) like :tl" + i + ")";
-            String simDesc = "function('word_similarity', :tr" + i + ", p.descripcion)";
-            String simMarca = "function('word_similarity', :tr" + i + ", m.nombre)";
-            String simCat = "function('word_similarity', :tr" + i + ", c.nombre)";
-            String pred = "(" + like
-                    + " or " + simDesc + " >= :umbral"
-                    + " or " + simMarca + " >= :umbral"
-                    + " or " + simCat + " >= :umbral)";
-            where.append(i == 0 ? "" : " or ").append(pred);
-            score.append(i == 0 ? "" : " + ")
-                    .append("case when ").append(like).append(" then 1.0")
-                    .append(" else function('greatest', ").append(simDesc).append(", ")
-                    .append(simMarca).append(", ").append(simCat).append(") end");
-        }
-
-        TypedQuery<Producto> data = em.createQuery(
-                "select p from Producto p left join fetch p.marca m left join fetch p.categoria c"
-                        + " where " + where
-                        + " order by (" + score + ") desc, length(p.descripcion) asc, p.id asc",
-                Producto.class);
-        TypedQuery<Long> count = em.createQuery(
-                "select count(p) from Producto p left join p.marca m left join p.categoria c"
-                        + " where " + where,
-                Long.class);
-
-        for (int i = 0; i < tokens.size(); i++) {
-            String tok = tokens.get(i).toLowerCase();
-            data.setParameter("tl" + i, "%" + tok + "%");
-            data.setParameter("tr" + i, tok);
-            count.setParameter("tl" + i, "%" + tok + "%");
-            count.setParameter("tr" + i, tok);
-        }
-        data.setParameter("umbral", umbral);
-        count.setParameter("umbral", umbral);
 
         data.setFirstResult((int) pageable.getOffset());
         data.setMaxResults(pageable.getPageSize());

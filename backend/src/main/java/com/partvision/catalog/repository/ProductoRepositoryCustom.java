@@ -17,12 +17,4 @@ public interface ProductoRepositoryCustom {
      * volkswagen" encuentran los productos aunque no coincidan textualmente palabra por palabra.
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
-
-    /**
-     * Busqueda tolerante a errores de tipeo (fallback cuando la exacta no encuentra nada).
-     * Usa la similaridad trigram de pg_trgm: cada palabra suma segun cuanto se parece a la
-     * descripcion/marca/categoria (ademas del match exacto). Asi "volswagen" encuentra
-     * "VOLKSWAGEN" y "mahel" encuentra "MAHLE". {@code umbral} es el minimo parecido (0..1).
-     */
-    Page<Producto> buscarFuzzy(List<String> tokens, Pageable pageable, double umbral);
 }
