@@ -3,7 +3,7 @@ package com.partvision.catalog.repository;
 import com.partvision.catalog.domain.Producto;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.TypedQuery;
+import jakarta.persistence.Query;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -11,46 +11,51 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
- * Busqueda por palabras: cada palabra debe aparecer (case-insensitive, parcial) en la
- * descripcion, el SKU, la marca o la categoria. El orden de las palabras no importa, asi
- * "piston 1.5mm" encuentra "MOTOMEL piston trifasico ASD 1.5mm x 05mm". Al exigir todas las
- * palabras el conjunto resultante es chico, por lo que es rapido sobre catalogos grandes.
- * Trae marca y categoria con fetch join para no generar N+1 al mapear.
+ * Busqueda por palabras, rapida y tolerante a errores de tipeo. Cada palabra debe parecerse
+ * (similaridad trigram, operador {@code <%}) a la columna denormalizada 'busqueda' (descripcion
+ * + sku + marca + categoria). El orden de las palabras no importa y se toleran typos:
+ * "aros mahek volswagen" encuentra "MAHLE ... VOLKSWAGEN". El operador usa el indice GIN trigram
+ * sobre 'busqueda', asi que es rapido (~40ms) sobre catalogos grandes. Se ordena por parecido.
  */
 public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
+
+    /** Parecido minimo (0..1) por palabra. 0.4 tolera typos (mahel~MAHLE=0.5) con poco ruido. */
+    private static final String UMBRAL = "0.4";
 
     @PersistenceContext
     private EntityManager em;
 
     @Override
     public Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable) {
-        StringBuilder where = new StringBuilder(" where 1 = 1");
+        // Umbral de similaridad, local a la transaccion (afecta al operador <%).
+        em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
+                .setParameter("u", UMBRAL)
+                .getSingleResult();
+
+        StringBuilder where = new StringBuilder();
+        StringBuilder score = new StringBuilder();
         for (int i = 0; i < tokens.size(); i++) {
-            where.append(" and (lower(p.descripcion) like :t").append(i)
-                    .append(" or lower(p.sku) like :t").append(i)
-                    .append(" or lower(m.nombre) like :t").append(i)
-                    .append(" or lower(c.nombre) like :t").append(i)
-                    .append(')');
+            where.append(i == 0 ? "" : " and ").append(":t").append(i).append(" <% p.busqueda");
+            score.append(i == 0 ? "" : " + ").append("word_similarity(:t").append(i).append(", p.busqueda)");
         }
 
-        TypedQuery<Producto> data = em.createQuery(
-                "select p from Producto p left join fetch p.marca m left join fetch p.categoria c"
-                        + where + " order by length(p.descripcion) asc, p.id asc",
-                Producto.class);
-        TypedQuery<Long> count = em.createQuery(
-                "select count(p) from Producto p left join p.marca m left join p.categoria c" + where,
-                Long.class);
+        String sql = "select p.* from productos p where " + where
+                + " order by (" + score + ") desc, char_length(p.descripcion) asc, p.id asc";
+        String countSql = "select count(*) from productos p where " + where;
 
+        Query data = em.createNativeQuery(sql, Producto.class);
+        Query count = em.createNativeQuery(countSql);
         for (int i = 0; i < tokens.size(); i++) {
-            String patron = "%" + tokens.get(i).toLowerCase() + "%";
-            data.setParameter("t" + i, patron);
-            count.setParameter("t" + i, patron);
+            data.setParameter("t" + i, tokens.get(i));
+            count.setParameter("t" + i, tokens.get(i));
         }
 
         data.setFirstResult((int) pageable.getOffset());
         data.setMaxResults(pageable.getPageSize());
 
+        @SuppressWarnings("unchecked")
         List<Producto> contenido = data.getResultList();
-        return new PageImpl<>(contenido, pageable, count.getSingleResult());
+        long total = ((Number) count.getSingleResult()).longValue();
+        return new PageImpl<>(contenido, pageable, total);
     }
 }

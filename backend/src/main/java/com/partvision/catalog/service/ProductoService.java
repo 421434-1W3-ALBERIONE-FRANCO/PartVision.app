@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -143,13 +144,18 @@ public class ProductoService {
         return conStock(productoRepository.buscarInteligente(tokens, pageable));
     }
 
-    /** Palabras del termino de busqueda, en minuscula, sin repetidas y acotadas a 8. */
+    /** Conectores que no aportan a la busqueda (se descartan para no exigirlos como palabra). */
+    private static final Set<String> VACIAS = Set.of(
+            "de", "del", "la", "el", "los", "las", "un", "una", "unos", "unas",
+            "para", "con", "por", "y", "o", "al", "en", "a");
+
+    /** Palabras utiles del termino: minuscula, sin conectores, sin repetidas, min 2 chars, max 8. */
     private List<String> tokenizar(String q) {
         if (q == null || q.isBlank()) {
             return List.of();
         }
         return Arrays.stream(q.trim().toLowerCase().split("\\s+"))
-                .filter(s -> !s.isBlank())
+                .filter(s -> s.length() >= 2 && !VACIAS.contains(s))
                 .distinct()
                 .limit(8)
                 .toList();
