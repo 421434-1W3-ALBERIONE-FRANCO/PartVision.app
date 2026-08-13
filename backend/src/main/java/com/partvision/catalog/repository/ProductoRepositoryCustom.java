@@ -10,9 +10,11 @@ import java.util.List;
 public interface ProductoRepositoryCustom {
 
     /**
-     * Busqueda "inteligente" por palabras: cada token debe aparecer (case-insensitive, parcial)
-     * en la descripcion, el SKU, la marca o la categoria. El orden de las palabras no importa,
-     * asi "piston 1.5mm" encuentra "MOTOMEL piston trifasico ASD 1.5mm x 05mm".
+     * Busqueda "inteligente" por palabras, tipo candidatos: trae los productos que coinciden en
+     * AL MENOS una palabra (en descripcion, SKU, marca o categoria; case-insensitive, parcial) y
+     * los ordena por cuantas palabras coinciden. El orden de las palabras no importa y las que no
+     * aparecen no descartan la fila, solo no suman. Asi "piston 1.5mm" o "juego de aros mahle 1.6
+     * volkswagen" encuentran los productos aunque no coincidan textualmente palabra por palabra.
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
 }

@@ -129,9 +129,10 @@ public class ProductoService {
     }
 
     /**
-     * Busqueda por texto: separa el termino en palabras y exige que TODAS aparezcan
-     * (en descripcion, SKU, marca o categoria), sin importar el orden. Asi "piston 1.5mm"
-     * encuentra "MOTOMEL piston trifasico ASD 1.5mm x 05mm". Si no hay palabras, lista todo.
+     * Busqueda por texto: separa el termino en palabras y trae candidatos ordenados por cuantas
+     * palabras coinciden (en descripcion, SKU, marca o categoria), sin importar el orden. Las
+     * palabras que no aparecen no descartan la fila. Asi "juego de aros mahle 1.6 volkswagen"
+     * encuentra "MAHLE ... VOLKSWAGEN 1.6 ..." aunque no diga "juego". Sin palabras, lista todo.
      */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
