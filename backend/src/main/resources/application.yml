@@ -7,6 +7,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5442/partvision}
     username: ${DB_USERNAME:partvision}
     password: ${DB_PASSWORD:partvision}
+    hikari:
+      data-source-properties:
+        # Reescribe los INSERT en lote a un unico multi-row INSERT: acelera la importacion masiva.
+        reWriteBatchedInserts: true
   jpa:
     open-in-view: false
     hibernate:

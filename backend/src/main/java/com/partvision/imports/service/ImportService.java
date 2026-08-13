@@ -39,6 +39,7 @@ import java.util.Set;
 public class ImportService {
 
     private final ProductoImporter productoImporter;
+    private final ProductoBulkImporter bulkImporter;
 
     /** Importacion sincrona: procesa el archivo y devuelve el resultado (para archivos chicos). */
     public ImportResultResponse importarCsv(MultipartFile archivo) {
@@ -58,12 +59,50 @@ public class ImportService {
      */
     @Async("importExecutor")
     public void importarAsync(byte[] contenido, ImportJob job) {
-        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8)) {
-            procesar(reader, job);
+        try {
+            // Camino rapido: se parsea/deduplica en memoria y se inserta en lotes (sin N+1).
+            List<ProductoImporter.FilaProducto> filas = parsearYDeduplicar(contenido, job);
+            bulkImporter.importar(filas, job);
             job.completar();
         } catch (Exception ex) {
             job.fallar("No se pudo procesar el archivo CSV: " + ex.getMessage());
         }
+    }
+
+    /**
+     * Parsea el CSV y deduplica dentro del archivo, devolviendo las filas validas a insertar.
+     * Las filas repetidas (misma clave) se cuentan como omitidas y las invalidas como error,
+     * reportando el avance en {@code job}. La insercion la hace {@link ProductoBulkImporter}.
+     */
+    private List<ProductoImporter.FilaProducto> parsearYDeduplicar(byte[] contenido, ImportJob job)
+            throws IOException {
+        List<ProductoImporter.FilaProducto> filas = new ArrayList<>();
+        Set<String> clavesVistas = new HashSet<>();
+        CSVFormat formato = CSVFormat.DEFAULT.builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreHeaderCase(true)
+                .setTrim(true)
+                .build();
+
+        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
+             CSVParser parser = CSVParser.parse(reader, formato)) {
+            for (CSVRecord registro : parser) {
+                try {
+                    ProductoImporter.FilaProducto fila = aFila(registro);
+                    if (!clavesVistas.add(claveDedup(fila))) {
+                        job.marcarOmitida();
+                        job.marcarProcesada();
+                        continue;
+                    }
+                    filas.add(fila);
+                } catch (Exception ex) {
+                    job.agregarError(new ImportResultResponse.FilaError(registro.getRecordNumber(), ex.getMessage()));
+                    job.marcarProcesada();
+                }
+            }
+        }
+        return filas;
     }
 
     /**
