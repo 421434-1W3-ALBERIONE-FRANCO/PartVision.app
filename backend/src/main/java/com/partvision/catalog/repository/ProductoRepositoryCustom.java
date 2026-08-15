@@ -10,11 +10,15 @@ import java.util.List;
 public interface ProductoRepositoryCustom {
 
     /**
-     * Busqueda "inteligente" por palabras, tipo candidatos: trae los productos que coinciden en
-     * AL MENOS una palabra (en descripcion, SKU, marca o categoria; case-insensitive, parcial) y
-     * los ordena por cuantas palabras coinciden. El orden de las palabras no importa y las que no
-     * aparecen no descartan la fila, solo no suman. Asi "piston 1.5mm" o "juego de aros mahle 1.6
-     * volkswagen" encuentran los productos aunque no coincidan textualmente palabra por palabra.
+     * Busqueda por relevancia (trigram, tolerante a typos) sobre la columna denormalizada
+     * 'busqueda' (descripcion + SKU + marca + categoria). La primera palabra "real" (tipo de
+     * pieza) es el ANCLA y se exige (filtra); el resto de las palabras no descartan la fila,
+     * solo suben su ranking cuando matchean. Rankea primero las filas cuya descripcion empieza
+     * con la primera palabra tipeada, luego por cantidad de palabras que matchean. Asi
+     * "cojinete 4d56 l200 2.5 8v" prioriza los COJINETE reales por encima de juntas/balancines
+     * que solo comparten specs del motor, "botador 16" prioriza los BOTADOR reales sobre las
+     * tapas que mencionan "botador 16mm", y "juego de aros ..." igual encuentra los "AROS ..."
+     * aunque no digan "juego".
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
 }
