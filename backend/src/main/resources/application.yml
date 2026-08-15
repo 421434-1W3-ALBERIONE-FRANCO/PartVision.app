@@ -48,6 +48,11 @@ security:
     # Strict con proxy mismo-dominio (Opcion A). Si algun dia el panel y la API quedan
     # en dominios distintos, hay que pasar a None (y secure=true).
     same-site: ${AUTH_COOKIE_SAMESITE:Strict}
+  rate-limit:
+    login:
+      # Anti fuerza-bruta en POST /auth/login: N intentos por IP por ventana.
+      capacity: ${LOGIN_RATE_LIMIT_CAPACITY:5}
+      refill-minutes: ${LOGIN_RATE_LIMIT_MINUTES:1}
 
 management:
   endpoints:
