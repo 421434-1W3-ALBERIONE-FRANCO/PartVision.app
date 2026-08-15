@@ -1,3 +1,5 @@
-// Config de runtime. En desarrollo apunta al backend local.
-// En producción, el contenedor reescribe este archivo con la variable API_BASE_URL.
-window.__env = { apiBaseUrl: 'http://localhost:8080/api/v1' };
+// Config de runtime. Por defecto RELATIVA: el navegador pega contra su propio origen
+// y el proxy reenvia al backend (mismo dominio => cookie HttpOnly + CSRF sin exponer CORS).
+// El contenedor puede reescribir este archivo con API_BASE_URL solo si se necesita apuntar
+// a un backend en otro dominio (no recomendado: pierde el blindaje same-origin).
+window.__env = { apiBaseUrl: '/api/v1' };

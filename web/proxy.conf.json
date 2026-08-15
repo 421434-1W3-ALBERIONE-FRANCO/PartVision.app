@@ -1,0 +1,10 @@
+{
+  "//": "Dev: el panel corre en localhost:4200 y reenvia /api al backend en :8080.",
+  "//2": "Asi el navegador ve UN SOLO ORIGEN (igual que en prod con el proxy nginx):",
+  "//3": "la cookie de auth queda same-origin y el CSRF de Angular funciona nativo.",
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true
+  }
+}
