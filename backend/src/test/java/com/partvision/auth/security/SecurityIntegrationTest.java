@@ -6,18 +6,22 @@ import com.partvision.auth.domain.Usuario;
 import com.partvision.auth.dto.UsuarioResponse;
 import com.partvision.auth.service.AuthService;
 import com.partvision.auth.service.UsuarioService;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Set;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -69,5 +73,40 @@ class SecurityIntegrationTest {
         mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("admin"));
+    }
+
+    /** Panel web (auth por cookie): un POST sin token CSRF debe rechazarse con 403. */
+    @Test
+    void postConCookieSinCsrf_devuelve403() throws Exception {
+        String token = jwtService.generateToken(admin());
+
+        mvc.perform(post("/api/v1/usuarios")
+                        .cookie(new Cookie("pv_token", token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Herramientas/tests (auth por header Bearer): el CSRF se saltea, el POST pasa. */
+    @Test
+    void postConBearerSinCsrf_noBloqueadoPorCsrf() throws Exception {
+        String token = jwtService.generateToken(admin());
+        when(authService.crearUsuario(any()))
+                .thenReturn(new UsuarioResponse(2L, "nuevo", "Juan", true, Set.of("OPERARIO")));
+
+        mvc.perform(post("/api/v1/usuarios")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
+                .andExpect(status().isCreated());
+    }
+
+    private static Usuario admin() {
+        return Usuario.builder()
+                .id(1L).username("admin")
+                .roles(Set.of(Rol.builder().nombre("ADMIN").build()))
+                .build();
     }
 }

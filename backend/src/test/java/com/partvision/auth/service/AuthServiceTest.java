@@ -9,6 +9,7 @@ import com.partvision.auth.dto.UsuarioResponse;
 import com.partvision.auth.repository.RolRepository;
 import com.partvision.auth.repository.UsuarioRepository;
 import com.partvision.auth.security.JwtService;
+import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.InvalidCredentialsException;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,12 +79,12 @@ class AuthServiceTest {
     }
 
     @Test
-    void register_sinRolPorDefecto_lanzaIllegalState() {
+    void register_sinRolPorDefecto_lanzaBusinessException() {
         when(usuarioRepository.existsByUsername("nuevo")).thenReturn(false);
         when(rolRepository.findByNombre("OPERARIO")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.register(new RegisterRequest("nuevo", "password123", "Juan")))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test

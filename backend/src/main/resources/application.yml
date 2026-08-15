@@ -39,6 +39,15 @@ security:
   cors:
     # Origenes del panel web permitidos (coma-separado). Dev: Angular en 4200.
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  cookie:
+    # Cookie HttpOnly que transporta el JWT en el panel web.
+    name: ${AUTH_COOKIE_NAME:pv_token}
+    # PROD (https, panel y API bajo el mismo dominio via proxy nginx): secure=true.
+    # DEV (http localhost): DEBE ser false o el navegador descarta la cookie.
+    secure: ${AUTH_COOKIE_SECURE:false}
+    # Strict con proxy mismo-dominio (Opcion A). Si algun dia el panel y la API quedan
+    # en dominios distintos, hay que pasar a None (y secure=true).
+    same-site: ${AUTH_COOKIE_SAMESITE:Strict}
 
 management:
   endpoints:

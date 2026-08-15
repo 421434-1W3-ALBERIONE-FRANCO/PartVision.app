@@ -30,7 +30,7 @@ class JwtAuthenticationFilterTest {
     @BeforeEach
     void setUp() {
         jwtService = new JwtService(new JwtProperties(SECRET, 3_600_000L));
-        filter = new JwtAuthenticationFilter(jwtService);
+        filter = new JwtAuthenticationFilter(jwtService, "pv_token");
     }
 
     @AfterEach
@@ -43,6 +43,10 @@ class JwtAuthenticationFilterTest {
         if (authHeader != null) {
             request.addHeader("Authorization", authHeader);
         }
+        ejecutar(request);
+    }
+
+    private void ejecutar(MockHttpServletRequest request) throws Exception {
         MockFilterChain chain = new MockFilterChain();
         filter.doFilter(request, new MockHttpServletResponse(), chain);
         assertThat(chain.getRequest()).as("la cadena debe continuar siempre").isNotNull();
@@ -74,6 +78,31 @@ class JwtAuthenticationFilterTest {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         assertThat(auth).isNotNull();
         assertThat(auth.getAuthorities()).isEmpty();
+    }
+
+    @Test
+    void tokenEnCookie_autentica() throws Exception {
+        Usuario usuario = Usuario.builder()
+                .id(7L).username("web")
+                .roles(Set.of(Rol.builder().nombre("OPERARIO").build()))
+                .build();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new jakarta.servlet.http.Cookie("pv_token", jwtService.generateToken(usuario)));
+
+        ejecutar(request);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(auth).isNotNull();
+        assertThat(((AuthenticatedUser) auth.getPrincipal()).id()).isEqualTo(7L);
+        assertThat(auth.getAuthorities()).extracting(Object::toString).containsExactly("ROLE_OPERARIO");
+    }
+
+    @Test
+    void cookieConOtroNombre_noAutentica() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new jakarta.servlet.http.Cookie("otra", "loquesea"));
+        ejecutar(request);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     @Test
