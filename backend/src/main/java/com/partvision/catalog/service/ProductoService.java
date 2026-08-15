@@ -130,10 +130,11 @@ public class ProductoService {
     }
 
     /**
-     * Busqueda por texto: separa el termino en palabras y trae candidatos ordenados por cuantas
-     * palabras coinciden (en descripcion, SKU, marca o categoria), sin importar el orden. Las
-     * palabras que no aparecen no descartan la fila. Asi "juego de aros mahle 1.6 volkswagen"
-     * encuentra "MAHLE ... VOLKSWAGEN 1.6 ..." aunque no diga "juego". Sin palabras, lista todo.
+     * Busqueda por texto: separa el termino en palabras y trae los productos por relevancia
+     * (trigram, tolerante a typos). La primera palabra "real" (tipo de pieza) se exige; el resto
+     * de las palabras no descartan la fila, solo la rankean mas arriba cuando matchean. Asi
+     * "cojinete 4d56 l200 2.5 8v" trae los COJINETE del motor arriba y no las juntas/valvulas que
+     * comparten specs, y "juego de aros ..." igual encuentra los "AROS ...". Sin palabras, lista todo.
      */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
