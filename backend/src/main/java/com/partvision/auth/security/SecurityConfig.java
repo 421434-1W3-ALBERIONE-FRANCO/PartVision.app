@@ -3,6 +3,7 @@ package com.partvision.auth.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -89,6 +90,20 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    /**
+     * Evita que Spring Boot registre el {@link JwtAuthenticationFilter} (un @Component que
+     * extiende OncePerRequestFilter) tambien como filtro servlet global. Debe correr SOLO
+     * dentro de la cadena de Spring Security (donde lo ubica {@code addFilterBefore}); de lo
+     * contrario se ejecuta en la posicion equivocada respecto del CsrfFilter y un fallo de
+     * CSRF terminaria como 401 en vez de 403.
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

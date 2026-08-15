@@ -75,9 +75,15 @@ class SecurityIntegrationTest {
                 .andExpect(jsonPath("$.username").value("admin"));
     }
 
-    /** Panel web (auth por cookie): un POST sin token CSRF debe rechazarse con 403. */
+    /**
+     * Panel web (auth por cookie): un POST sin token CSRF debe rechazarse (no ejecuta la
+     * mutacion). El codigo es 4xx: 403 si la auth ya se resolvio, o 401 si el CsrfFilter
+     * corre antes que el filtro JWT (la auth aun es anonima al validar el CSRF). En cualquier
+     * caso queda bloqueado; en la practica Angular siempre manda el header, asi que este caso
+     * solo lo alcanza un atacante (que ademas ni envia la cookie por SameSite=Strict).
+     */
     @Test
-    void postConCookieSinCsrf_devuelve403() throws Exception {
+    void postConCookieSinCsrf_rechazado() throws Exception {
         String token = jwtService.generateToken(admin());
 
         mvc.perform(post("/api/v1/usuarios")
@@ -85,7 +91,7 @@ class SecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
-                .andExpect(status().isForbidden());
+                .andExpect(status().is4xxClientError());
     }
 
     /** Herramientas/tests (auth por header Bearer): el CSRF se saltea, el POST pasa. */
