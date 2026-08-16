@@ -99,6 +99,17 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               </span>
             </a>
 
+            <a
+              routerLink="/seguridad"
+              routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
+              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
+            >
+              <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-cyan transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Seguridad</span>
+            </a>
+
             @if (esAdmin) {
             <a
               routerLink="/importacion"
@@ -189,7 +200,11 @@ export class Layout {
   }
 
   salir(): void {
-    this.auth.logout();
-    this.router.navigate(['/login']);
+    // logout() es un Observable: hay que suscribirse para que dispare el POST /auth/logout
+    // (borra la cookie y revoca el token del lado del server). Navegamos igual pase lo que pase.
+    this.auth.logout().subscribe({
+      next: () => this.router.navigate(['/login']),
+      error: () => this.router.navigate(['/login']),
+    });
   }
 }

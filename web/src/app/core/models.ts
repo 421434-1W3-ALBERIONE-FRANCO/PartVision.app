@@ -13,6 +13,19 @@ export interface LoginResponse {
   expiresIn: number;
 }
 
+export interface TotpStatus {
+  enabled: boolean;
+}
+
+export interface TotpSetupResponse {
+  secret: string;
+  otpauthUri: string;
+}
+
+export interface RecoveryCodesResponse {
+  recoveryCodes: string[];
+}
+
 export interface Marca {
   id: number;
   nombre: string;

@@ -78,27 +78,26 @@ class SecurityIntegrationTest {
     }
 
     /**
-     * Panel web (auth por cookie): un POST sin token CSRF debe rechazarse (no ejecuta la
-     * mutacion). El codigo es 4xx: 403 si la auth ya se resolvio, o 401 si el CsrfFilter
-     * corre antes que el filtro JWT (la auth aun es anonima al validar el CSRF). En cualquier
-     * caso queda bloqueado; en la practica Angular siempre manda el header, asi que este caso
-     * solo lo alcanza un atacante (que ademas ni envia la cookie por SameSite=Strict).
+     * Panel web (auth por cookie): la mutacion pasa. No hay double-submit CSRF (se protege con
+     * la cookie SameSite=Strict), asi que un POST autenticado por cookie no necesita token.
      */
     @Test
-    void postConCookieSinCsrf_rechazado() throws Exception {
+    void postConCookie_autenticaYCrea() throws Exception {
         String token = jwtService.generateToken(admin());
+        when(authService.crearUsuario(any()))
+                .thenReturn(new UsuarioResponse(3L, "nuevo", "Juan", true, Set.of("OPERARIO")));
 
         mvc.perform(post("/api/v1/usuarios")
                         .cookie(new Cookie("pv_token", token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isCreated());
     }
 
-    /** Herramientas/tests (auth por header Bearer): el CSRF se saltea, el POST pasa. */
+    /** Auth por header Bearer (herramientas/tests): el POST tambien pasa. */
     @Test
-    void postConBearerSinCsrf_noBloqueadoPorCsrf() throws Exception {
+    void postConBearer_autenticaYCrea() throws Exception {
         String token = jwtService.generateToken(admin());
         when(authService.crearUsuario(any()))
                 .thenReturn(new UsuarioResponse(2L, "nuevo", "Juan", true, Set.of("OPERARIO")));

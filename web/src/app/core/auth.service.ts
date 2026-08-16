@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Usuario } from './models';
+import { RecoveryCodesResponse, TotpSetupResponse, TotpStatus, Usuario } from './models';
 
 /**
  * Autenticacion basada en cookie HttpOnly: el token JWT lo maneja el navegador (el JS
@@ -29,11 +29,36 @@ export class AuthService {
     return this.usuario()?.roles.includes('ADMIN') ?? false;
   }
 
-  /** Login: el backend setea la cookie; luego cargamos el perfil para tener roles. */
-  login(username: string, password: string): Observable<Usuario> {
+  /**
+   * Login: el backend setea la cookie; luego cargamos el perfil para tener roles. El {@code code}
+   * (2FA) es opcional: si el usuario tiene 2FA y falta, el backend responde 401 con
+   * {@code twoFactorRequired: true} (el componente de login lo detecta y pide el código).
+   */
+  login(username: string, password: string, code?: string): Observable<Usuario> {
     return this.http
-      .post(`${API_BASE_URL}/auth/login`, { username, password })
+      .post(`${API_BASE_URL}/auth/login`, { username, password, code: code ?? null })
       .pipe(switchMap(() => this.cargarSesionOrThrow()));
+  }
+
+  // ===== 2FA (TOTP) =====
+
+  estado2fa(): Observable<TotpStatus> {
+    return this.http.get<TotpStatus>(`${API_BASE_URL}/2fa/status`);
+  }
+
+  /** Paso 1: genera el secret y devuelve el otpauth:// para el QR. */
+  setup2fa(): Observable<TotpSetupResponse> {
+    return this.http.post<TotpSetupResponse>(`${API_BASE_URL}/2fa/setup`, {});
+  }
+
+  /** Paso 2: confirma con el primer código; activa el 2FA y devuelve los códigos de recuperación. */
+  activar2fa(code: string): Observable<RecoveryCodesResponse> {
+    return this.http.post<RecoveryCodesResponse>(`${API_BASE_URL}/2fa/activate`, { code });
+  }
+
+  /** Desactiva el 2FA (requiere un código válido). */
+  desactivar2fa(code: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE_URL}/2fa/disable`, { code });
   }
 
   /** Logout: el backend borra la cookie; limpiamos el estado local. */

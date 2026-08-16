@@ -14,10 +14,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfFilter;
-import org.springframework.security.web.util.matcher.RequestMatcher;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -52,15 +48,13 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(Customizer.withDefaults())
-                // CSRF por double-submit cookie para el panel web (auth por cookie HttpOnly).
-                // Se saltea para el login/logout (aun sin sesion) y para requests con Bearer
-                // (Swagger/tests/herramientas: el header no viaja solo, no es atacable por CSRF).
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
-                        .ignoringRequestMatchers("/api/v1/auth/login", "/api/v1/auth/logout")
-                        .ignoringRequestMatchers(bearerTokenRequests()))
-                .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
+                // CSRF: se protege con la cookie de auth SameSite=Strict (el navegador NO manda
+                // pv_token en requests cross-site, asi que un ataque CSRF queda sin autenticar).
+                // Es la defensa correcta para esta app same-origin (Opcion A). No se usa el
+                // double-submit token: con CookieCsrfTokenRepository diferido rotaba de forma
+                // impredecible y rompia POSTs legitimos. (Si algun dia el panel y la API quedan
+                // en dominios distintos -> SameSite=None -> habria que reintroducir CSRF.)
+                .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
@@ -68,14 +62,6 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
-    }
-
-    /** Requests autenticadas por header {@code Authorization: Bearer ...} (no por cookie). */
-    private static RequestMatcher bearerTokenRequests() {
-        return request -> {
-            String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
-            return auth != null && auth.startsWith("Bearer ");
-        };
     }
 
     @Bean
@@ -95,9 +81,7 @@ public class SecurityConfig {
     /**
      * Evita que Spring Boot registre el {@link JwtAuthenticationFilter} (un @Component que
      * extiende OncePerRequestFilter) tambien como filtro servlet global. Debe correr SOLO
-     * dentro de la cadena de Spring Security (donde lo ubica {@code addFilterBefore}); de lo
-     * contrario se ejecuta en la posicion equivocada respecto del CsrfFilter y un fallo de
-     * CSRF terminaria como 401 en vez de 403.
+     * dentro de la cadena de Spring Security (donde lo ubica {@code addFilterBefore}).
      */
     @Bean
     public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter) {

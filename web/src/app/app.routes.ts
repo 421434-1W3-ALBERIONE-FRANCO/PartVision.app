@@ -10,6 +10,7 @@ import { Extracciones } from './features/extracciones';
 import { CargaIa } from './features/carga-ia';
 import { Importacion } from './features/importacion';
 import { Usuarios } from './features/usuarios';
+import { Seguridad } from './features/seguridad';
 
 export const routes: Routes = [
   { path: 'login', component: Login },
@@ -24,6 +25,7 @@ export const routes: Routes = [
       { path: 'ubicaciones', component: Ubicaciones },
       { path: 'carga-ia', component: CargaIa },
       { path: 'extracciones', component: Extracciones },
+      { path: 'seguridad', component: Seguridad },
       { path: 'importacion', component: Importacion, canActivate: [adminGuard] },
       { path: 'usuarios', component: Usuarios, canActivate: [adminGuard] },
     ],

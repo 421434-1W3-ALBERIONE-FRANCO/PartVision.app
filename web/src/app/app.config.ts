@@ -6,7 +6,7 @@ import {
   inject,
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import { routes } from './app.routes';
@@ -18,12 +18,9 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    provideHttpClient(
-      withInterceptors([authInterceptor]),
-      // CSRF: Angular lee la cookie XSRF-TOKEN y la reenvia en el header X-XSRF-TOKEN
-      // en cada POST/PUT/PATCH/DELETE same-origin (coincide con la config del backend).
-      withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' }),
-    ),
+    // El token CSRF (X-XSRF-TOKEN) lo adjunta authInterceptor a mano, leído fresco de la
+    // cookie en cada request mutante (más confiable que el XSRF nativo, que cacheaba el valor).
+    provideHttpClient(withInterceptors([authInterceptor])),
     // Al arrancar (o tras un refresh) rehidrata la sesion desde la cookie antes de que
     // corran los guards, para que sepan si hay usuario y con que roles.
     provideAppInitializer(() => firstValueFrom(inject(AuthService).cargarSesion())),

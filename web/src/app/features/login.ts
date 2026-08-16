@@ -96,6 +96,27 @@ import { ThreeBgComponent } from '../core/three-bg.component';
             </div>
           </div>
 
+          @if (requiere2fa()) {
+            <div class="animate-fade-in">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+                Código de verificación (2FA)
+              </label>
+              <input
+                [(ngModel)]="code"
+                (keyup.enter)="submit()"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="123 456"
+                maxlength="12"
+                class="w-full px-4 py-3 bg-dark-surface/80 border border-neon-cyan/40 rounded-xl text-white placeholder-gray-500 tracking-[0.3em] text-center font-mono focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all"
+              />
+              <p class="text-[11px] text-gray-500 mt-1.5">
+                Ingresá el código de tu app de autenticación (o un código de recuperación).
+              </p>
+            </div>
+          }
+
           @if (error()) {
             <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs flex items-center gap-2 animate-shake">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -143,7 +164,9 @@ export class Login {
 
   username = '';
   password = '';
+  code = '';
   mostrarPassword = signal(false);
+  requiere2fa = signal(false);
   error = signal<string | null>(null);
   cargando = signal(false);
 
@@ -152,13 +175,28 @@ export class Login {
       this.error.set('Por favor ingresá usuario y contraseña');
       return;
     }
+    if (this.requiere2fa() && !this.code.trim()) {
+      this.error.set('Ingresá el código de verificación');
+      return;
+    }
     this.error.set(null);
     this.cargando.set(true);
-    this.auth.login(this.username.trim(), this.password).subscribe({
+    const code = this.requiere2fa() ? this.code.trim() : undefined;
+    this.auth.login(this.username.trim(), this.password, code).subscribe({
       next: () => this.router.navigate(['/']),
       error: (e) => {
-        this.error.set(e?.status === 401 ? 'Usuario o contraseña incorrectos' : 'No se pudo conectar con el servidor');
         this.cargando.set(false);
+        // El backend pide el segundo factor: mostramos el campo del código (no es un error).
+        if (e?.status === 401 && e?.error?.twoFactorRequired) {
+          this.requiere2fa.set(true);
+          this.error.set(null);
+          return;
+        }
+        if (e?.status === 401) {
+          this.error.set(this.requiere2fa() ? 'Código o credenciales incorrectos' : 'Usuario o contraseña incorrectos');
+        } else {
+          this.error.set('No se pudo conectar con el servidor');
+        }
       },
     });
   }
