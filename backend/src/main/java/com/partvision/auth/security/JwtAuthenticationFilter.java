@@ -36,11 +36,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final TokenRevocationService revocationService;
     private final String cookieName;
 
     public JwtAuthenticationFilter(JwtService jwtService,
+                                   TokenRevocationService revocationService,
                                    @Value("${security.cookie.name:pv_token}") String cookieName) {
         this.jwtService = jwtService;
+        this.revocationService = revocationService;
         this.cookieName = cookieName;
     }
 
@@ -75,6 +78,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void authenticate(String token) {
         try {
             Claims claims = jwtService.parse(token);
+            if (revocationService.estaRevocado(claims.getId())) {
+                SecurityContextHolder.clearContext();
+                return;
+            }
             Long uid = claims.get("uid", Long.class);
             List<?> roles = claims.get("roles", List.class);
             List<SimpleGrantedAuthority> authorities = (roles == null ? List.of() : roles).stream()

@@ -9,6 +9,7 @@ import com.partvision.auth.security.JwtAuthenticationFilter;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.RestAuthenticationEntryPoint;
 import com.partvision.auth.security.SecurityConfig;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.auth.service.AuthService;
 import com.partvision.auth.service.UsuarioService;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,8 @@ class UsuarioControllerTest {
     private UsuarioService usuarioService;
     @MockBean
     private AuthService authService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     private String bearerAdmin(Long id) {
         Usuario admin = Usuario.builder()

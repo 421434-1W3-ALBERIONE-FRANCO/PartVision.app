@@ -3,7 +3,13 @@ package com.partvision.auth.controller;
 import com.partvision.auth.dto.LoginRequest;
 import com.partvision.auth.dto.LoginResponse;
 import com.partvision.auth.security.AuthCookieFactory;
+import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.auth.service.AuthService;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -19,17 +25,21 @@ import org.springframework.web.bind.annotation.RestController;
  * crear cuentas desde {@code UsuarioController} (evita el auto-registro abierto en
  * internet). Este controller expone el login y el logout.
  *
- * <p>El login setea el JWT en una cookie {@code HttpOnly} (para el panel web, que asi
- * nunca expone el token al JavaScript) y además lo devuelve en el body. El logout borra
- * esa cookie. Los roles para el UI se leen aparte desde {@code GET /api/v1/usuarios/me}.
+ * <p>El login setea el JWT en una cookie {@code HttpOnly} y lo devuelve en el body. El
+ * logout borra esa cookie Y revoca el token del lado del servidor (su jti queda en la
+ * lista negra hasta que expira), asi un token capturado deja de servir tras el logout.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final String BEARER_PREFIX = "Bearer ";
+
     private final AuthService authService;
     private final AuthCookieFactory cookieFactory;
+    private final JwtService jwtService;
+    private final TokenRevocationService revocationService;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -41,10 +51,41 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout() {
+    public ResponseEntity<Void> logout(HttpServletRequest request) {
+        revocarTokenActual(request);
         ResponseCookie cleared = cookieFactory.clear();
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cleared.toString())
                 .build();
+    }
+
+    /** Si la request trae un token valido, lo agrega a la lista negra (revocacion). */
+    private void revocarTokenActual(HttpServletRequest request) {
+        String token = tokenDesdeRequest(request);
+        if (token == null) {
+            return;
+        }
+        try {
+            Claims claims = jwtService.parse(token);
+            revocationService.revocar(claims.getId(), claims.getExpiration().toInstant());
+        } catch (JwtException | IllegalArgumentException ignored) {
+            // Token invalido o ya expirado: no hay nada que revocar.
+        }
+    }
+
+    private String tokenDesdeRequest(HttpServletRequest request) {
+        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header != null && header.startsWith(BEARER_PREFIX)) {
+            return header.substring(BEARER_PREFIX.length());
+        }
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (cookieFactory.name().equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
     }
 }

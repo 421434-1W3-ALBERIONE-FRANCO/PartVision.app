@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Genera y valida tokens JWT firmados con HMAC-SHA.
@@ -35,6 +36,7 @@ public class JwtService {
         Instant now = Instant.now();
         List<String> roles = usuario.getRoles().stream().map(Rol::getNombre).toList();
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())   // jti: id unico por token, para poder revocarlo
                 .subject(usuario.getUsername())
                 .claim("uid", usuario.getId())
                 .claim("roles", roles)

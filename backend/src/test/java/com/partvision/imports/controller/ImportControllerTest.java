@@ -6,6 +6,7 @@ import com.partvision.auth.security.JwtAuthenticationFilter;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.RestAuthenticationEntryPoint;
 import com.partvision.auth.security.SecurityConfig;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.imports.service.CatalogoMantenimientoService;
 import com.partvision.imports.service.ImportJob;
 import com.partvision.imports.service.ImportJobRegistry;
@@ -51,6 +52,8 @@ class ImportControllerTest {
     private ImportJobRegistry jobRegistry;
     @MockBean
     private CatalogoMantenimientoService catalogoMantenimientoService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     private String bearer(String rol) {
         Usuario u = Usuario.builder()

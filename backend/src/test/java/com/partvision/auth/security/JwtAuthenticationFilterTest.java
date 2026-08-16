@@ -19,18 +19,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class JwtAuthenticationFilterTest {
 
     private static final String SECRET = "0123456789012345678901234567890123456789012345678901234567890123";
 
     private JwtService jwtService;
+    private TokenRevocationService revocationService;
     private JwtAuthenticationFilter filter;
 
     @BeforeEach
     void setUp() {
         jwtService = new JwtService(new JwtProperties(SECRET, 3_600_000L));
-        filter = new JwtAuthenticationFilter(jwtService, "pv_token");
+        revocationService = mock(TokenRevocationService.class);
+        filter = new JwtAuthenticationFilter(jwtService, revocationService, "pv_token");
     }
 
     @AfterEach
@@ -121,5 +126,20 @@ class JwtAuthenticationFilterTest {
     void tokenInvalido_noAutentica() throws Exception {
         doFilter("Bearer token-corrupto");
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void tokenRevocado_noAutentica() throws Exception {
+        Usuario usuario = Usuario.builder()
+                .id(3L).username("admin")
+                .roles(Set.of(Rol.builder().nombre("ADMIN").build()))
+                .build();
+        when(revocationService.estaRevocado(any())).thenReturn(true);
+
+        doFilter("Bearer " + jwtService.generateToken(usuario));
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication())
+                .as("un token revocado (logout) no debe autenticar aunque la firma sea valida")
+                .isNull();
     }
 }

@@ -45,6 +45,8 @@ class SecurityIntegrationTest {
     private UsuarioService usuarioService;
     @MockBean
     private AuthService authService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void endpointProtegido_sinToken_devuelve401() throws Exception {

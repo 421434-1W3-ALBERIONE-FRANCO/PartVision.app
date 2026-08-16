@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.partvision.auth.dto.LoginResponse;
 import com.partvision.auth.security.AuthCookieFactory;
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.auth.service.AuthService;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.common.exception.InvalidCredentialsException;
@@ -35,9 +36,11 @@ class AuthControllerTest {
     private ObjectMapper objectMapper;
     @MockBean
     private AuthService authService;
-    // El filtro JWT es un bean Filter que @WebMvcTest incluye; necesita este colaborador.
+    // El filtro JWT es un bean Filter que @WebMvcTest incluye; necesita estos colaboradores.
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void login_devuelve200ConTokenYCookieHttpOnly() throws Exception {
