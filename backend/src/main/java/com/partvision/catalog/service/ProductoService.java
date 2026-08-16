@@ -130,11 +130,12 @@ public class ProductoService {
     }
 
     /**
-     * Busqueda por texto: separa el termino en palabras y trae los productos por relevancia
-     * (trigram, tolerante a typos). Filtra por la frase completa (selectivo => rapido) y rankea
-     * priorizando las filas cuya descripcion empieza con el tipo de pieza. Asi "cojinete 4d56
-     * l200 2.5 8v" trae los COJINETE del motor arriba y no las juntas/valvulas que comparten
-     * specs, y "juego de aros ..." igual encuentra los "AROS ...". Sin palabras, lista todo.
+     * Busqueda por texto: separa el termino en palabras y trae los productos por relevancia.
+     * Usa Full-Text Search (rapido, indice invertido) como recuperacion primaria y cae a
+     * similaridad trigram si FTS no encuentra nada (typos). Rankea priorizando las filas cuya
+     * descripcion empieza con el tipo de pieza. Asi "cojinete 4d56 l200 2.5 8v" trae los
+     * COJINETE del motor arriba, y "juego de aros ..." encuentra los "AROS ...". Sin palabras,
+     * lista todo.
      */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {

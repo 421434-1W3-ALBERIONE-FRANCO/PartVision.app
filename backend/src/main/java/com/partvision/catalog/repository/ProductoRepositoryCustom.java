@@ -10,13 +10,13 @@ import java.util.List;
 public interface ProductoRepositoryCustom {
 
     /**
-     * Busqueda por relevancia (trigram, tolerante a typos) sobre la columna denormalizada
-     * 'busqueda' (descripcion + SKU + marca + categoria). Filtra por la FRASE COMPLETA con el
-     * operador {@code <%} (selectivo => rapido) y rankea con un BOOST para las filas cuya
-     * descripcion empieza con la primera palabra "real" (tipo de pieza), y luego por parecido
-     * de la frase. Asi "cojinete 4d56 l200 2.5 8v" prioriza los COJINETE de ese motor por
-     * encima de juntas/valvulas que solo comparten specs, "botador 16" prioriza los BOTADOR
-     * reales, y "juego de aros ..." igual encuentra los "AROS ..." aunque no digan "juego".
+     * Busqueda por relevancia en dos capas sobre la columna denormalizada 'busqueda'
+     * (descripcion + SKU + marca + categoria): Full-Text Search como recuperacion primaria
+     * (indice invertido, milisegundos; tsquery {@code ancla & (resto en OR)} para acotar
+     * candidatos), con ranking por boost de tipo de pieza + {@code ts_rank}; y fallback a
+     * similaridad trigram cuando FTS no encuentra nada (typos). Asi "cojinete 4d56 l200 2.5 8v"
+     * prioriza los COJINETE de ese motor, "juego de aros ..." encuentra los "AROS ...", y
+     * "pistpn" (con typo) igual cae en PISTON via el fallback.
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
 }
