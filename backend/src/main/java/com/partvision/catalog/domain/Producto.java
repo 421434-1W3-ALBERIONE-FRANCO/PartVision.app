@@ -19,13 +19,16 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Entity
 @Table(name = "productos")
@@ -39,6 +42,11 @@ public class Producto extends Auditable {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Identificador publico (para URLs/respuestas). Lo genera la DB; el 'id' interno no se expone. */
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
+    @Generated(event = EventType.INSERT)
+    private UUID publicId;
 
     /** Codigo de pieza / SKU. Opcional; unico por marca cuando existe (D2). */
     @Column(length = 100)
