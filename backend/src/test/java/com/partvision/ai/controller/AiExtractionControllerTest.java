@@ -7,6 +7,7 @@ import com.partvision.ai.dto.ConfirmacionResponse;
 import com.partvision.ai.dto.SugerenciaAccionResponse;
 import com.partvision.ai.service.AiExtractionService;
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.catalog.domain.ProductoEstado;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.common.exception.BusinessException;
@@ -44,6 +45,8 @@ class AiExtractionControllerTest {
     private AiExtractionService aiExtractionService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     private AiExtractionResponse pendiente() {
         return new AiExtractionResponse(1L, "k.jpg", "stub-vision", EstadoExtraccion.PENDIENTE, Map.of(), null);

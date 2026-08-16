@@ -46,6 +46,15 @@ public class Usuario extends Auditable {
     @Column(nullable = false)
     private boolean activo;
 
+    /** Semilla TOTP (2FA). Null si el usuario nunca configuro 2FA. */
+    @Column(name = "totp_secret")
+    private String totpSecret;
+
+    /** Si el 2FA esta activo (tras confirmar el primer codigo del authenticator). */
+    @Column(name = "totp_enabled", nullable = false)
+    @Builder.Default
+    private boolean totpEnabled = false;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "usuarios_roles",

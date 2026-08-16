@@ -45,6 +45,22 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request, null);
     }
 
+    /**
+     * Login correcto de usuario/contraseña pero falta el código 2FA. Devuelve 401 con la marca
+     * {@code twoFactorRequired: true} para que el frontend muestre el campo del código.
+     */
+    @ExceptionHandler(TwoFactorRequiredException.class)
+    public ResponseEntity<java.util.Map<String, Object>> handleTwoFactorRequired(
+            TwoFactorRequiredException ex, HttpServletRequest request) {
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", HttpStatus.UNAUTHORIZED.value());
+        body.put("twoFactorRequired", true);
+        body.put("message", ex.getMessage());
+        body.put("path", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
     @ExceptionHandler({
             org.springframework.security.access.AccessDeniedException.class,
             org.springframework.security.authorization.AuthorizationDeniedException.class

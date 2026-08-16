@@ -1,6 +1,7 @@
 package com.partvision.catalog.controller;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.catalog.dto.CategoriaResponse;
 import com.partvision.catalog.service.CategoriaService;
 import com.partvision.common.exception.GlobalExceptionHandler;
@@ -34,6 +35,8 @@ class CategoriaControllerTest {
     private CategoriaService categoriaService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void create_devuelve201() throws Exception {

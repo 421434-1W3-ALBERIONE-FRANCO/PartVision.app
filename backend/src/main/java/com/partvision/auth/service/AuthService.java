@@ -13,6 +13,7 @@ import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.InvalidCredentialsException;
 import com.partvision.common.exception.ResourceNotFoundException;
+import com.partvision.common.exception.TwoFactorRequiredException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class AuthService {
     private final RolRepository rolRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final TwoFactorService twoFactorService;
 
     @Transactional
     public UsuarioResponse register(RegisterRequest request) {
@@ -102,7 +104,7 @@ public class AuthService {
         return UsuarioResponse.from(usuarioRepository.save(usuario));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         Usuario usuario = usuarioRepository.findByUsername(request.username())
                 .orElseThrow(() -> new InvalidCredentialsException("Credenciales invalidas"));
@@ -111,6 +113,14 @@ public class AuthService {
         }
         if (!passwordEncoder.matches(request.password(), usuario.getPasswordHash())) {
             throw new InvalidCredentialsException("Credenciales invalidas");
+        }
+        if (usuario.isTotpEnabled()) {
+            if (request.code() == null || request.code().isBlank()) {
+                throw new TwoFactorRequiredException("Ingresá el código de tu autenticador");
+            }
+            if (!twoFactorService.verificarLogin(usuario, request.code())) {
+                throw new InvalidCredentialsException("Código de 2FA inválido");
+            }
         }
         String token = jwtService.generateToken(usuario);
         return new LoginResponse(token, jwtService.getExpirationMs() / 1000);

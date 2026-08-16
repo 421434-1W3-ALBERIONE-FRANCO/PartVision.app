@@ -1,6 +1,7 @@
 package com.partvision.catalog.controller;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.catalog.dto.MarcaResponse;
 import com.partvision.catalog.service.MarcaService;
 import com.partvision.common.exception.BusinessException;
@@ -41,6 +42,8 @@ class MarcaControllerTest {
     private MarcaService marcaService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void create_devuelve201() throws Exception {

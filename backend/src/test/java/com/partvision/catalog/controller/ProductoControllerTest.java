@@ -1,6 +1,7 @@
 package com.partvision.catalog.controller;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.catalog.domain.ProductoEstado;
 import com.partvision.catalog.dto.ProductoListItemResponse;
 import com.partvision.catalog.dto.ProductoResponse;
@@ -39,6 +40,8 @@ class ProductoControllerTest {
     private ProductoService productoService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     private ProductoResponse sampleProducto() {
         return new ProductoResponse(1L, "ABC-123", 5L, "Bosch", 7L, "Filtros",

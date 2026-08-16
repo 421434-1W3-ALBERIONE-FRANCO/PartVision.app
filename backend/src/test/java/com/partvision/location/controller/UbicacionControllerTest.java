@@ -1,6 +1,7 @@
 package com.partvision.location.controller;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.common.exception.ResourceNotFoundException;
@@ -36,6 +37,8 @@ class UbicacionControllerTest {
     private UbicacionService ubicacionService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void create_devuelve201() throws Exception {

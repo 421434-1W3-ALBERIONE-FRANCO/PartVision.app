@@ -12,6 +12,7 @@ import com.partvision.auth.security.JwtService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.InvalidCredentialsException;
+import com.partvision.common.exception.TwoFactorRequiredException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,13 +39,15 @@ class AuthServiceTest {
     private RolRepository rolRepository;
     @Mock
     private JwtService jwtService;
+    @Mock
+    private TwoFactorService twoFactorService;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(usuarioRepository, rolRepository, passwordEncoder, jwtService);
+        authService = new AuthService(usuarioRepository, rolRepository, passwordEncoder, jwtService, twoFactorService);
     }
 
     @Test
@@ -94,7 +97,7 @@ class AuthServiceTest {
         when(jwtService.generateToken(usuario)).thenReturn("token-jwt");
         when(jwtService.getExpirationMs()).thenReturn(3_600_000L);
 
-        LoginResponse response = authService.login(new LoginRequest("admin", "secreta123"));
+        LoginResponse response = authService.login(new LoginRequest("admin", "secreta123", null));
 
         assertThat(response.token()).isEqualTo("token-jwt");
         assertThat(response.expiresIn()).isEqualTo(3_600L);
@@ -104,7 +107,7 @@ class AuthServiceTest {
     void login_usuarioInexistente_lanza401() {
         when(usuarioRepository.findByUsername("nadie")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("nadie", "x")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("nadie", "x", null)))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -114,7 +117,7 @@ class AuthServiceTest {
         usuario.setActivo(false);
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "secreta123")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "secreta123", null)))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -123,8 +126,43 @@ class AuthServiceTest {
         Usuario usuario = usuarioActivoConPassword("secreta123");
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "incorrecta")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "incorrecta", null)))
                 .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void login_con2faSinCodigo_pideSegundoFactor() {
+        Usuario usuario = usuarioActivoConPassword("secreta123");
+        usuario.setTotpEnabled(true);
+        when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "secreta123", null)))
+                .isInstanceOf(TwoFactorRequiredException.class);
+    }
+
+    @Test
+    void login_con2faCodigoInvalido_lanza401() {
+        Usuario usuario = usuarioActivoConPassword("secreta123");
+        usuario.setTotpEnabled(true);
+        when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
+        when(twoFactorService.verificarLogin(usuario, "000000")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("admin", "secreta123", "000000")))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void login_con2faCodigoValido_devuelveToken() {
+        Usuario usuario = usuarioActivoConPassword("secreta123");
+        usuario.setTotpEnabled(true);
+        when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
+        when(twoFactorService.verificarLogin(usuario, "123456")).thenReturn(true);
+        when(jwtService.generateToken(usuario)).thenReturn("token-jwt");
+        when(jwtService.getExpirationMs()).thenReturn(3_600_000L);
+
+        LoginResponse response = authService.login(new LoginRequest("admin", "secreta123", "123456"));
+
+        assertThat(response.token()).isEqualTo("token-jwt");
     }
 
     private Usuario usuarioActivoConPassword(String rawPassword) {

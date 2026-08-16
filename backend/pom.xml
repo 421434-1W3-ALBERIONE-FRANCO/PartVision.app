@@ -126,6 +126,25 @@
             <version>8.10.1</version>
         </dependency>
 
+        <!-- 2FA (TOTP): generacion de secret, verificacion de codigos y codigos de recuperacion.
+             No usamos su generador de QR (ZXing), asi que lo excluimos: el otpauth:// lo arma el
+             service y el QR lo dibuja el frontend. -->
+        <dependency>
+            <groupId>dev.samstevens.totp</groupId>
+            <artifactId>totp</artifactId>
+            <version>1.7.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.zxing</groupId>
+                    <artifactId>core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.zxing</groupId>
+                    <artifactId>javase</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

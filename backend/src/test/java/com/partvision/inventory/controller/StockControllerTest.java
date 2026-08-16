@@ -1,6 +1,7 @@
 package com.partvision.inventory.controller;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.inventory.domain.TipoMovimiento;
@@ -38,6 +39,8 @@ class StockControllerTest {
     private StockService stockService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     private MovimientoResponse movimiento(TipoMovimiento tipo) {
         return new MovimientoResponse(100L, 1L, tipo, 5, null, 10L, 7L, "motivo", null, Instant.now());

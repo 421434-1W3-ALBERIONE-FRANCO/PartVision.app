@@ -1,6 +1,7 @@
 package com.partvision.common.exception;
 
 import com.partvision.auth.security.JwtService;
+import com.partvision.auth.security.TokenRevocationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -22,9 +23,11 @@ class GlobalExceptionHandlerTest {
 
     @Autowired
     private MockMvc mvc;
-    // El filtro JWT (bean Filter) se incluye en el slice; necesita este colaborador.
+    // El filtro JWT (bean Filter) se incluye en el slice; necesita estos colaboradores.
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private TokenRevocationService revocationService;
 
     @Test
     void resourceNotFound_devuelve404() throws Exception {
