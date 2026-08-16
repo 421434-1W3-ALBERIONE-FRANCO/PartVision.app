@@ -11,14 +11,12 @@ public interface ProductoRepositoryCustom {
 
     /**
      * Busqueda por relevancia (trigram, tolerante a typos) sobre la columna denormalizada
-     * 'busqueda' (descripcion + SKU + marca + categoria). La primera palabra "real" (tipo de
-     * pieza) es el ANCLA y se exige (filtra); el resto de las palabras no descartan la fila,
-     * solo suben su ranking cuando matchean. Rankea primero las filas cuya descripcion empieza
-     * con la primera palabra tipeada, luego por cantidad de palabras que matchean. Asi
-     * "cojinete 4d56 l200 2.5 8v" prioriza los COJINETE reales por encima de juntas/balancines
-     * que solo comparten specs del motor, "botador 16" prioriza los BOTADOR reales sobre las
-     * tapas que mencionan "botador 16mm", y "juego de aros ..." igual encuentra los "AROS ..."
-     * aunque no digan "juego".
+     * 'busqueda' (descripcion + SKU + marca + categoria). Filtra por la FRASE COMPLETA con el
+     * operador {@code <%} (selectivo => rapido) y rankea con un BOOST para las filas cuya
+     * descripcion empieza con la primera palabra "real" (tipo de pieza), y luego por parecido
+     * de la frase. Asi "cojinete 4d56 l200 2.5 8v" prioriza los COJINETE de ese motor por
+     * encima de juntas/valvulas que solo comparten specs, "botador 16" prioriza los BOTADOR
+     * reales, y "juego de aros ..." igual encuentra los "AROS ..." aunque no digan "juego".
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
 }
