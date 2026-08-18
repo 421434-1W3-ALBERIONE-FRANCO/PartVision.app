@@ -89,7 +89,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
                 (keyup.enter)="confirmar()"
                 type="text"
                 inputmode="numeric"
-                placeholder="123456"
+                placeholder="Código"
                 maxlength="6"
                 class="w-full px-4 py-3 bg-dark-surface/80 border border-neon-cyan/40 rounded-xl text-white placeholder-gray-500 tracking-[0.3em] text-center font-mono text-lg focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all"
               />

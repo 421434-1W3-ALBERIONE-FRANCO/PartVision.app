@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, ElementRef, inject, signal, ViewChildren, QueryList } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
@@ -101,22 +101,29 @@ import { ThreeBgComponent } from '../core/three-bg.component';
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
                 Código de verificación (2FA)
               </label>
-              <input
-                [(ngModel)]="code"
-                (keyup.enter)="submit()"
-                type="text"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                placeholder="Ingrese código"
-                maxlength="12"
-                class="w-full px-4 py-3 bg-dark-surface/80 border border-neon-cyan/40 rounded-xl text-white placeholder-gray-500 tracking-[0.3em] text-center font-mono focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all"
-              />
-              <p class="text-[11px] text-gray-500 mt-1.5">
+              <div class="flex justify-center gap-2">
+                @for (i of otpIndices; track i) {
+                  <input
+                    #otpInput
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="1"
+                    [value]="otpDigits()[i]"
+                    (input)="onOtpInput($event, i)"
+                    (keydown)="onOtpKeydown($event, i)"
+                    (paste)="onOtpPaste($event)"
+                    class="otp-cell w-11 h-12 text-center text-lg font-mono font-bold border border-neon-cyan/40 rounded-lg placeholder-gray-600 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all"
+                  />
+                }
+              </div>
+              <p class="text-[11px] text-gray-500 mt-2 text-center">
                 Ingresá el código de tu app de autenticación (o un código de recuperación).
               </p>
-              <a routerLink="/recuperar-2fa" class="inline-block mt-2 text-xs text-neon-cyan/70 hover:text-neon-cyan transition-colors cursor-pointer">
-                Perdí el acceso a mi autenticador
-              </a>
+              <div class="text-center">
+                <a routerLink="/recuperar-2fa" class="inline-block mt-2 text-xs text-neon-cyan/70 hover:text-neon-cyan transition-colors cursor-pointer">
+                  Perdí el acceso a mi autenticador
+                </a>
+              </div>
             </div>
           }
 
@@ -171,6 +178,8 @@ export class Login {
   private auth = inject(AuthService);
   private router = inject(Router);
 
+  @ViewChildren('otpInput') otpInputs!: QueryList<ElementRef<HTMLInputElement>>;
+
   username = '';
   password = '';
   code = '';
@@ -178,6 +187,49 @@ export class Login {
   requiere2fa = signal(false);
   error = signal<string | null>(null);
   cargando = signal(false);
+
+  otpDigits = signal<string[]>(['', '', '', '', '', '']);
+  readonly otpIndices = [0, 1, 2, 3, 4, 5];
+
+  onOtpInput(event: Event, index: number): void {
+    const input = event.target as HTMLInputElement;
+    const val = input.value.replace(/\D/g, '');
+    const digits = [...this.otpDigits()];
+    digits[index] = val.slice(0, 1);
+    this.otpDigits.set(digits);
+    this.code = digits.join('');
+    if (val && index < 5) {
+      const inputs = this.otpInputs.toArray();
+      inputs[index + 1]?.nativeElement.focus();
+    }
+    if (this.code.length === 6) this.submit();
+  }
+
+  onOtpKeydown(event: KeyboardEvent, index: number): void {
+    if (event.key === 'Backspace' && !this.otpDigits()[index] && index > 0) {
+      const inputs = this.otpInputs.toArray();
+      const prev = inputs[index - 1]?.nativeElement;
+      if (prev) {
+        const digits = [...this.otpDigits()];
+        digits[index - 1] = '';
+        this.otpDigits.set(digits);
+        this.code = digits.join('');
+        prev.focus();
+      }
+    }
+  }
+
+  onOtpPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const paste = (event.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
+    const digits = Array.from({ length: 6 }, (_, i) => paste[i] ?? '');
+    this.otpDigits.set(digits);
+    this.code = digits.join('');
+    const inputs = this.otpInputs.toArray();
+    const focusIdx = Math.min(paste.length, 5);
+    inputs[focusIdx]?.nativeElement.focus();
+    if (this.code.length === 6) this.submit();
+  }
 
   submit(): void {
     if (!this.username.trim() || !this.password) {

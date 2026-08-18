@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, ViewChild, ElementRef } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -113,7 +113,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
 
       <!-- Form: Crear / Editar -->
       @if (mostrarForm()) {
-        <div class="glass-panel p-6 rounded-2xl border border-neon-purple/40 shadow-neon animate-slide-in">
+        <div #formPanel class="glass-panel p-6 rounded-2xl border border-neon-purple/40 shadow-neon animate-slide-in">
           <h3 class="text-lg font-bold text-white mb-4">
             {{ editandoId() ? 'Editar Ubicación' : 'Crear Ubicación' }}
           </h3>
@@ -357,22 +357,34 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                 </svg>
                 <h3 class="text-xs font-bold text-white uppercase tracking-wider">Planta del depósito</h3>
               </div>
-              <div class="p-4 space-y-2">
+              <div class="p-4 space-y-1.5">
+                <!-- Encabezado de posiciones -->
+                @if (mapaDeposito().length > 0) {
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-[10px] font-mono w-8 text-right shrink-0 text-gray-500">PAS</span>
+                    <div class="flex gap-1 flex-1">
+                      @for (slot of mapaDeposito()[0].posiciones; track slot.pos) {
+                        <div class="flex-1 text-center text-[9px] font-mono text-gray-500">P{{ slot.pos }}</div>
+                      }
+                    </div>
+                  </div>
+                }
                 @for (row of mapaDeposito(); track row.pasillo) {
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-mono w-5 text-right shrink-0"
-                      [class]="row.pasillo === pasilloSel() ? 'text-neon-cyan font-bold' : 'text-gray-500'">
+                    <span class="text-[10px] font-mono w-8 text-right shrink-0 font-semibold"
+                      [class]="row.pasillo === pasilloSel() ? 'text-neon-cyan' : 'text-gray-400'">
                       {{ row.pasillo }}
                     </span>
-                    <div class="flex gap-1 flex-1"
-                      [class.rounded-md]="row.pasillo === pasilloSel()"
+                    <div class="flex gap-1 flex-1 rounded-md transition-all"
                       [class.ring-1]="row.pasillo === pasilloSel()"
                       [class.ring-neon-cyan/30]="row.pasillo === pasilloSel()"
                       [class.bg-neon-cyan/5]="row.pasillo === pasilloSel()"
                       [class.p-1]="row.pasillo === pasilloSel()">
                       @for (slot of row.posiciones; track slot.pos) {
-                        <div
-                          class="flex-1 h-7 rounded flex items-center justify-center text-[9px] font-mono border transition-all"
+                        <button
+                          (click)="irAPasillo(row.pasillo); irAPosicion(slot.pos)"
+                          [title]="'Pasillo ' + row.pasillo + ' · Posición ' + slot.pos"
+                          class="flex-1 h-8 rounded flex items-center justify-center text-[10px] font-mono border transition-all cursor-pointer"
                           [class]="
                             row.pasillo === pasilloSel() && slot.pos === posicionSel()
                               ? 'bg-neon-cyan/25 border-neon-cyan text-neon-cyan font-bold shadow-[0_0_8px_rgba(34,211,238,0.3)]'
@@ -380,7 +392,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                                 ? (slot.tieneStock ? 'bg-neon-cyan/8 border-neon-cyan/20 text-gray-300' : 'bg-dark-surface border-dark-border text-gray-500')
                                 : (slot.tieneStock ? 'bg-neon-cyan/5 border-neon-cyan/10 text-gray-400' : 'bg-dark-surface/50 border-dark-border/50 text-gray-600')
                           "
-                        >{{ slot.pos }}</div>
+                        >{{ slot.pos }}</button>
                       }
                     </div>
                   </div>
@@ -388,15 +400,15 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                 <div class="flex items-center justify-center gap-4 pt-2 border-t border-dark-border/50 mt-2">
                   <div class="flex items-center gap-1.5">
                     <div class="w-3 h-3 rounded-sm bg-neon-cyan/25 border border-neon-cyan"></div>
-                    <span class="text-[9px] text-gray-500">Actual</span>
+                    <span class="text-[10px] text-gray-500">Actual</span>
                   </div>
                   <div class="flex items-center gap-1.5">
                     <div class="w-3 h-3 rounded-sm bg-neon-cyan/5 border border-neon-cyan/10"></div>
-                    <span class="text-[9px] text-gray-500">Con stock</span>
+                    <span class="text-[10px] text-gray-500">Con stock</span>
                   </div>
                   <div class="flex items-center gap-1.5">
                     <div class="w-3 h-3 rounded-sm bg-dark-surface/50 border border-dark-border/50"></div>
-                    <span class="text-[9px] text-gray-500">Vacía</span>
+                    <span class="text-[10px] text-gray-500">Vacía</span>
                   </div>
                 </div>
               </div>
@@ -626,6 +638,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
 })
 export class Ubicaciones implements OnInit {
   private service = inject(UbicacionService);
+  @ViewChild('formPanel') formPanel?: ElementRef<HTMLElement>;
 
   ubicaciones = signal<Ubicacion[]>([]);
   stockMap = signal<Record<number, StockPorUbicacion>>({});
@@ -922,6 +935,7 @@ export class Ubicaciones implements OnInit {
     this.modoFormAsistido.set(false);
     this.error.set(null);
     this.mostrarForm.set(true);
+    setTimeout(() => this.formPanel?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   cancelar(): void {
@@ -945,10 +959,15 @@ export class Ubicaciones implements OnInit {
     const id = this.editandoId();
     const op = id ? this.service.actualizar(id, req) : this.service.crear(req);
 
+    const editId = this.editandoId();
+    const descFinal = this.descripcion.trim() || null;
     op.subscribe({
       next: () => {
         this.guardando.set(false);
         this.mostrarForm.set(false);
+        if (editId && this.ubicacionSel()?.id === editId) {
+          this.ubicacionSel.update(sel => sel ? { ...sel, codigo: codigoFinal, descripcion: descFinal } : null);
+        }
         this.limpiarForm();
         this.cargar();
       },

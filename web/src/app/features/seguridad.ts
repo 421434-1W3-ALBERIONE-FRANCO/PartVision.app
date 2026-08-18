@@ -49,7 +49,7 @@ type Estado = 'cargando' | 'off' | 'setup' | 'recovery' | 'on' | 'desactivar';
           }
           <h2 class="text-white font-semibold mb-2">2. Ingresá el código que muestra la app</h2>
           <div class="flex items-center gap-3">
-            <input [(ngModel)]="code" (keyup.enter)="confirmar()" inputmode="numeric" placeholder="123 456" maxlength="6"
+            <input [(ngModel)]="code" (keyup.enter)="confirmar()" inputmode="numeric" placeholder="Código" maxlength="6"
               class="w-40 px-4 py-2.5 bg-dark-surface/80 border border-neon-cyan/40 rounded-xl text-white text-center font-mono tracking-[0.3em] focus:outline-none focus:border-neon-cyan" />
             <button (click)="confirmar()" [disabled]="procesando()"
               class="py-2.5 px-5 rounded-xl font-semibold text-sm neon-button-primary disabled:opacity-50 cursor-pointer">
@@ -98,7 +98,7 @@ type Estado = 'cargando' | 'off' | 'setup' | 'recovery' | 'on' | 'desactivar';
           <h2 class="text-white font-semibold mb-2">Desactivar 2FA</h2>
           <p class="text-sm text-gray-400 mb-3">Ingresá un código de tu app (o uno de recuperación) para confirmar.</p>
           <div class="flex items-center gap-3">
-            <input [(ngModel)]="code" (keyup.enter)="desactivar()" inputmode="numeric" placeholder="123 456" maxlength="12"
+            <input [(ngModel)]="code" (keyup.enter)="desactivar()" inputmode="numeric" placeholder="Código" maxlength="12"
               class="w-40 px-4 py-2.5 bg-dark-surface/80 border border-red-500/40 rounded-xl text-white text-center font-mono tracking-[0.2em] focus:outline-none focus:border-red-400" />
             <button (click)="desactivar()" [disabled]="procesando()"
               class="py-2.5 px-5 rounded-xl font-semibold text-sm text-red-400 border border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 cursor-pointer">

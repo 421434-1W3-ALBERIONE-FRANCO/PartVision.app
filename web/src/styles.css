@@ -148,6 +148,27 @@ body {
   background: #7c3aed;
 }
 
+/* ===== Form defaults (overrides @tailwindcss/forms white bg) ===== */
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: var(--c-input-bg);
+  color: var(--c-text-primary);
+  caret-color: var(--c-text-primary);
+}
+
+/* ===== Opacity variants for CSS-variable colors ===== */
+/* Tailwind can't apply /XX opacity to CSS variable colors, so we define them manually */
+.bg-dark-surface\/30 { background-color: color-mix(in srgb, var(--c-dark-surface) 30%, transparent); }
+.bg-dark-surface\/40 { background-color: color-mix(in srgb, var(--c-dark-surface) 40%, transparent); }
+.bg-dark-surface\/50 { background-color: color-mix(in srgb, var(--c-dark-surface) 50%, transparent); }
+.bg-dark-surface\/60 { background-color: color-mix(in srgb, var(--c-dark-surface) 60%, transparent); }
+.bg-dark-surface\/80 { background-color: color-mix(in srgb, var(--c-dark-surface) 80%, transparent); }
+.hover\:bg-dark-surface\/60:hover { background-color: color-mix(in srgb, var(--c-dark-surface) 60%, transparent); }
+.hover\:bg-dark-surface\/40:hover { background-color: color-mix(in srgb, var(--c-dark-surface) 40%, transparent); }
+.border-dark-border\/30 { border-color: color-mix(in srgb, var(--c-dark-border) 30%, transparent); }
+.border-dark-border\/50 { border-color: color-mix(in srgb, var(--c-dark-border) 50%, transparent); }
+
 /* ===== Light Theme: text & input overrides ===== */
 [data-theme="light"] .text-white {
   color: var(--c-text-primary);
@@ -164,7 +185,11 @@ body {
 [data-theme="light"] .text-gray-500 {
   color: var(--c-text-muted);
 }
-[data-theme="light"] .placeholder-gray-500::placeholder {
+[data-theme="light"] .text-gray-600 {
+  color: #6b7280;
+}
+[data-theme="light"] .placeholder-gray-500::placeholder,
+[data-theme="light"] .placeholder-gray-600::placeholder {
   color: #94a3b8;
 }
 [data-theme="light"] input,
@@ -212,6 +237,12 @@ body {
 [data-theme="light"] .text-neon-purple {
   color: #6d28d9;
 }
+[data-theme="light"] .text-neon-green {
+  color: #15803d;
+}
+[data-theme="light"] .text-neon-orange {
+  color: #c2410c;
+}
 
 /* Light: gradient text on headings */
 [data-theme="light"] .bg-gradient-to-r.from-white {
@@ -222,6 +253,24 @@ body {
 }
 [data-theme="light"] .bg-gradient-to-r.via-purple-100 {
   --tw-gradient-via: #6d28d9;
+}
+
+/* Light: mini-map & ubicaciones overrides */
+[data-theme="light"] .bg-neon-cyan\/5,
+[data-theme="light"] .bg-neon-cyan\/8 {
+  background-color: rgba(6, 182, 212, 0.08);
+}
+[data-theme="light"] .bg-neon-cyan\/25 {
+  background-color: rgba(6, 182, 212, 0.18);
+}
+[data-theme="light"] .bg-neon-purple\/15 {
+  background-color: rgba(124, 58, 237, 0.08);
+}
+[data-theme="light"] .bg-neon-cyan\/15 {
+  background-color: rgba(6, 182, 212, 0.08);
+}
+[data-theme="light"] .bg-neon-cyan\/10 {
+  background-color: rgba(6, 182, 212, 0.08);
 }
 
 /* Light: reduce glow effects */
