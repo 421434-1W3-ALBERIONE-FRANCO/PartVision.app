@@ -6,6 +6,8 @@ import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.inventory.repository.MovimientoStockRepository;
 import com.partvision.inventory.repository.StockRepository;
 import com.partvision.location.domain.Ubicacion;
+import com.partvision.location.dto.StockDetalleUbicacionResponse;
+import com.partvision.location.dto.StockPorUbicacionResponse;
 import com.partvision.location.dto.UbicacionRequest;
 import com.partvision.location.dto.UbicacionResponse;
 import com.partvision.location.repository.UbicacionRepository;
@@ -14,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -104,6 +108,31 @@ public class UbicacionService {
     public Ubicacion getByCodigo(String codigo) {
         return ubicacionRepository.findByCodigoIgnoreCase(codigo)
                 .orElseThrow(() -> new ResourceNotFoundException("Ubicacion (codigo)", codigo));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, StockPorUbicacionResponse> stockResumen() {
+        return stockRepository.findStockAgrupadoPorUbicacion().stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> new StockPorUbicacionResponse(
+                                (Long) row[0],
+                                ((Number) row[1]).longValue(),
+                                ((Number) row[2]).longValue())));
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockDetalleUbicacionResponse> stockDetalle(Long ubicacionId) {
+        getEntity(ubicacionId);
+        return stockRepository.findStockDetalleByUbicacionId(ubicacionId).stream()
+                .map(row -> new StockDetalleUbicacionResponse(
+                        (Long) row[0],
+                        (String) row[1],
+                        (String) row[2],
+                        (String) row[3],
+                        (String) row[4],
+                        ((Number) row[5]).intValue()))
+                .toList();
     }
 
     private void validarCodigoLibre(String codigo, Long idActual) {

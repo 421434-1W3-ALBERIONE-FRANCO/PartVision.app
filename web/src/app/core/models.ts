@@ -108,6 +108,21 @@ export interface Ubicacion {
   parentId: number | null;
 }
 
+export interface StockPorUbicacion {
+  ubicacionId: number;
+  cantidadTotal: number;
+  productosDistintos: number;
+}
+
+export interface StockDetalleUbicacion {
+  productoId: number;
+  sku: string | null;
+  descripcion: string;
+  marcaNombre: string | null;
+  categoriaNombre: string | null;
+  cantidad: number;
+}
+
 export interface AiExtraction {
   id: number;
   imagenKey: string;

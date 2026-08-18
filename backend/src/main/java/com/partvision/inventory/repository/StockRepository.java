@@ -28,4 +28,15 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
     /** Stock de varios productos (para enriquecer listados sin N+1). */
     @EntityGraph(attributePaths = {"ubicacion"})
     List<Stock> findByProductoIdIn(Collection<Long> productoIds);
+
+    @Query("SELECT s.ubicacion.id, COALESCE(SUM(s.cantidad), 0), COUNT(DISTINCT s.producto.id) " +
+            "FROM Stock s WHERE s.cantidad > 0 GROUP BY s.ubicacion.id")
+    List<Object[]> findStockAgrupadoPorUbicacion();
+
+    @Query("SELECT s.producto.id, s.producto.sku, s.producto.descripcion, " +
+            "m.nombre, c.nombre, s.cantidad " +
+            "FROM Stock s LEFT JOIN s.producto.marca m LEFT JOIN s.producto.categoria c " +
+            "WHERE s.ubicacion.id = :ubicacionId AND s.cantidad > 0 " +
+            "ORDER BY s.cantidad DESC")
+    List<Object[]> findStockDetalleByUbicacionId(@Param("ubicacionId") Long ubicacionId);
 }

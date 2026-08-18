@@ -3,11 +3,13 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Ubicacion } from './models';
+import { StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from './models';
 
 export interface UbicacionInput {
   codigo: string;
   descripcion?: string | null;
+  tipo?: string | null;
+  parentId?: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -15,9 +17,12 @@ export class UbicacionService {
   private http = inject(HttpClient);
   private base = `${API_BASE_URL}/ubicaciones`;
 
-  /** Lista todas las ubicaciones (modelo plano). */
   listar(): Observable<Ubicacion[]> {
     return this.http.get<Ubicacion[]>(this.base);
+  }
+
+  stockResumen(): Observable<Record<number, StockPorUbicacion>> {
+    return this.http.get<Record<number, StockPorUbicacion>>(`${this.base}/stock-resumen`);
   }
 
   crear(req: UbicacionInput): Observable<Ubicacion> {
@@ -26,6 +31,10 @@ export class UbicacionService {
 
   actualizar(id: number, req: UbicacionInput): Observable<Ubicacion> {
     return this.http.put<Ubicacion>(`${this.base}/${id}`, req);
+  }
+
+  stockDetalle(ubicacionId: number): Observable<StockDetalleUbicacion[]> {
+    return this.http.get<StockDetalleUbicacion[]>(`${this.base}/${ubicacionId}/stock-detalle`);
   }
 
   eliminar(id: number): Observable<void> {

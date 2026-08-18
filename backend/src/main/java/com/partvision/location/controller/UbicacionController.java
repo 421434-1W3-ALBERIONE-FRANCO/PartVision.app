@@ -1,5 +1,7 @@
 package com.partvision.location.controller;
 
+import com.partvision.location.dto.StockDetalleUbicacionResponse;
+import com.partvision.location.dto.StockPorUbicacionResponse;
 import com.partvision.location.dto.UbicacionRequest;
 import com.partvision.location.dto.UbicacionResponse;
 import com.partvision.location.service.UbicacionService;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/ubicaciones")
@@ -55,6 +58,17 @@ public class UbicacionController {
     @GetMapping
     public ResponseEntity<List<UbicacionResponse>> findRaices() {
         return ResponseEntity.ok(ubicacionService.findRaices());
+    }
+
+    /** Resumen de stock agrupado por ubicación (una sola query, sin N+1). */
+    @GetMapping("/stock-resumen")
+    public ResponseEntity<Map<Long, StockPorUbicacionResponse>> stockResumen() {
+        return ResponseEntity.ok(ubicacionService.stockResumen());
+    }
+
+    @GetMapping("/{id}/stock-detalle")
+    public ResponseEntity<List<StockDetalleUbicacionResponse>> stockDetalle(@PathVariable Long id) {
+        return ResponseEntity.ok(ubicacionService.stockDetalle(id));
     }
 
     /** Hijos directos de una ubicación (soporte de árbol, opcional). */
