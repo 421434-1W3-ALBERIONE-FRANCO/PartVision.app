@@ -46,20 +46,28 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     @Override
     public Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable) {
+        return buscarInteligenteInterno(tokens, null, pageable);
+    }
+
+    @Override
+    public Page<Producto> buscarInteligenteConStock(List<String> tokens, boolean tieneStock, Pageable pageable) {
+        return buscarInteligenteInterno(tokens, tieneStock, pageable);
+    }
+
+    private Page<Producto> buscarInteligenteInterno(List<String> tokens, Boolean tieneStock, Pageable pageable) {
         int anchorIdx = anchorIndex(tokens);
         String anchorFts = ftsSanitize(tokens.get(anchorIdx));
         if (!anchorFts.isEmpty()) {
-            Page<Producto> fts = buscarFts(tokens, anchorIdx, anchorFts, pageable);
+            Page<Producto> fts = buscarFts(tokens, anchorIdx, anchorFts, tieneStock, pageable);
             if (fts.getTotalElements() > 0) {
                 return fts;
             }
         }
-        // Fallback difuso (typos / formas no reconocidas por el indice de palabras).
-        return buscarTrigram(tokens, anchorIdx, pageable);
+        return buscarTrigram(tokens, anchorIdx, tieneStock, pageable);
     }
 
     /** Recuperacion primaria por FTS: {@code ancla & (resto en OR)}. */
-    private Page<Producto> buscarFts(List<String> tokens, int anchorIdx, String anchorFts, Pageable pageable) {
+    private Page<Producto> buscarFts(List<String> tokens, int anchorIdx, String anchorFts, Boolean tieneStock, Pageable pageable) {
         List<String> rest = new ArrayList<>();
         for (int i = 0; i < tokens.size(); i++) {
             if (i == anchorIdx) {
@@ -74,19 +82,21 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
                 ? anchorFts
                 : anchorFts + " & (" + String.join(" | ", rest) + ")";
 
-        // Con varias palabras el set es chico => ts_rank es barato y ordena bien.
-        // Con una sola palabra el set puede ser grande => se omite ts_rank (seria caro y no aporta).
         String rankOrder = rest.isEmpty()
                 ? ""
                 : " ts_rank(to_tsvector('" + FTS + "', p.busqueda), to_tsquery('" + FTS + "', :tsq)) desc,";
 
+        String stockClause = stockFilter(tieneStock);
+
         String sql = "select p.* from productos p"
                 + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
+                + stockClause
                 + " order by (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,"
                 + rankOrder
                 + " char_length(p.descripcion) asc, p.id asc";
         String countSql = "select count(*) from productos p"
-                + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)";
+                + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
+                + stockClause;
 
         Query data = em.createNativeQuery(sql, Producto.class);
         Query count = em.createNativeQuery(countSql);
@@ -98,19 +108,21 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
     }
 
     /** Fallback difuso: frase completa con similaridad trigram (tolera typos). */
-    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Pageable pageable) {
+    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Boolean tieneStock, Pageable pageable) {
         em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
                 .setParameter("u", UMBRAL_TRIGRAM)
                 .getSingleResult();
 
+        String stockClause = stockFilter(tieneStock);
         String frase = String.join(" ", tokens);
         Query data = em.createNativeQuery(
                 "select p.* from productos p where :frase <% p.busqueda"
+                        + stockClause
                         + " order by (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,"
                         + " word_similarity(:frase, p.busqueda) desc, char_length(p.descripcion) asc, p.id asc",
                 Producto.class);
         Query count = em.createNativeQuery(
-                "select count(*) from productos p where :frase <% p.busqueda");
+                "select count(*) from productos p where :frase <% p.busqueda" + stockClause);
         data.setParameter("frase", frase);
         data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
         count.setParameter("frase", frase);
@@ -153,5 +165,13 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
     /** Escapa los comodines de LIKE en el token y le agrega '%' para el match por prefijo. */
     private static String likePrefix(String token) {
         return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    }
+
+    private static String stockFilter(Boolean tieneStock) {
+        if (tieneStock == null) {
+            return "";
+        }
+        String op = tieneStock ? "EXISTS" : "NOT EXISTS";
+        return " AND " + op + " (SELECT 1 FROM stock s WHERE s.producto_id = p.id AND s.cantidad > 0)";
     }
 }

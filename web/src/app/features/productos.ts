@@ -3,10 +3,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 
-import { Marca, ProductoListItem } from '../core/models';
+import { Marca, ProductoListItem, StockResumen, Ubicacion } from '../core/models';
 import { AuthService } from '../core/auth.service';
 import { MarcaService } from '../core/marca.service';
 import { ProductoService } from '../core/producto.service';
+import { StockService } from '../core/stock.service';
+import { UbicacionService } from '../core/ubicacion.service';
 
 @Component({
   selector: 'app-productos',
@@ -393,7 +395,8 @@ import { ProductoService } from '../core/producto.service';
           <p class="text-xs uppercase tracking-wider text-gray-400 mb-1">Acciones</p>
           <p class="text-sm font-semibold text-white mb-4 truncate">{{ p.descripcion }}</p>
           <div class="space-y-2">
-            <button (click)="modificar(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-cyan transition-colors cursor-pointer">Modificar</button>
+            <button (click)="modificar(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-cyan transition-colors cursor-pointer">Modificar datos</button>
+            <button (click)="gestionarStock(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-green transition-colors cursor-pointer">Gestionar stock</button>
             <button (click)="agregarCodigoDe(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-200 bg-dark-surface border border-dark-border hover:border-neon-cyan transition-colors cursor-pointer">Agregar código</button>
             @if (esAdmin) {
               <button (click)="pedirBaja(p)" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-red-400 bg-dark-surface border border-dark-border hover:border-red-500/50 transition-colors cursor-pointer">Eliminar (dar de baja)</button>
@@ -430,11 +433,178 @@ import { ProductoService } from '../core/producto.service';
         </div>
       </div>
     }
+
+    <!-- Modal de eliminación de marca -->
+    @if (aMarcaEliminar(); as m) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminarMarca()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Eliminar marca
+          </h3>
+          <p class="text-sm text-gray-300">
+            ¿Estás seguro de eliminar la marca <span class="font-semibold text-white">"{{ m.nombre }}"</span>?
+            Si hay productos asociados, no se podrá eliminar.
+          </p>
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarEliminarMarca()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button (click)="confirmarEliminarMarca(m)" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer">
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Modal de gestión de stock -->
+    @if (stockProducto(); as p) {
+      <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto" (click)="cerrarStock()">
+        <div class="glass-panel w-full max-w-2xl my-8 p-5 md:p-6 rounded-2xl border border-neon-green/40 shadow-neon space-y-5" (click)="$event.stopPropagation()">
+          <div class="flex items-start justify-between gap-3">
+            <div class="space-y-1 min-w-0">
+              <p class="text-xs uppercase tracking-wider text-gray-400">Gestionar stock</p>
+              <p class="text-lg font-bold text-white truncate">{{ p.descripcion }}</p>
+              <p class="text-sm font-mono text-neon-cyan">
+                SKU {{ p.sku || '—' }}
+                @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
+              </p>
+            </div>
+            <button (click)="cerrarStock()" class="text-gray-400 hover:text-white cursor-pointer text-lg shrink-0">✕</button>
+          </div>
+
+          @if (stockResumen(); as r) {
+            <div class="flex flex-wrap gap-3">
+              <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                <p class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }}</p>
+                <p class="text-[10px] uppercase text-gray-400 font-semibold">Unidades</p>
+              </div>
+              <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                <p class="text-xl font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
+                <p class="text-[10px] uppercase text-gray-400 font-semibold">Ubicaciones</p>
+              </div>
+            </div>
+          }
+
+          <!-- Operación: entrada / salida -->
+          <div class="border-t border-dark-border pt-4 space-y-3">
+            <div class="flex gap-2">
+              <button (click)="stockOpTipo.set('entrada')"
+                [class]="stockOpTipo() === 'entrada'
+                  ? 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-green-500/15 text-green-400 border border-green-500/30 cursor-pointer'
+                  : 'px-4 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white cursor-pointer'">
+                Entrada
+              </button>
+              <button (click)="stockOpTipo.set('salida')"
+                [class]="stockOpTipo() === 'salida'
+                  ? 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30 cursor-pointer'
+                  : 'px-4 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white cursor-pointer'">
+                Salida
+              </button>
+              <button (click)="stockOpTipo.set('ajuste')"
+                [class]="stockOpTipo() === 'ajuste'
+                  ? 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 cursor-pointer'
+                  : 'px-4 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white cursor-pointer'">
+                Ajuste
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
+                  {{ stockOpTipo() === 'salida' ? 'Ubicación origen' : 'Ubicación' }}
+                </label>
+                <select [(ngModel)]="stockOpUbicacionId"
+                  class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-green text-sm">
+                  <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                  @if (stockOpTipo() === 'salida') {
+                    @for (u of stockResumen()?.ubicaciones ?? []; track u.ubicacionId) {
+                      <option [ngValue]="u.ubicacionId">{{ u.ubicacionPath }} ({{ u.cantidad }} u.)</option>
+                    }
+                  } @else {
+                    @for (u of stockUbicaciones(); track u.id) {
+                      <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                    }
+                  }
+                </select>
+              </div>
+              @if (stockOpTipo() === 'ajuste') {
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Tipo</label>
+                  <select [(ngModel)]="stockAjusteTipo"
+                    class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-green text-sm">
+                    <option value="AJUSTE_POSITIVO">Ajuste positivo (+)</option>
+                    <option value="AJUSTE_NEGATIVO">Ajuste negativo (−)</option>
+                  </select>
+                </div>
+              }
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                <input [(ngModel)]="stockOpCantidad" type="number" min="1" placeholder="0"
+                  class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-green text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo{{ stockOpTipo() === 'ajuste' ? '' : ' (opcional)' }}</label>
+                <input [(ngModel)]="stockOpMotivo" type="text" placeholder="Ej: ingreso de mercadería"
+                  class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-green text-sm" />
+              </div>
+            </div>
+
+            @if (stockOpError()) {
+              <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockOpError() }}</div>
+            }
+            @if (stockOpOk()) {
+              <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ stockOpOk() }}</div>
+            }
+
+            <div class="flex justify-end">
+              <button [disabled]="stockOpGuardando()" (click)="ejecutarStockOp()"
+                class="px-5 py-2 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+                {{ stockOpGuardando() ? 'Procesando...'
+                  : stockOpTipo() === 'entrada' ? 'Registrar entrada'
+                  : stockOpTipo() === 'salida' ? 'Registrar salida'
+                  : 'Registrar ajuste' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Stock actual por ubicación -->
+          @if (stockResumen(); as r) {
+            @if (r.ubicaciones.length > 0) {
+              <div class="border-t border-dark-border pt-4 space-y-3">
+                <h4 class="text-sm font-bold text-white">Stock por ubicación</h4>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                        <th class="py-2 px-3">Ubicación</th>
+                        <th class="py-2 px-3 text-right">Cantidad</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border/50">
+                      @for (l of r.ubicaciones; track l.ubicacionId) {
+                        <tr class="hover:bg-dark-surface/40 transition-colors">
+                          <td class="py-2 px-3 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
+                          <td class="py-2 px-3 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+    }
   `,
 })
 export class Productos implements OnInit {
   private service = inject(ProductoService);
   private marcaService = inject(MarcaService);
+  private stockService = inject(StockService);
+  private ubicacionService = inject(UbicacionService);
   private auth = inject(AuthService);
   private destroyRef = inject(DestroyRef);
   private queryChanged = new Subject<string>();
@@ -474,6 +644,22 @@ export class Productos implements OnInit {
   marcaError = signal<string | null>(null);
   editandoMarcaId = signal<number | null>(null);
   editandoMarcaNombre = '';
+
+  // Confirmación de eliminación de marca
+  aMarcaEliminar = signal<Marca | null>(null);
+
+  // Gestión de stock inline
+  stockProducto = signal<ProductoListItem | null>(null);
+  stockResumen = signal<StockResumen | null>(null);
+  stockUbicaciones = signal<Ubicacion[]>([]);
+  stockOpTipo = signal<'entrada' | 'salida' | 'ajuste'>('entrada');
+  stockOpUbicacionId: number | null = null;
+  stockOpCantidad: number | null = null;
+  stockOpMotivo = '';
+  stockAjusteTipo: 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO' = 'AJUSTE_POSITIVO';
+  stockOpGuardando = signal(false);
+  stockOpError = signal<string | null>(null);
+  stockOpOk = signal<string | null>(null);
 
   // Asociar código a producto existente
   agregandoCodigoId = signal<number | null>(null);
@@ -572,8 +758,16 @@ export class Productos implements OnInit {
   }
 
   eliminarMarca(m: Marca): void {
-    if (!confirm(`¿Eliminar la marca "${m.nombre}"?`)) return;
+    this.aMarcaEliminar.set(m);
+  }
+
+  cancelarEliminarMarca(): void {
+    this.aMarcaEliminar.set(null);
+  }
+
+  confirmarEliminarMarca(m: Marca): void {
     this.marcaError.set(null);
+    this.aMarcaEliminar.set(null);
     this.marcaService.eliminar(m.id).subscribe({
       next: () => this.cargarMarcas(),
       error: (e) => this.marcaError.set(e?.error?.message ?? 'No se pudo eliminar la marca'),
@@ -764,6 +958,92 @@ export class Productos implements OnInit {
   modificar(p: ProductoListItem): void {
     this.cerrarMenu();
     this.iniciarEdicion(p);
+  }
+
+  // --- Gestión de stock desde productos ---
+
+  gestionarStock(p: ProductoListItem): void {
+    this.cerrarMenu();
+    this.stockProducto.set(p);
+    this.stockOpError.set(null);
+    this.stockOpOk.set(null);
+    this.stockOpUbicacionId = null;
+    this.stockOpCantidad = null;
+    this.stockOpMotivo = '';
+    this.stockOpTipo.set('entrada');
+    this.stockService.resumen(p.id).subscribe({
+      next: (r) => this.stockResumen.set(r),
+      error: () => this.stockResumen.set(null),
+    });
+    if (this.stockUbicaciones().length === 0) {
+      this.ubicacionService.listar().subscribe({
+        next: (list) => this.stockUbicaciones.set(list),
+        error: () => this.stockUbicaciones.set([]),
+      });
+    }
+  }
+
+  cerrarStock(): void {
+    this.stockProducto.set(null);
+    this.stockResumen.set(null);
+  }
+
+  ejecutarStockOp(): void {
+    const p = this.stockProducto();
+    if (!p) return;
+    this.stockOpError.set(null);
+    this.stockOpOk.set(null);
+
+    if (!this.stockOpUbicacionId) { this.stockOpError.set('Elegí una ubicación.'); return; }
+    if (!this.stockOpCantidad || this.stockOpCantidad < 1) { this.stockOpError.set('La cantidad debe ser ≥ 1.'); return; }
+
+    this.stockOpGuardando.set(true);
+    const tipo = this.stockOpTipo();
+
+    if (tipo === 'entrada') {
+      this.stockService.entrada({
+        productoId: p.id, ubicacionId: this.stockOpUbicacionId,
+        cantidad: this.stockOpCantidad, motivo: this.stockOpMotivo.trim() || undefined,
+      }).subscribe({
+        next: () => this.onStockOpOk(`+${this.stockOpCantidad} u. registradas.`, p.id),
+        error: (e) => this.onStockOpError(e),
+      });
+    } else if (tipo === 'salida') {
+      this.stockService.salida({
+        productoId: p.id, ubicacionId: this.stockOpUbicacionId,
+        cantidad: this.stockOpCantidad, motivo: this.stockOpMotivo.trim() || undefined,
+      }).subscribe({
+        next: () => this.onStockOpOk(`−${this.stockOpCantidad} u. registradas.`, p.id),
+        error: (e) => this.onStockOpError(e),
+      });
+    } else {
+      if (!this.stockOpMotivo.trim()) { this.stockOpError.set('El motivo es obligatorio para ajustes.'); this.stockOpGuardando.set(false); return; }
+      this.stockService.ajuste({
+        productoId: p.id, ubicacionId: this.stockOpUbicacionId,
+        tipo: this.stockAjusteTipo, cantidad: this.stockOpCantidad,
+        motivo: this.stockOpMotivo.trim(),
+      }).subscribe({
+        next: () => this.onStockOpOk(`Ajuste registrado.`, p.id),
+        error: (e) => this.onStockOpError(e),
+      });
+    }
+  }
+
+  private onStockOpOk(msg: string, productoId: number): void {
+    this.stockOpOk.set(msg);
+    this.stockOpCantidad = null;
+    this.stockOpMotivo = '';
+    this.stockOpGuardando.set(false);
+    this.stockService.resumen(productoId).subscribe({
+      next: (r) => this.stockResumen.set(r),
+      error: () => this.stockResumen.set(null),
+    });
+    this.cargar();
+  }
+
+  private onStockOpError(e: any): void {
+    this.stockOpError.set(e?.error?.message ?? 'No se pudo completar la operación.');
+    this.stockOpGuardando.set(false);
   }
 
   agregarCodigoDe(p: ProductoListItem): void {

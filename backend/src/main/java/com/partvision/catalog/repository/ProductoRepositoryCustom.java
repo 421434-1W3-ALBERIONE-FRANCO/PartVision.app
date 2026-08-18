@@ -19,4 +19,10 @@ public interface ProductoRepositoryCustom {
      * "pistpn" (con typo) igual cae en PISTON via el fallback.
      */
     Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable);
+
+    /**
+     * Igual que {@link #buscarInteligente} pero filtra ademas por existencia de stock
+     * ({@code tieneStock=true} = solo productos con stock > 0, {@code false} = sin stock).
+     */
+    Page<Producto> buscarInteligenteConStock(List<String> tokens, boolean tieneStock, Pageable pageable);
 }

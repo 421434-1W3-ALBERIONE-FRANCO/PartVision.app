@@ -161,7 +161,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
                 </svg>
               </a>
               <button
-                (click)="salir()"
+                (click)="pedirSalir()"
                 title="Cerrar Sesión"
                 class="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
               >
@@ -200,6 +200,27 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
       </div>
 
     </div>
+
+    <!-- Confirmación de cierre de sesión -->
+    @if (confirmandoSalir()) {
+      <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" (click)="cancelarSalir()">
+        <div class="glass-panel w-full max-w-sm p-6 rounded-2xl border border-amber-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Cerrar sesión
+          </h3>
+          <p class="text-sm text-gray-300">¿Estás seguro de que querés cerrar la sesión?</p>
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarSalir()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button (click)="confirmarSalir()" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer">
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Layout {
@@ -207,14 +228,22 @@ export class Layout {
   private router = inject(Router);
 
   sidebarOpen = signal(false);
+  confirmandoSalir = signal(false);
 
   get esAdmin(): boolean {
     return this.auth.esAdmin;
   }
 
-  salir(): void {
-    // logout() es un Observable: hay que suscribirse para que dispare el POST /auth/logout
-    // (borra la cookie y revoca el token del lado del server). Navegamos igual pase lo que pase.
+  pedirSalir(): void {
+    this.confirmandoSalir.set(true);
+  }
+
+  cancelarSalir(): void {
+    this.confirmandoSalir.set(false);
+  }
+
+  confirmarSalir(): void {
+    this.confirmandoSalir.set(false);
     this.auth.logout().subscribe({
       next: () => this.router.navigate(['/login']),
       error: () => this.router.navigate(['/login']),

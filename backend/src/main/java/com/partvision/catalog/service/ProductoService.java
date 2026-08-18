@@ -130,13 +130,20 @@ public class ProductoService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ProductoListItemResponse> findAll(Boolean tieneStock, Pageable pageable) {
-        if (tieneStock == null) {
+    public Page<ProductoListItemResponse> findAll(String q, Boolean tieneStock, Pageable pageable) {
+        List<String> tokens = tokenizar(q);
+        if (tokens.isEmpty() && tieneStock == null) {
             return findAll(pageable);
         }
-        return conStock(tieneStock
-                ? productoRepository.findConStock(pageable)
-                : productoRepository.findSinStock(pageable));
+        if (tokens.isEmpty()) {
+            return conStock(tieneStock
+                    ? productoRepository.findConStock(pageable)
+                    : productoRepository.findSinStock(pageable));
+        }
+        if (tieneStock == null) {
+            return conStock(productoRepository.buscarInteligente(tokens, pageable));
+        }
+        return conStock(productoRepository.buscarInteligenteConStock(tokens, tieneStock, pageable));
     }
 
     /**

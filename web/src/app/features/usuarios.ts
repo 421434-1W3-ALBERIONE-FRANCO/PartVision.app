@@ -244,7 +244,7 @@ import { UsuarioService } from '../core/usuario.service';
                         Cambiar rol
                       </button>
                       <button
-                        (click)="toggleActivo(u)"
+                        (click)="pedirToggleActivo(u)"
                         class="px-3 py-1.5 mr-2 rounded-lg text-xs font-medium cursor-pointer transition-colors"
                         [class]="u.activo ? 'neon-button-danger' : 'neon-button-secondary'"
                       >
@@ -295,6 +295,38 @@ import { UsuarioService } from '../core/usuario.service';
         </div>
       </div>
     }
+
+    <!-- Confirmación de activar/desactivar usuario -->
+    @if (aToggleActivo(); as u) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarToggleActivo()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-amber-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            {{ u.activo ? 'Desactivar' : 'Activar' }} usuario
+          </h3>
+          <p class="text-sm text-gray-300">
+            @if (u.activo) {
+              ¿Estás seguro de desactivar a <span class="font-semibold text-white">{{ u.nombre }}</span>?
+              No podrá iniciar sesión hasta que lo reactives.
+            } @else {
+              ¿Querés reactivar a <span class="font-semibold text-white">{{ u.nombre }}</span>?
+              Volverá a tener acceso al sistema.
+            }
+          </p>
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarToggleActivo()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
+            <button (click)="confirmarToggleActivo(u)"
+              [class]="u.activo
+                ? 'px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer'
+                : 'px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer'">
+              {{ u.activo ? 'Desactivar' : 'Activar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Usuarios implements OnInit {
@@ -318,6 +350,9 @@ export class Usuarios implements OnInit {
   editandoRolId = signal<number | null>(null);
   rolEdit = 'OPERARIO';
   rolGuardando = signal(false);
+
+  // Confirmación de activar/desactivar
+  aToggleActivo = signal<Usuario | null>(null);
 
   // Eliminación (hard delete) de usuario
   aEliminar = signal<Usuario | null>(null);
@@ -371,7 +406,16 @@ export class Usuarios implements OnInit {
       });
   }
 
-  toggleActivo(u: Usuario): void {
+  pedirToggleActivo(u: Usuario): void {
+    this.aToggleActivo.set(u);
+  }
+
+  cancelarToggleActivo(): void {
+    this.aToggleActivo.set(null);
+  }
+
+  confirmarToggleActivo(u: Usuario): void {
+    this.aToggleActivo.set(null);
     this.service.toggleActivo(u.id).subscribe({
       next: () => this.cargarUsuarios(),
       error: (e) => alert(e?.error?.message ?? 'No se pudo modificar el estado del usuario'),

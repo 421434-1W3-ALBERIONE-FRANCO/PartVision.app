@@ -55,12 +55,30 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
       <!-- ==================== PRODUCTOS CARGADOS ==================== -->
       @if (vista() === 'cargados') {
+        <!-- Buscador -->
+        <div class="flex flex-col sm:flex-row gap-3 items-end">
+          <div class="flex-1">
+            <input [(ngModel)]="filtroTexto" (keyup.enter)="buscarEnLista()" (input)="onFiltroInput()" type="text"
+              placeholder="Buscar producto por nombre, SKU o marca..."
+              class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-green text-sm" />
+          </div>
+          @if (filtroTexto) {
+            <button (click)="limpiarFiltro()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-400 bg-dark-surface border border-dark-border hover:text-white cursor-pointer transition-colors shrink-0">
+              Limpiar
+            </button>
+          }
+        </div>
+
         @if (cargandoLista()) {
           <div class="text-center py-12 text-gray-500 text-sm">Cargando productos con stock...</div>
         } @else if (listaCargados().length === 0) {
           <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
-            <p class="text-gray-400">No hay productos con stock cargado.</p>
-            <p class="text-xs text-gray-500 mt-2">Seleccioná un producto desde "Sin cargar" para registrar una entrada.</p>
+            @if (filtroTexto) {
+              <p class="text-gray-400">No se encontraron productos con stock para "{{ filtroTexto }}".</p>
+            } @else {
+              <p class="text-gray-400">No hay productos con stock cargado.</p>
+              <p class="text-xs text-gray-500 mt-2">Seleccioná un producto desde "Sin cargar" para registrar una entrada.</p>
+            }
           </div>
         } @else {
           <!-- Tabla de productos con stock -->
@@ -379,11 +397,29 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
       <!-- ==================== SIN CARGAR ==================== -->
       @if (vista() === 'sin-cargar') {
+        <!-- Buscador -->
+        <div class="flex flex-col sm:flex-row gap-3 items-end">
+          <div class="flex-1">
+            <input [(ngModel)]="filtroTexto" (keyup.enter)="buscarEnLista()" (input)="onFiltroInput()" type="text"
+              placeholder="Buscar producto por nombre, SKU o marca..."
+              class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 text-sm" />
+          </div>
+          @if (filtroTexto) {
+            <button (click)="limpiarFiltro()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-400 bg-dark-surface border border-dark-border hover:text-white cursor-pointer transition-colors shrink-0">
+              Limpiar
+            </button>
+          }
+        </div>
+
         @if (cargandoLista()) {
           <div class="text-center py-12 text-gray-500 text-sm">Cargando productos sin stock...</div>
         } @else if (listaSinCargar().length === 0) {
           <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
-            <p class="text-gray-400">Todos los productos del catálogo tienen stock cargado.</p>
+            @if (filtroTexto) {
+              <p class="text-gray-400">No se encontraron productos sin stock para "{{ filtroTexto }}".</p>
+            } @else {
+              <p class="text-gray-400">Todos los productos del catálogo tienen stock cargado.</p>
+            }
           </div>
         } @else {
           <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
@@ -663,6 +699,10 @@ export class Stock implements OnInit {
 
   vista = signal<Vista>('cargados');
 
+  // Filtro de texto (tabs cargados/sin-cargar)
+  filtroTexto = '';
+  private filtroChanged = new Subject<string>();
+
   // Listas paginadas
   listaCargados = signal<ProductoListItem[]>([]);
   listaSinCargar = signal<ProductoListItem[]>([]);
@@ -729,6 +769,17 @@ export class Stock implements OnInit {
     });
     this.cargarLista();
 
+    this.filtroChanged
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.paginaActual.set(0);
+        this.cargarLista();
+      });
+
     this.queryChanged
       .pipe(
         debounceTime(250),
@@ -749,6 +800,7 @@ export class Stock implements OnInit {
   cambiarVista(v: Vista): void {
     this.vista.set(v);
     this.deseleccionar();
+    this.filtroTexto = '';
     this.paginaActual.set(0);
     this.cargarLista();
   }
@@ -758,7 +810,8 @@ export class Stock implements OnInit {
     if (v === 'historial') return;
     this.cargandoLista.set(true);
     const conStock = v === 'cargados';
-    this.productos.listar(this.paginaActual(), 20, conStock).subscribe({
+    const q = this.filtroTexto.trim() || undefined;
+    this.productos.listar(this.paginaActual(), 20, conStock, q).subscribe({
       next: (page) => {
         if (conStock) {
           this.listaCargados.set(page.content);
@@ -777,6 +830,23 @@ export class Stock implements OnInit {
 
   irPagina(p: number): void {
     this.paginaActual.set(p);
+    this.cargarLista();
+  }
+
+  buscarEnLista(): void {
+    this.paginaActual.set(0);
+    this.cargarLista();
+  }
+
+  onFiltroInput(): void {
+    const term = this.filtroTexto.trim();
+    if (term.length === 1) return;
+    this.filtroChanged.next(term);
+  }
+
+  limpiarFiltro(): void {
+    this.filtroTexto = '';
+    this.paginaActual.set(0);
     this.cargarLista();
   }
 
