@@ -159,6 +159,7 @@ export interface Usuario {
   id: number;
   username: string;
   nombre: string;
+  email: string | null;
   activo: boolean;
   roles: string[];
 }

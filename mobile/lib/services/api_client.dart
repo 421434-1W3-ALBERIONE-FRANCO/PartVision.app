@@ -10,8 +10,11 @@ import 'token_store.dart';
 class ApiException implements Exception {
   final int statusCode;
   final String message;
+  final Map<String, dynamic>? data;
 
-  ApiException(this.statusCode, this.message);
+  ApiException(this.statusCode, this.message, {this.data});
+
+  bool get twoFactorRequired => data?['twoFactorRequired'] == true;
 
   @override
   String toString() => message;
@@ -65,6 +68,7 @@ class ApiClient {
     final mensaje = (cuerpo is Map && cuerpo['message'] != null)
         ? cuerpo['message'].toString()
         : 'Error ${res.statusCode}';
-    throw ApiException(res.statusCode, mensaje);
+    throw ApiException(res.statusCode, mensaje,
+        data: cuerpo is Map<String, dynamic> ? cuerpo : null);
   }
 }

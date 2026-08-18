@@ -46,7 +46,7 @@ import { UsuarioService } from '../core/usuario.service';
             Alta de Operador / Usuario
           </h3>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
                 Usuario *
@@ -80,6 +80,18 @@ import { UsuarioService } from '../core/usuario.service';
                 [(ngModel)]="nombre"
                 type="text"
                 placeholder="Ej: Juan Pérez"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
+                Email *
+              </label>
+              <input
+                [(ngModel)]="email"
+                type="email"
+                placeholder="Ej: juan@gmail.com"
                 class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
               />
             </div>
@@ -168,6 +180,7 @@ import { UsuarioService } from '../core/usuario.service';
                   <th class="py-3 px-4">ID</th>
                   <th class="py-3 px-4">Usuario</th>
                   <th class="py-3 px-4">Nombre</th>
+                  <th class="py-3 px-4">Email</th>
                   <th class="py-3 px-4">Roles</th>
                   <th class="py-3 px-4">Estado</th>
                   <th class="py-3 px-4 text-right">Acciones</th>
@@ -182,6 +195,9 @@ import { UsuarioService } from '../core/usuario.service';
                     </td>
                     <td class="py-3.5 px-4 text-gray-300">
                       {{ u.nombre }}
+                    </td>
+                    <td class="py-3.5 px-4 text-gray-400 text-xs">
+                      {{ u.email ?? '—' }}
                     </td>
                     <td class="py-3.5 px-4">
                       @if (editandoRolId() === u.id) {
@@ -290,6 +306,7 @@ export class Usuarios implements OnInit {
   mostrarForm = signal(false);
   username = '';
   nombre = '';
+  email = '';
   password = '';
   rol = 'OPERARIO';
   guardando = signal(false);
@@ -325,7 +342,7 @@ export class Usuarios implements OnInit {
   }
 
   crear(): void {
-    if (!this.username.trim() || !this.nombre.trim() || this.password.length < 8) {
+    if (!this.username.trim() || !this.nombre.trim() || !this.email.trim() || this.password.length < 8) {
       this.error.set('Completá todos los campos (contraseña de al menos 8 caracteres)');
       return;
     }
@@ -334,12 +351,13 @@ export class Usuarios implements OnInit {
     this.ok.set(false);
 
     this.service
-      .crear({ username: this.username.trim(), nombre: this.nombre.trim(), password: this.password, rol: this.rol })
+      .crear({ username: this.username.trim(), nombre: this.nombre.trim(), email: this.email.trim(), password: this.password, rol: this.rol })
       .subscribe({
         next: () => {
           this.rolCreado.set(this.rol === 'ADMIN' ? 'ADMIN' : 'OPERARIO');
           this.username = '';
           this.nombre = '';
+          this.email = '';
           this.password = '';
           this.rol = 'OPERARIO';
           this.guardando.set(false);

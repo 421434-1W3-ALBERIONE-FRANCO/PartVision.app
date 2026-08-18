@@ -6,6 +6,8 @@ import com.partvision.auth.security.AuthCookieFactory;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.auth.service.AuthService;
+import com.partvision.auth.service.PasswordResetService;
+import com.partvision.auth.service.TwoFactorRecoveryService;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.common.exception.InvalidCredentialsException;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,10 @@ class AuthControllerTest {
     private JwtService jwtService;
     @MockBean
     private TokenRevocationService revocationService;
+    @MockBean
+    private PasswordResetService passwordResetService;
+    @MockBean
+    private TwoFactorRecoveryService twoFactorRecoveryService;
 
     @Test
     void login_devuelve200ConTokenYCookieHttpOnly() throws Exception {

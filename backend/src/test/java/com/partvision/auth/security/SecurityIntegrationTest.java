@@ -70,7 +70,7 @@ class SecurityIntegrationTest {
                 .build();
         String token = jwtService.generateToken(usuario);
         when(usuarioService.getCurrentUser())
-                .thenReturn(new UsuarioResponse(1L, "admin", "Admin", true, Set.of("ADMIN")));
+                .thenReturn(new UsuarioResponse(1L, "admin", "Admin", null, true, Set.of("ADMIN")));
 
         mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -85,13 +85,13 @@ class SecurityIntegrationTest {
     void postConCookie_autenticaYCrea() throws Exception {
         String token = jwtService.generateToken(admin());
         when(authService.crearUsuario(any()))
-                .thenReturn(new UsuarioResponse(3L, "nuevo", "Juan", true, Set.of("OPERARIO")));
+                .thenReturn(new UsuarioResponse(3L, "nuevo", "Juan", null, true, Set.of("OPERARIO")));
 
         mvc.perform(post("/api/v1/usuarios")
                         .cookie(new Cookie("pv_token", token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
+                                {"username":"nuevo","password":"password123","nombre":"Juan","email":"nuevo@test.com"}"""))
                 .andExpect(status().isCreated());
     }
 
@@ -100,13 +100,13 @@ class SecurityIntegrationTest {
     void postConBearer_autenticaYCrea() throws Exception {
         String token = jwtService.generateToken(admin());
         when(authService.crearUsuario(any()))
-                .thenReturn(new UsuarioResponse(2L, "nuevo", "Juan", true, Set.of("OPERARIO")));
+                .thenReturn(new UsuarioResponse(2L, "nuevo", "Juan", null, true, Set.of("OPERARIO")));
 
         mvc.perform(post("/api/v1/usuarios")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"nuevo","password":"password123","nombre":"Juan"}"""))
+                                {"username":"nuevo","password":"password123","nombre":"Juan","email":"nuevo2@test.com"}"""))
                 .andExpect(status().isCreated());
     }
 

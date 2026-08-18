@@ -47,6 +47,10 @@ public class AuthService {
         if (usuarioRepository.existsByUsername(request.username())) {
             throw new DuplicateResourceException("El username ya existe: " + request.username());
         }
+        if (request.email() != null && !request.email().isBlank()
+                && usuarioRepository.existsByEmail(request.email())) {
+            throw new DuplicateResourceException("El email ya está registrado");
+        }
         String rolNombre = (request.rol() == null || request.rol().isBlank())
                 ? DEFAULT_ROLE
                 : request.rol().trim().toUpperCase();
@@ -57,6 +61,7 @@ public class AuthService {
                 .username(request.username())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .nombre(request.nombre())
+                .email(request.email() != null && !request.email().isBlank() ? request.email() : null)
                 .activo(true)
                 .roles(new HashSet<>(Set.of(rol)))
                 .build();
@@ -102,6 +107,40 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
         usuario.setActivo(!usuario.isActivo());
         return UsuarioResponse.from(usuarioRepository.save(usuario));
+    }
+
+    @Transactional
+    public UsuarioResponse cambiarEmail(Long id, String email) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        if (email != null && !email.isBlank()) {
+            usuarioRepository.findByEmail(email).ifPresent(otro -> {
+                if (!otro.getId().equals(id)) {
+                    throw new DuplicateResourceException("El email ya está registrado");
+                }
+            });
+        }
+        usuario.setEmail(email != null && !email.isBlank() ? email : null);
+        return UsuarioResponse.from(usuarioRepository.save(usuario));
+    }
+
+    @Transactional
+    public void cambiarPasswordPropia(Long userId, String passwordActual, String nuevaPassword, String code) {
+        Usuario usuario = usuarioRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", userId));
+        if (!passwordEncoder.matches(passwordActual, usuario.getPasswordHash())) {
+            throw new InvalidCredentialsException("La contraseña actual es incorrecta");
+        }
+        if (usuario.isTotpEnabled()) {
+            if (code == null || code.isBlank()) {
+                throw new BusinessException("Se requiere el código 2FA para cambiar la contraseña");
+            }
+            if (!twoFactorService.verificarLogin(usuario, code)) {
+                throw new InvalidCredentialsException("Código de 2FA inválido");
+            }
+        }
+        usuario.setPasswordHash(passwordEncoder.encode(nuevaPassword));
+        usuarioRepository.save(usuario);
     }
 
     @Transactional

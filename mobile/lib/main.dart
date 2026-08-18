@@ -10,6 +10,7 @@ import 'services/token_store.dart';
 import 'state/auth_state.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/reset_password_screen.dart';
 
 void main() {
   final tokenStore = TokenStore();
@@ -44,9 +45,25 @@ class PartVisionApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
           useMaterial3: true,
         ),
-        home: Consumer<AuthState>(
-          builder: (_, auth, __) => auth.autenticado ? const HomeScreen() : const LoginScreen(),
-        ),
+        onGenerateRoute: (settings) {
+          final uri = Uri.parse(settings.name ?? '/');
+
+          if (uri.path == '/reset-password') {
+            final token = uri.queryParameters['token'];
+            if (token != null && token.isNotEmpty) {
+              return MaterialPageRoute(
+                builder: (_) => ResetPasswordScreen(token: token),
+              );
+            }
+          }
+
+          return MaterialPageRoute(
+            builder: (_) => Consumer<AuthState>(
+              builder: (_, auth, __) =>
+                  auth.autenticado ? const HomeScreen() : const LoginScreen(),
+            ),
+          );
+        },
       ),
     );
   }

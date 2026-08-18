@@ -40,6 +40,9 @@ public class Usuario extends Auditable {
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
+    @Column(length = 255)
+    private String email;
+
     @Column(nullable = false, length = 150)
     private String nombre;
 

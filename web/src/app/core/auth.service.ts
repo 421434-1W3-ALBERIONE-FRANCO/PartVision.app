@@ -93,6 +93,32 @@ export class AuthService {
     this.usuario.set(null);
   }
 
+  // ===== Recuperación de cuenta =====
+
+  forgotPassword(email: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE_URL}/auth/forgot-password`, { email });
+  }
+
+  resetPassword(token: string, password: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE_URL}/auth/reset-password`, { token, password });
+  }
+
+  twoFactorRecoverRequest(email: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE_URL}/auth/2fa/recover-request`, { email });
+  }
+
+  twoFactorRecoverConfirm(email: string, code: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE_URL}/auth/2fa/recover-confirm`, { email, code });
+  }
+
+  cambiarPassword(passwordActual: string, nuevaPassword: string, code?: string): Observable<void> {
+    return this.http.patch<void>(`${API_BASE_URL}/usuarios/me/password`, {
+      passwordActual,
+      nuevaPassword,
+      code: code ?? null,
+    });
+  }
+
   private cargarSesionOrThrow(): Observable<Usuario> {
     return this.http.get<Usuario>(`${API_BASE_URL}/usuarios/me`).pipe(
       tap((u) => this.usuario.set(u)),

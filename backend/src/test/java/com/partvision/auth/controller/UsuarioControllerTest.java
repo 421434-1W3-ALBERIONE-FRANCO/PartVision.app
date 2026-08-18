@@ -70,7 +70,7 @@ class UsuarioControllerTest {
 
     @Test
     void listar_comoAdmin_devuelve200() throws Exception {
-        UsuarioResponse u1 = new UsuarioResponse(1L, "admin", "Admin", true, Set.of("ADMIN"));
+        UsuarioResponse u1 = new UsuarioResponse(1L, "admin", "Admin", null, true, Set.of("ADMIN"));
         when(authService.listarTodos()).thenReturn(java.util.List.of(u1));
 
         mvc.perform(get("/api/v1/usuarios").header("Authorization", bearerAdmin(1L)))
@@ -87,8 +87,8 @@ class UsuarioControllerTest {
 
     @Test
     void crear_comoAdmin_devuelve201() throws Exception {
-        RegisterRequest req = new RegisterRequest("operario2", "password123", "Operario Dos");
-        UsuarioResponse res = new UsuarioResponse(2L, "operario2", "Operario Dos", true, Set.of("OPERARIO"));
+        RegisterRequest req = new RegisterRequest("operario2", "password123", "Operario Dos", "op2@test.com");
+        UsuarioResponse res = new UsuarioResponse(2L, "operario2", "Operario Dos", null, true, Set.of("OPERARIO"));
         when(authService.crearUsuario(any(RegisterRequest.class))).thenReturn(res);
 
         mvc.perform(post("/api/v1/usuarios")
@@ -101,7 +101,7 @@ class UsuarioControllerTest {
 
     @Test
     void toggleActivo_otroUsuario_devuelve200() throws Exception {
-        UsuarioResponse res = new UsuarioResponse(2L, "operario", "Operario", false, Set.of("OPERARIO"));
+        UsuarioResponse res = new UsuarioResponse(2L, "operario", "Operario", null, false, Set.of("OPERARIO"));
         when(authService.toggleActivo(eq(2L))).thenReturn(res);
 
         mvc.perform(patch("/api/v1/usuarios/2/activo").header("Authorization", bearerAdmin(1L)))

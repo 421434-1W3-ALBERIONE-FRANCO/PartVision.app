@@ -13,6 +13,7 @@ public record UsuarioResponse(
         Long id,
         String username,
         String nombre,
+        String email,
         boolean activo,
         Set<String> roles
 ) {
@@ -21,6 +22,7 @@ public record UsuarioResponse(
                 usuario.getId(),
                 usuario.getUsername(),
                 usuario.getNombre(),
+                usuario.getEmail(),
                 usuario.isActivo(),
                 usuario.getRoles().stream().map(Rol::getNombre).collect(Collectors.toSet()));
     }

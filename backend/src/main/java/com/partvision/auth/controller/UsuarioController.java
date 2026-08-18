@@ -1,5 +1,7 @@
 package com.partvision.auth.controller;
 
+import com.partvision.auth.dto.CambiarEmailRequest;
+import com.partvision.auth.dto.CambiarPasswordRequest;
 import com.partvision.auth.dto.CambiarRolRequest;
 import com.partvision.auth.dto.RegisterRequest;
 import com.partvision.auth.dto.UsuarioResponse;
@@ -40,6 +42,15 @@ public class UsuarioController {
     @GetMapping("/me")
     public ResponseEntity<UsuarioResponse> me() {
         return ResponseEntity.ok(usuarioService.getCurrentUser());
+    }
+
+    @PatchMapping("/me/password")
+    public ResponseEntity<java.util.Map<String, String>> cambiarPassword(
+            @Valid @RequestBody CambiarPasswordRequest request, Authentication authentication) {
+        AuthenticatedUser principal = (AuthenticatedUser) authentication.getPrincipal();
+        authService.cambiarPasswordPropia(
+                principal.id(), request.passwordActual(), request.nuevaPassword(), request.code());
+        return ResponseEntity.ok(java.util.Map.of("message", "Contraseña actualizada correctamente"));
     }
 
     /** Lista todos los usuarios del sistema (solo ADMIN). */
@@ -90,6 +101,13 @@ public class UsuarioController {
      * Cambia el rol de un usuario (ADMIN u OPERARIO). Un admin no puede cambiarse
      * su propio rol (evita auto-degradarse y quedar sin acceso admin).
      */
+    @PatchMapping("/{id}/email")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UsuarioResponse> cambiarEmail(@PathVariable Long id,
+            @Valid @RequestBody CambiarEmailRequest request) {
+        return ResponseEntity.ok(authService.cambiarEmail(id, request.email()));
+    }
+
     @PatchMapping("/{id}/rol")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UsuarioResponse> cambiarRol(@PathVariable Long id,

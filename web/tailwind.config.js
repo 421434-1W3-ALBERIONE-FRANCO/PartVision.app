@@ -7,11 +7,11 @@ module.exports = {
     extend: {
       colors: {
         dark: {
-          DEFAULT: '#0a0a0f',
-          card: '#12121a',
-          surface: '#1a1a27',
-          border: '#1e1e2e',
-          hover: '#22223a',
+          DEFAULT: 'var(--c-dark)',
+          card: 'var(--c-dark-card)',
+          surface: 'var(--c-dark-surface)',
+          border: 'var(--c-dark-border)',
+          hover: 'var(--c-dark-hover)',
         },
         neon: {
           purple: '#7c3aed',
@@ -40,7 +40,7 @@ module.exports = {
       backgroundImage: {
         'gradient-neon': 'linear-gradient(135deg, #7c3aed, #06b6d4)',
         'gradient-neon-rev': 'linear-gradient(135deg, #06b6d4, #7c3aed)',
-        'gradient-dark': 'linear-gradient(180deg, #0a0a0f 0%, #12121a 100%)',
+        'gradient-dark': 'linear-gradient(180deg, var(--c-dark) 0%, var(--c-dark-card) 100%)',
         'gradient-card': 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(6,182,212,0.05))',
       },
       animation: {

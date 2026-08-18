@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../core/auth.service';
 import { ThreeBgComponent } from '../core/three-bg.component';
@@ -8,7 +8,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, ThreeBgComponent],
+  imports: [FormsModule, RouterLink, ThreeBgComponent],
   template: `
     <div class="relative min-h-screen flex items-center justify-center bg-dark overflow-hidden selection:bg-neon-purple selection:text-white px-4">
       <!-- 3D ThreeJS Particle Network Background -->
@@ -114,6 +114,9 @@ import { ThreeBgComponent } from '../core/three-bg.component';
               <p class="text-[11px] text-gray-500 mt-1.5">
                 Ingresá el código de tu app de autenticación (o un código de recuperación).
               </p>
+              <a routerLink="/recuperar-2fa" class="inline-block mt-2 text-xs text-neon-cyan/70 hover:text-neon-cyan transition-colors cursor-pointer">
+                Perdí el acceso a mi autenticador
+              </a>
             </div>
           }
 
@@ -145,6 +148,12 @@ import { ThreeBgComponent } from '../core/three-bg.component';
                 </svg>
               }
             </button>
+          </div>
+
+          <div class="text-center mt-4">
+            <a routerLink="/olvide-password" class="text-xs text-gray-400 hover:text-neon-cyan transition-colors cursor-pointer">
+              ¿Olvidaste tu contraseña?
+            </a>
           </div>
         </div>
 

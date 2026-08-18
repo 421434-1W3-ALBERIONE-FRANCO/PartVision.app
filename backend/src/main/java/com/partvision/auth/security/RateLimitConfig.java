@@ -9,12 +9,6 @@ import org.springframework.core.Ordered;
 
 import java.time.Duration;
 
-/**
- * Registra el {@link LoginRateLimitFilter} scopeado exclusivamente a {@code POST /api/v1/auth/login}
- * y con la maxima prioridad (corre antes de la cadena de seguridad: rechaza los excesos barato,
- * sin tocar la DB). Configurable por entorno:
- * {@code security.rate-limit.login.capacity} (intentos) y {@code refill-minutes} (ventana).
- */
 @Configuration
 public class RateLimitConfig {
 
@@ -29,6 +23,20 @@ public class RateLimitConfig {
         FilterRegistrationBean<LoginRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
         registration.addUrlPatterns("/api/v1/auth/login");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<LoginRateLimitFilter> recoveryRateLimitFilter(ObjectMapper objectMapper) {
+        LoginRateLimitFilter filter =
+                new LoginRateLimitFilter(5, Duration.ofMinutes(15), objectMapper);
+
+        FilterRegistrationBean<LoginRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.addUrlPatterns(
+                "/api/v1/auth/forgot-password",
+                "/api/v1/auth/2fa/recover-request",
+                "/api/v1/auth/2fa/recover-confirm");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         return registration;
     }
 }

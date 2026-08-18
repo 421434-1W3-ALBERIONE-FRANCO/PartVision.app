@@ -1,11 +1,17 @@
 package com.partvision.auth.controller;
 
+import com.partvision.auth.dto.ForgotPasswordRequest;
 import com.partvision.auth.dto.LoginRequest;
 import com.partvision.auth.dto.LoginResponse;
+import com.partvision.auth.dto.ResetPasswordRequest;
+import com.partvision.auth.dto.TwoFactorRecoverRequest;
+import com.partvision.auth.dto.TwoFactorRecoverConfirmRequest;
 import com.partvision.auth.security.AuthCookieFactory;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.auth.service.AuthService;
+import com.partvision.auth.service.PasswordResetService;
+import com.partvision.auth.service.TwoFactorRecoveryService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.Cookie;
@@ -40,6 +46,8 @@ public class AuthController {
     private final AuthCookieFactory cookieFactory;
     private final JwtService jwtService;
     private final TokenRevocationService revocationService;
+    private final PasswordResetService passwordResetService;
+    private final TwoFactorRecoveryService twoFactorRecoveryService;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -48,6 +56,36 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(body);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<java.util.Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.solicitarReset(request.email());
+        return ResponseEntity.ok(java.util.Map.of(
+                "message", "Si el email está registrado, recibirás un enlace para restablecer tu contraseña"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<java.util.Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetearPassword(request.token(), request.password());
+        return ResponseEntity.ok(java.util.Map.of("message", "Contraseña actualizada correctamente"));
+    }
+
+    @PostMapping("/2fa/recover-request")
+    public ResponseEntity<java.util.Map<String, String>> twoFactorRecoverRequest(
+            @Valid @RequestBody TwoFactorRecoverRequest request) {
+        twoFactorRecoveryService.solicitarRecuperacion(request.email());
+        return ResponseEntity.ok(java.util.Map.of(
+                "message", "Si el email está registrado y tiene 2FA activo, recibirás un código de recuperación"));
+    }
+
+    @PostMapping("/2fa/recover-confirm")
+    public ResponseEntity<java.util.Map<String, String>> twoFactorRecoverConfirm(
+            @Valid @RequestBody TwoFactorRecoverConfirmRequest request) {
+        twoFactorRecoveryService.confirmarRecuperacion(request.email(), request.code());
+        return ResponseEntity.ok(java.util.Map.of("message", "2FA desactivado. Podés iniciar sesión y re-configurarlo"));
     }
 
     @PostMapping("/logout")
