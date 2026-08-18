@@ -61,8 +61,9 @@ public class ProductoController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<ProductoListItemResponse>> findAll(Pageable pageable) {
-        return ResponseEntity.ok(productoService.findAll(pageable));
+    public ResponseEntity<Page<ProductoListItemResponse>> findAll(
+            @RequestParam(required = false) Boolean conStock, Pageable pageable) {
+        return ResponseEntity.ok(productoService.findAll(conStock, pageable));
     }
 
     /** Busqueda por codigo (flujo de escaneo). 404 si no existe. */

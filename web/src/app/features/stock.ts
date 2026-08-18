@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,240 +9,618 @@ import { StockService } from '../core/stock.service';
 import { ProductoService } from '../core/producto.service';
 import { UbicacionService } from '../core/ubicacion.service';
 
+type Vista = 'cargados' | 'sin-cargar' | 'historial';
+type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
+
 @Component({
   selector: 'app-stock',
   standalone: true,
   imports: [FormsModule, DatePipe],
   template: `
-    <div class="space-y-8 animate-fade-in max-w-7xl mx-auto">
+    <div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <!-- Header -->
-      <div class="border-b border-dark-border pb-6">
+      <div class="border-b border-dark-border pb-5">
         <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-3">
-          <span>Control de Stock e Inventario</span>
+          <span>Control de Stock</span>
           <span class="text-xs font-mono bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-2 py-0.5 rounded-full uppercase">
-            DEPOSITO REAL
+            INVENTARIO
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">
-          Buscá un producto, mirá dónde está y cuánto hay, y cargá stock en una ubicación.
+          Gestioná entradas, salidas, transferencias y ajustes de inventario.
         </p>
       </div>
 
-      <!-- Buscador de producto -->
-      <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
-        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300">Buscar producto</label>
-        <div class="flex flex-col sm:flex-row gap-3">
-          <input
-            [(ngModel)]="q"
-            (keyup.enter)="buscar()"
-            (input)="onQueryInput()"
-            type="text"
-            placeholder="SKU, descripción o marca (varias palabras)..."
-            class="flex-1 px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
-          />
-          <button (click)="buscar()" class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer">
-            Buscar
-          </button>
-        </div>
-
-        @if (buscando()) {
-          <p class="text-xs text-gray-500 font-mono">Buscando...</p>
-        } @else if (resultados().length > 0) {
-          <div class="divide-y divide-dark-border/50 border border-dark-border rounded-xl overflow-hidden">
-            @for (p of resultados(); track p.id) {
-              <button
-                (click)="seleccionar(p)"
-                class="w-full text-left px-4 py-3 hover:bg-dark-surface/60 transition-colors cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1"
-              >
-                <span class="font-mono font-bold text-neon-cyan text-sm">{{ p.sku || '—' }}</span>
-                <span class="text-gray-200 text-sm">{{ p.descripcion }}</span>
-                @if (p.marcaNombre) {
-                  <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
-                }
-              </button>
-            }
-          </div>
-        } @else if (buscoSinResultados()) {
-          <p class="text-xs text-gray-500">No se encontraron productos para "{{ q }}".</p>
-        }
+      <!-- Tabs principales -->
+      <div class="flex items-center gap-1 bg-dark-surface/60 rounded-xl p-1 w-fit overflow-x-auto">
+        <button (click)="cambiarVista('cargados')"
+          [class]="vista() === 'cargados'
+            ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-neon-green/15 text-neon-green border border-neon-green/30 transition-all cursor-pointer whitespace-nowrap'
+            : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
+          Productos cargados
+        </button>
+        <button (click)="cambiarVista('sin-cargar')"
+          [class]="vista() === 'sin-cargar'
+            ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 transition-all cursor-pointer whitespace-nowrap'
+            : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
+          Sin cargar
+        </button>
+        <button (click)="cambiarVista('historial')"
+          [class]="vista() === 'historial'
+            ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40 transition-all cursor-pointer whitespace-nowrap'
+            : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
+          Historial
+        </button>
       </div>
 
-      @if (productoSel(); as p) {
-        <!-- Producto seleccionado -->
-        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-cyan/40 shadow-neon-cyan space-y-1">
-          <p class="text-xs uppercase tracking-wider text-gray-400">Producto seleccionado</p>
-          <p class="text-lg font-bold text-white">{{ p.descripcion }}</p>
-          <p class="text-sm font-mono text-neon-cyan">
-            SKU {{ p.sku || '—' }}
-            @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
-          </p>
-        </div>
-
-        <!-- Cargar stock -->
-        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-purple/40 shadow-neon space-y-4">
-          <h3 class="text-lg font-bold text-white flex items-center gap-2">
-            <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            Cargar stock
-          </h3>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="md:col-span-1">
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
-              <select
-                [(ngModel)]="entradaUbicacionId"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm"
-              >
-                <option [ngValue]="null" disabled>Elegí una ubicación…</option>
-                @for (u of ubicaciones(); track u.id) {
-                  <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
-                }
-              </select>
-              @if (ubicaciones().length === 0) {
-                <p class="mt-1 text-[11px] text-amber-400">No hay ubicaciones. Creá una en la sección Ubicaciones.</p>
-              }
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
-              <input
-                [(ngModel)]="entradaCantidad"
-                type="number"
-                min="1"
-                placeholder="0"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm"
-              />
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
-              <input
-                [(ngModel)]="entradaMotivo"
-                type="text"
-                placeholder="Ej: ingreso de mercadería"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
-              />
-            </div>
+      <!-- ==================== PRODUCTOS CARGADOS ==================== -->
+      @if (vista() === 'cargados') {
+        @if (cargandoLista()) {
+          <div class="text-center py-12 text-gray-500 text-sm">Cargando productos con stock...</div>
+        } @else if (listaCargados().length === 0) {
+          <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
+            <p class="text-gray-400">No hay productos con stock cargado.</p>
+            <p class="text-xs text-gray-500 mt-2">Seleccioná un producto desde "Sin cargar" para registrar una entrada.</p>
           </div>
-
-          @if (entradaError()) {
-            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ entradaError() }}</div>
-          }
-          @if (entradaOk()) {
-            <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ entradaOk() }}</div>
-          }
-
-          <div class="flex justify-end">
-            <button [disabled]="guardandoEntrada()" (click)="cargarStock()"
-              class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
-              {{ guardandoEntrada() ? 'Guardando...' : 'Cargar stock' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Stock actual -->
-        @if (resumen(); as r) {
-          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
-            <div class="flex items-center justify-between border-b border-dark-border pb-3">
-              <h3 class="text-lg font-bold text-white">Stock actual</h3>
-              <span class="text-xl font-extrabold text-neon-green font-mono">Total: {{ r.total }} u.</span>
-            </div>
-            @if (r.ubicaciones.length === 0) {
-              <p class="text-xs text-gray-500 py-4 text-center">Este producto todavía no tiene existencias en ninguna ubicación.</p>
-            } @else {
-              @if (stockError()) {
-                <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockError() }}</div>
-              }
-              <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm border-collapse min-w-[440px]">
-                  <thead>
-                    <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                      <th class="py-3 px-4">Ubicación</th>
-                      <th class="py-3 px-4 text-right">Cantidad</th>
-                      <th class="py-3 px-4 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-dark-border/50">
-                    @for (l of r.ubicaciones; track l.ubicacionId) {
-                      <tr class="hover:bg-dark-surface/40 transition-colors">
-                        <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
-                        @if (editandoUbicacionId() === l.ubicacionId) {
-                          <td class="py-3 px-4 text-right">
-                            <input
-                              [(ngModel)]="editCantidad"
-                              type="number"
-                              min="0"
-                              (keyup.enter)="guardarCantidad(l.ubicacionId)"
-                              class="w-24 px-2.5 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white font-mono text-right text-sm focus:outline-none focus:border-neon-cyan"
-                            />
-                          </td>
-                          <td class="py-3 px-4 text-right whitespace-nowrap">
-                            <button [disabled]="filaGuardando()" (click)="guardarCantidad(l.ubicacionId)" class="text-xs font-semibold text-neon-green hover:underline cursor-pointer disabled:opacity-50">Guardar</button>
-                            <button (click)="cancelarEdicionCantidad()" class="ml-3 text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
-                          </td>
-                        } @else {
-                          <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
-                          <td class="py-3 px-4 text-right whitespace-nowrap">
-                            <button (click)="iniciarEdicionCantidad(l)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">Editar</button>
-                            <button [disabled]="filaGuardando()" (click)="pedirEliminarLinea(l)" class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
-                          </td>
-                        }
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
-            }
-          </div>
-        }
-
-        <!-- Historial -->
-        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
-          <h3 class="text-lg font-bold text-white flex items-center gap-2">
-            <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Historial de Movimientos
-          </h3>
-          @if (movimientos().length === 0) {
-            <div class="py-8 text-center text-gray-500 text-sm">Sin movimientos registrados para este producto.</div>
-          } @else {
+        } @else {
+          <!-- Tabla de productos con stock -->
+          <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
             <div class="overflow-x-auto">
-              <table class="w-full text-left text-sm border-collapse min-w-[520px]">
+              <table class="w-full text-left text-sm border-collapse min-w-[700px]">
                 <thead>
                   <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                    <th class="py-3 px-4">Fecha</th>
-                    <th class="py-3 px-4">Tipo</th>
-                    <th class="py-3 px-4">Cantidad</th>
-                    <th class="py-3 px-4">Motivo</th>
+                    <th class="py-3 px-4">SKU</th>
+                    <th class="py-3 px-4">Descripción</th>
+                    <th class="py-3 px-4">Marca</th>
+                    <th class="py-3 px-4 text-right">Stock total</th>
+                    <th class="py-3 px-4">Ubicaciones</th>
+                    <th class="py-3 px-4 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-dark-border/50">
-                  @for (m of movimientos(); track m.id) {
-                    <tr class="hover:bg-dark-surface/40 transition-colors">
-                      <td class="py-3.5 px-4 font-mono text-gray-400 text-xs">
-                        {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm') : '-' }}
+                  @for (p of listaCargados(); track p.id) {
+                    <tr class="hover:bg-dark-surface/40 transition-colors"
+                        [class.bg-neon-cyan/5]="productoSel()?.id === p.id">
+                      <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
+                      <td class="py-3 px-4 text-white text-sm max-w-[300px] truncate">{{ p.descripcion }}</td>
+                      <td class="py-3 px-4">
+                        @if (p.marcaNombre) {
+                          <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
+                        } @else {
+                          <span class="text-gray-500 text-xs">—</span>
+                        }
                       </td>
-                      <td class="py-3.5 px-4 font-semibold">
-                        <span class="px-2.5 py-1 rounded-md text-xs font-mono"
-                              [class]="m.tipo === 'ENTRADA' ? 'neon-badge-green' : m.tipo === 'SALIDA' ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'neon-badge-cyan'">
-                          {{ m.tipo }}
-                        </span>
+                      <td class="py-3 px-4 font-mono font-extrabold text-neon-green text-right">{{ p.stockTotal }} u.</td>
+                      <td class="py-3 px-4 text-xs text-gray-300">
+                        @for (u of p.ubicaciones; track u.codigo; let i = $index) {
+                          @if (i < 3) {
+                            <span class="font-mono text-neon-purple">{{ u.codigo }}</span><span class="text-gray-500">({{ u.cantidad }})</span>@if (i < p.ubicaciones.length - 1 && i < 2) {<span class="text-gray-600">, </span>}
+                          }
+                        }
+                        @if (p.ubicaciones.length > 3) {
+                          <span class="text-gray-500"> +{{ p.ubicaciones.length - 3 }}</span>
+                        }
                       </td>
-                      <td class="py-3.5 px-4 font-mono font-bold text-white">{{ m.cantidad }} u.</td>
-                      <td class="py-3.5 px-4 text-gray-400 text-xs">{{ m.motivo ?? '-' }}</td>
+                      <td class="py-3 px-4 text-center whitespace-nowrap">
+                        <button (click)="seleccionar(p)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">
+                          {{ productoSel()?.id === p.id ? 'Seleccionado' : 'Gestionar' }}
+                        </button>
+                      </td>
                     </tr>
                   }
                 </tbody>
               </table>
             </div>
+
+            <!-- Paginación -->
+            @if (totalPaginas() > 1) {
+              <div class="flex items-center justify-between px-4 py-3 border-t border-dark-border bg-dark-surface/20">
+                <span class="text-xs text-gray-500">
+                  Página {{ paginaActual() + 1 }} de {{ totalPaginas() }} · {{ totalElementos() }} productos
+                </span>
+                <div class="flex gap-2">
+                  <button [disabled]="paginaActual() === 0" (click)="irPagina(paginaActual() - 1)"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
+                    ← Anterior
+                  </button>
+                  <button [disabled]="paginaActual() >= totalPaginas() - 1" (click)="irPagina(paginaActual() + 1)"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Panel de gestión del producto seleccionado -->
+        @if (productoSel(); as p) {
+          <div class="space-y-5 animate-fade-in">
+            <!-- Info + métricas -->
+            <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-cyan/40 space-y-4">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div class="space-y-1 flex-1 min-w-0">
+                  <div class="flex items-center gap-3">
+                    <p class="text-xs uppercase tracking-wider text-gray-400">Producto seleccionado</p>
+                    <button (click)="deseleccionar()" class="text-xs text-gray-500 hover:text-white cursor-pointer">✕ Cerrar</button>
+                  </div>
+                  <p class="text-lg font-bold text-white truncate">{{ p.descripcion }}</p>
+                  <p class="text-sm font-mono text-neon-cyan">
+                    SKU {{ p.sku || '—' }}
+                    @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
+                  </p>
+                </div>
+                @if (resumen(); as r) {
+                  <div class="flex flex-wrap gap-3 shrink-0">
+                    <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                      <p class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }}</p>
+                      <p class="text-[10px] uppercase text-gray-400 font-semibold">Unidades</p>
+                    </div>
+                    <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                      <p class="text-xl font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
+                      <p class="text-[10px] uppercase text-gray-400 font-semibold">Ubicaciones</p>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Tabs de operaciones -->
+            <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
+              <div class="flex border-b border-dark-border overflow-x-auto">
+                @for (t of opTabs; track t.key) {
+                  <button (click)="opTab.set(t.key)"
+                    [class]="opTab() === t.key
+                      ? 'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ' + t.activeClass
+                      : 'flex items-center gap-2 px-5 py-3 text-sm font-medium text-gray-400 hover:text-white border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap'">
+                    <span>{{ t.icon }}</span>
+                    {{ t.label }}
+                  </button>
+                }
+              </div>
+
+              <div class="p-4 md:p-6 space-y-4">
+                <!-- ENTRADA -->
+                @if (opTab() === 'entrada') {
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación destino</label>
+                      <select [(ngModel)]="opUbicacionId"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                        @for (u of ubicaciones(); track u.id) {
+                          <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                      <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+                      <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: ingreso de mercadería"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                  </div>
+                }
+
+                <!-- SALIDA -->
+                @if (opTab() === 'salida') {
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación origen</label>
+                      <select [(ngModel)]="opUbicacionId"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                        @for (u of ubicacionesConStock(); track u.ubicacionId) {
+                          <option [ngValue]="u.ubicacionId">{{ u.ubicacionPath }} ({{ u.cantidad }} u.)</option>
+                        }
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                      <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+                      <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: venta, devolución"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                  </div>
+                }
+
+                <!-- TRANSFERENCIA -->
+                @if (opTab() === 'transferencia') {
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación origen</label>
+                      <select [(ngModel)]="opUbicacionId"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option [ngValue]="null" disabled>Origen…</option>
+                        @for (u of ubicacionesConStock(); track u.ubicacionId) {
+                          <option [ngValue]="u.ubicacionId">{{ u.ubicacionPath }} ({{ u.cantidad }} u.)</option>
+                        }
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación destino</label>
+                      <select [(ngModel)]="opUbicacionDestinoId"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option [ngValue]="null" disabled>Destino…</option>
+                        @for (u of ubicaciones(); track u.id) {
+                          <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                      <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+                      <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: reubicación"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                  </div>
+                }
+
+                <!-- AJUSTE -->
+                @if (opTab() === 'ajuste') {
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
+                      <select [(ngModel)]="opUbicacionId"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                        @for (u of ubicaciones(); track u.id) {
+                          <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Tipo de ajuste</label>
+                      <select [(ngModel)]="ajusteTipo"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                        <option value="AJUSTE_POSITIVO">Ajuste positivo (+)</option>
+                        <option value="AJUSTE_NEGATIVO">Ajuste negativo (−)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                      <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (obligatorio)</label>
+                      <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: rotura, merma"
+                        class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+                    </div>
+                  </div>
+                }
+
+                @if (opError()) {
+                  <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ opError() }}</div>
+                }
+                @if (opOk()) {
+                  <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ opOk() }}</div>
+                }
+
+                <div class="flex justify-end">
+                  <button [disabled]="guardandoOp()" (click)="ejecutarOperacion()"
+                    class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+                    {{ guardandoOp() ? 'Procesando...' : opTabActual().action }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stock actual por ubicación -->
+            @if (resumen(); as r) {
+              <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+                <div class="flex items-center justify-between border-b border-dark-border pb-3">
+                  <h3 class="text-lg font-bold text-white">Stock por ubicación</h3>
+                  <span class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }} u.</span>
+                </div>
+                @if (r.ubicaciones.length === 0) {
+                  <p class="text-xs text-gray-500 py-4 text-center">Sin existencias.</p>
+                } @else {
+                  @if (stockError()) {
+                    <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockError() }}</div>
+                  }
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse min-w-[440px]">
+                      <thead>
+                        <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                          <th class="py-3 px-4">Ubicación</th>
+                          <th class="py-3 px-4 text-right">Cantidad</th>
+                          <th class="py-3 px-4 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-dark-border/50">
+                        @for (l of r.ubicaciones; track l.ubicacionId) {
+                          <tr class="hover:bg-dark-surface/40 transition-colors">
+                            <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
+                            @if (editandoUbicacionId() === l.ubicacionId) {
+                              <td class="py-3 px-4 text-right">
+                                <input [(ngModel)]="editCantidad" type="number" min="0"
+                                  (keyup.enter)="guardarCantidad(l.ubicacionId)"
+                                  class="w-24 px-2.5 py-1.5 bg-dark-surface border border-neon-cyan/50 rounded-lg text-white font-mono text-right text-sm focus:outline-none focus:border-neon-cyan" />
+                              </td>
+                              <td class="py-3 px-4 text-right whitespace-nowrap">
+                                <button [disabled]="filaGuardando()" (click)="guardarCantidad(l.ubicacionId)"
+                                  class="text-xs font-semibold text-neon-green hover:underline cursor-pointer disabled:opacity-50">Guardar</button>
+                                <button (click)="cancelarEdicionCantidad()"
+                                  class="ml-3 text-xs font-semibold text-gray-400 hover:underline cursor-pointer">Cancelar</button>
+                              </td>
+                            } @else {
+                              <td class="py-3 px-4 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                              <td class="py-3 px-4 text-right whitespace-nowrap">
+                                <button (click)="iniciarEdicionCantidad(l)"
+                                  class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">Editar</button>
+                                <button [disabled]="filaGuardando()" (click)="pedirEliminarLinea(l)"
+                                  class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
+                              </td>
+                            }
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+
+      <!-- ==================== SIN CARGAR ==================== -->
+      @if (vista() === 'sin-cargar') {
+        @if (cargandoLista()) {
+          <div class="text-center py-12 text-gray-500 text-sm">Cargando productos sin stock...</div>
+        } @else if (listaSinCargar().length === 0) {
+          <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
+            <p class="text-gray-400">Todos los productos del catálogo tienen stock cargado.</p>
+          </div>
+        } @else {
+          <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm border-collapse min-w-[600px]">
+                <thead>
+                  <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                    <th class="py-3 px-4">SKU</th>
+                    <th class="py-3 px-4">Descripción</th>
+                    <th class="py-3 px-4">Marca</th>
+                    <th class="py-3 px-4">Categoría</th>
+                    <th class="py-3 px-4 text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-dark-border/50">
+                  @for (p of listaSinCargar(); track p.id) {
+                    <tr class="hover:bg-dark-surface/40 transition-colors">
+                      <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
+                      <td class="py-3 px-4 text-white text-sm max-w-[350px] truncate">{{ p.descripcion }}</td>
+                      <td class="py-3 px-4">
+                        @if (p.marcaNombre) {
+                          <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
+                        } @else {
+                          <span class="text-gray-500 text-xs">—</span>
+                        }
+                      </td>
+                      <td class="py-3 px-4 text-gray-400 text-xs">{{ p.categoriaNombre || '—' }}</td>
+                      <td class="py-3 px-4 text-center">
+                        <button (click)="cargarDesde(p)"
+                          class="px-3 py-1.5 rounded-lg text-xs font-semibold neon-button-primary cursor-pointer">
+                          Cargar stock
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Paginación -->
+            @if (totalPaginas() > 1) {
+              <div class="flex items-center justify-between px-4 py-3 border-t border-dark-border bg-dark-surface/20">
+                <span class="text-xs text-gray-500">
+                  Página {{ paginaActual() + 1 }} de {{ totalPaginas() }} · {{ totalElementos() }} productos sin stock
+                </span>
+                <div class="flex gap-2">
+                  <button [disabled]="paginaActual() === 0" (click)="irPagina(paginaActual() - 1)"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
+                    ← Anterior
+                  </button>
+                  <button [disabled]="paginaActual() >= totalPaginas() - 1" (click)="irPagina(paginaActual() + 1)"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Panel inline de carga rápida -->
+        @if (productoSel(); as p) {
+          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-purple/40 shadow-neon space-y-4 animate-fade-in">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-gray-400">Cargando stock para</p>
+                <p class="text-base font-bold text-white">{{ p.descripcion }}</p>
+                <p class="text-sm font-mono text-neon-cyan">SKU {{ p.sku || '—' }}</p>
+              </div>
+              <button (click)="deseleccionar()" class="text-xs text-gray-500 hover:text-white cursor-pointer shrink-0">✕ Cancelar</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
+                <select [(ngModel)]="opUbicacionId"
+                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                  <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                  @for (u of ubicaciones(); track u.id) {
+                    <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+                <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+                <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: carga inicial"
+                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+              </div>
+            </div>
+            @if (opError()) {
+              <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ opError() }}</div>
+            }
+            @if (opOk()) {
+              <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ opOk() }}</div>
+            }
+            <div class="flex justify-end">
+              <button [disabled]="guardandoOp()" (click)="ejecutarEntradaRapida()"
+                class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+                {{ guardandoOp() ? 'Guardando...' : 'Registrar entrada' }}
+              </button>
+            </div>
+          </div>
+        }
+      }
+
+      <!-- ==================== HISTORIAL ==================== -->
+      @if (vista() === 'historial') {
+        <!-- Buscador -->
+        <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+          <div class="flex flex-col sm:flex-row gap-3 items-end">
+            <div class="flex-1">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Producto</label>
+              <input [(ngModel)]="q" (keyup.enter)="buscar()" (input)="onQueryInput()" type="text"
+                placeholder="Buscá un producto para ver su historial..."
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Filtrar tipo</label>
+              <select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event)"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                <option value="">Todos</option>
+                <option value="ENTRADA">Entradas</option>
+                <option value="SALIDA">Salidas</option>
+                <option value="AJUSTE_POSITIVO">Ajuste +</option>
+                <option value="AJUSTE_NEGATIVO">Ajuste −</option>
+                <option value="TRANSFERENCIA">Transferencias</option>
+              </select>
+            </div>
+            <button (click)="buscar()" class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer shrink-0">
+              Buscar
+            </button>
+          </div>
+
+          @if (buscando()) {
+            <p class="text-xs text-gray-500 font-mono">Buscando...</p>
+          } @else if (resultados().length > 0 && !productoSel()) {
+            <div class="divide-y divide-dark-border/50 border border-dark-border rounded-xl overflow-hidden">
+              @for (p of resultados(); track p.id) {
+                <button (click)="seleccionar(p)"
+                  class="w-full text-left px-4 py-3 hover:bg-dark-surface/60 transition-colors cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="font-mono font-bold text-neon-cyan text-sm">{{ p.sku || '—' }}</span>
+                  <span class="text-gray-200 text-sm">{{ p.descripcion }}</span>
+                  @if (p.marcaNombre) {
+                    <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
+                  }
+                </button>
+              }
+            </div>
           }
         </div>
+
+        @if (productoSel(); as p) {
+          <div class="flex flex-wrap items-center justify-between gap-3 px-1">
+            <div class="flex items-center gap-3">
+              <p class="text-sm text-gray-400">Historial de</p>
+              <span class="font-semibold text-white">{{ p.descripcion }}</span>
+              <span class="font-mono text-neon-cyan text-sm">{{ p.sku || '' }}</span>
+            </div>
+            <button (click)="deseleccionar()" class="text-xs text-gray-400 hover:text-white cursor-pointer">
+              ✕ Cambiar producto
+            </button>
+          </div>
+
+          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card space-y-4">
+            @if (movimientosFiltrados().length === 0) {
+              <div class="py-10 text-center text-gray-500 text-sm">
+                @if (filtroTipo()) {
+                  No hay movimientos de tipo "{{ tipoLabel(filtroTipo()) }}" para este producto.
+                } @else {
+                  Sin movimientos registrados para este producto.
+                }
+              </div>
+            } @else {
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm border-collapse min-w-[700px]">
+                  <thead>
+                    <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
+                      <th class="py-3 px-4">Fecha</th>
+                      <th class="py-3 px-4">Tipo</th>
+                      <th class="py-3 px-4 text-right">Cantidad</th>
+                      <th class="py-3 px-4">Ubicación</th>
+                      <th class="py-3 px-4">Motivo</th>
+                      <th class="py-3 px-4">Referencia</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-dark-border/50">
+                    @for (m of movimientosFiltrados(); track m.id) {
+                      <tr class="hover:bg-dark-surface/40 transition-colors">
+                        <td class="py-3.5 px-4 font-mono text-gray-300 text-xs whitespace-nowrap">
+                          {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm:ss') : '-' }}
+                        </td>
+                        <td class="py-3.5 px-4">
+                          <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold" [class]="tipoClass(m.tipo)">
+                            {{ tipoLabel(m.tipo) }}
+                          </span>
+                        </td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-right" [class]="cantidadClass(m.tipo)">
+                          {{ cantidadPrefix(m.tipo) }}{{ m.cantidad }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-gray-300">{{ ubicacionInfo(m) }}</td>
+                        <td class="py-3.5 px-4 text-gray-400 text-xs">{{ m.motivo ?? '-' }}</td>
+                        <td class="py-3.5 px-4 font-mono text-gray-500 text-xs">{{ m.referencia ?? '-' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="flex flex-wrap gap-4 pt-3 border-t border-dark-border">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-green-400"></span>
+                  <span class="text-xs text-gray-400">Entradas: <span class="font-mono font-bold text-white">{{ contarPorTipo('ENTRADA') }}</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+                  <span class="text-xs text-gray-400">Salidas: <span class="font-mono font-bold text-white">{{ contarPorTipo('SALIDA') }}</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                  <span class="text-xs text-gray-400">Transfer.: <span class="font-mono font-bold text-white">{{ contarPorTipo('TRANSFERENCIA') }}</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                  <span class="text-xs text-gray-400">Ajustes: <span class="font-mono font-bold text-white">{{ contarPorTipo('AJUSTE_POSITIVO') + contarPorTipo('AJUSTE_NEGATIVO') }}</span></span>
+                </div>
+              </div>
+            }
+          </div>
+        }
       }
     </div>
 
-    <!-- Confirmación de eliminación de existencia -->
+    <!-- Modal: confirmación de eliminación -->
     @if (aEliminarLinea(); as l) {
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminarLinea()">
         <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-red-500/40 shadow-neon" (click)="$event.stopPropagation()">
@@ -253,17 +631,21 @@ import { UbicacionService } from '../core/ubicacion.service';
             Eliminar existencia
           </h3>
           <p class="text-sm text-gray-300">
-            Vas a eliminar la existencia de este producto en
+            Vas a eliminar la existencia en
             <span class="font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</span>
             (<span class="font-mono font-semibold text-neon-green">{{ l.cantidad }} u.</span>).
-            Esta ubicación dejará de figurar para el producto. ¿Seguro?
+            ¿Seguro?
           </p>
           @if (stockError()) {
             <div class="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ stockError() }}</div>
           }
           <div class="mt-6 flex flex-wrap justify-end gap-3">
-            <button (click)="cancelarEliminarLinea()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">Cancelar</button>
-            <button [disabled]="filaGuardando()" (click)="confirmarEliminarLinea(l)" class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
+            <button (click)="cancelarEliminarLinea()"
+              class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button [disabled]="filaGuardando()" (click)="confirmarEliminarLinea(l)"
+              class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer disabled:opacity-50">
               {{ filaGuardando() ? 'Eliminando...' : 'Eliminar' }}
             </button>
           </div>
@@ -279,7 +661,17 @@ export class Stock implements OnInit {
   private destroyRef = inject(DestroyRef);
   private queryChanged = new Subject<string>();
 
-  // Búsqueda
+  vista = signal<Vista>('cargados');
+
+  // Listas paginadas
+  listaCargados = signal<ProductoListItem[]>([]);
+  listaSinCargar = signal<ProductoListItem[]>([]);
+  cargandoLista = signal(false);
+  paginaActual = signal(0);
+  totalPaginas = signal(0);
+  totalElementos = signal(0);
+
+  // Búsqueda (historial)
   q = '';
   resultados = signal<ProductoListItem[]>([]);
   buscando = signal(false);
@@ -290,31 +682,53 @@ export class Stock implements OnInit {
   resumen = signal<StockResumen | null>(null);
   movimientos = signal<Movimiento[]>([]);
 
-  // Ubicaciones (para el desplegable)
+  // Ubicaciones
   ubicaciones = signal<Ubicacion[]>([]);
 
-  // Cargar stock
-  entradaUbicacionId: number | null = null;
-  entradaCantidad: number | null = null;
-  entradaMotivo = '';
-  guardandoEntrada = signal(false);
-  entradaError = signal<string | null>(null);
-  entradaOk = signal<string | null>(null);
+  // Operaciones
+  opTab = signal<OpTab>('entrada');
+  opUbicacionId: number | null = null;
+  opUbicacionDestinoId: number | null = null;
+  opCantidad: number | null = null;
+  opMotivo = '';
+  ajusteTipo: 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO' = 'AJUSTE_POSITIVO';
+  guardandoOp = signal(false);
+  opError = signal<string | null>(null);
+  opOk = signal<string | null>(null);
 
-  // Editar / eliminar filas de stock actual
+  // Editar / eliminar filas
   editandoUbicacionId = signal<number | null>(null);
   editCantidad: number | null = null;
   filaGuardando = signal(false);
   stockError = signal<string | null>(null);
   aEliminarLinea = signal<StockLinea | null>(null);
 
+  // Historial
+  filtroTipo = signal('');
+
+  readonly opTabs: { key: OpTab; label: string; icon: string; activeClass: string; action: string }[] = [
+    { key: 'entrada', label: 'Entrada', icon: '↓', activeClass: 'text-green-400 border-green-400', action: 'Registrar entrada' },
+    { key: 'salida', label: 'Salida', icon: '↑', activeClass: 'text-red-400 border-red-400', action: 'Registrar salida' },
+    { key: 'transferencia', label: 'Transferencia', icon: '⇄', activeClass: 'text-neon-cyan border-neon-cyan', action: 'Transferir' },
+    { key: 'ajuste', label: 'Ajuste', icon: '±', activeClass: 'text-amber-400 border-amber-400', action: 'Registrar ajuste' },
+  ];
+
+  readonly ubicacionesConStock = computed(() => this.resumen()?.ubicaciones ?? []);
+  readonly opTabActual = computed(() => this.opTabs.find(t => t.key === this.opTab())!);
+
+  readonly movimientosFiltrados = computed(() => {
+    const tipo = this.filtroTipo();
+    if (!tipo) return this.movimientos();
+    return this.movimientos().filter(m => m.tipo === tipo);
+  });
+
   ngOnInit(): void {
     this.ubicacionService.listar().subscribe({
       next: (list) => this.ubicaciones.set(list),
       error: () => this.ubicaciones.set([]),
     });
-    // Búsqueda en vivo: muestra candidatos a medida que se tipea. switchMap cancela las
-    // consultas viejas para que siempre gane la última (evita el parpadeo de resultados).
+    this.cargarLista();
+
     this.queryChanged
       .pipe(
         debounceTime(250),
@@ -332,12 +746,43 @@ export class Stock implements OnInit {
       });
   }
 
-  /** En cada tecla dispara la búsqueda en vivo (debounced), a partir de 2 caracteres. */
+  cambiarVista(v: Vista): void {
+    this.vista.set(v);
+    this.deseleccionar();
+    this.paginaActual.set(0);
+    this.cargarLista();
+  }
+
+  cargarLista(): void {
+    const v = this.vista();
+    if (v === 'historial') return;
+    this.cargandoLista.set(true);
+    const conStock = v === 'cargados';
+    this.productos.listar(this.paginaActual(), 20, conStock).subscribe({
+      next: (page) => {
+        if (conStock) {
+          this.listaCargados.set(page.content);
+        } else {
+          this.listaSinCargar.set(page.content);
+        }
+        this.totalPaginas.set(page.totalPages);
+        this.totalElementos.set(page.totalElements);
+        this.cargandoLista.set(false);
+      },
+      error: () => {
+        this.cargandoLista.set(false);
+      },
+    });
+  }
+
+  irPagina(p: number): void {
+    this.paginaActual.set(p);
+    this.cargarLista();
+  }
+
   onQueryInput(): void {
     const term = this.q.trim();
-    if (term.length === 1) {
-      return;
-    }
+    if (term.length === 1) return;
     if (!term) {
       this.resultados.set([]);
       this.buscoSinResultados.set(false);
@@ -367,48 +812,117 @@ export class Stock implements OnInit {
   seleccionar(p: ProductoListItem): void {
     this.productoSel.set(p);
     this.resultados.set([]);
-    this.entradaOk.set(null);
-    this.entradaError.set(null);
+    this.opOk.set(null);
+    this.opError.set(null);
     this.refrescarStock(p.id);
   }
 
-  cargarStock(): void {
+  cargarDesde(p: ProductoListItem): void {
+    this.productoSel.set(p);
+    this.opTab.set('entrada');
+    this.opOk.set(null);
+    this.opError.set(null);
+    this.opUbicacionId = null;
+    this.opCantidad = null;
+    this.opMotivo = '';
+  }
+
+  deseleccionar(): void {
+    this.productoSel.set(null);
+    this.resumen.set(null);
+    this.movimientos.set([]);
+    this.opOk.set(null);
+    this.opError.set(null);
+  }
+
+  ejecutarOperacion(): void {
     const p = this.productoSel();
     if (!p) return;
-    this.entradaError.set(null);
-    this.entradaOk.set(null);
+    this.opError.set(null);
+    this.opOk.set(null);
+    const tab = this.opTab();
 
-    if (this.entradaUbicacionId == null) {
-      this.entradaError.set('Elegí una ubicación.');
-      return;
-    }
-    if (this.entradaCantidad == null || this.entradaCantidad < 1) {
-      this.entradaError.set('La cantidad debe ser mayor o igual a 1.');
-      return;
-    }
-
-    this.guardandoEntrada.set(true);
-    this.service
-      .entrada({
-        productoId: p.id,
-        ubicacionId: this.entradaUbicacionId,
-        cantidad: this.entradaCantidad,
-        motivo: this.entradaMotivo.trim() || undefined,
-      })
-      .subscribe({
-        next: () => {
-          this.entradaOk.set(`Se cargaron ${this.entradaCantidad} u. correctamente.`);
-          this.entradaCantidad = null;
-          this.entradaMotivo = '';
-          this.guardandoEntrada.set(false);
-          this.refrescarStock(p.id);
-        },
-        error: (e) => {
-          this.entradaError.set(e?.error?.message ?? 'No se pudo cargar el stock.');
-          this.guardandoEntrada.set(false);
-        },
+    if (tab === 'entrada') {
+      if (!this.opUbicacionId) { this.opError.set('Elegí una ubicación.'); return; }
+      if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
+      this.guardandoOp.set(true);
+      this.service.entrada({
+        productoId: p.id, ubicacionId: this.opUbicacionId, cantidad: this.opCantidad,
+        motivo: this.opMotivo.trim() || undefined,
+      }).subscribe({
+        next: () => this.onOpExito(`+${this.opCantidad} u. registradas como entrada.`, p.id),
+        error: (e) => this.onOpError(e),
       });
+    }
+
+    if (tab === 'salida') {
+      if (!this.opUbicacionId) { this.opError.set('Elegí la ubicación de origen.'); return; }
+      if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
+      this.guardandoOp.set(true);
+      this.service.salida({
+        productoId: p.id, ubicacionId: this.opUbicacionId, cantidad: this.opCantidad,
+        motivo: this.opMotivo.trim() || undefined,
+      }).subscribe({
+        next: () => this.onOpExito(`−${this.opCantidad} u. registradas como salida.`, p.id),
+        error: (e) => this.onOpError(e),
+      });
+    }
+
+    if (tab === 'transferencia') {
+      if (!this.opUbicacionId) { this.opError.set('Elegí la ubicación de origen.'); return; }
+      if (!this.opUbicacionDestinoId) { this.opError.set('Elegí la ubicación de destino.'); return; }
+      if (this.opUbicacionId === this.opUbicacionDestinoId) { this.opError.set('Origen y destino no pueden ser iguales.'); return; }
+      if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
+      this.guardandoOp.set(true);
+      this.service.transferencia({
+        productoId: p.id, ubicacionOrigenId: this.opUbicacionId,
+        ubicacionDestinoId: this.opUbicacionDestinoId, cantidad: this.opCantidad,
+        motivo: this.opMotivo.trim() || undefined,
+      }).subscribe({
+        next: () => this.onOpExito(`${this.opCantidad} u. transferidas correctamente.`, p.id),
+        error: (e) => this.onOpError(e),
+      });
+    }
+
+    if (tab === 'ajuste') {
+      if (!this.opUbicacionId) { this.opError.set('Elegí una ubicación.'); return; }
+      if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
+      if (!this.opMotivo.trim()) { this.opError.set('El motivo es obligatorio para ajustes.'); return; }
+      this.guardandoOp.set(true);
+      this.service.ajuste({
+        productoId: p.id, ubicacionId: this.opUbicacionId, tipo: this.ajusteTipo,
+        cantidad: this.opCantidad, motivo: this.opMotivo.trim(),
+      }).subscribe({
+        next: () => this.onOpExito(`Ajuste de ${this.ajusteTipo === 'AJUSTE_POSITIVO' ? '+' : '−'}${this.opCantidad} u. registrado.`, p.id),
+        error: (e) => this.onOpError(e),
+      });
+    }
   }
+
+  ejecutarEntradaRapida(): void {
+    const p = this.productoSel();
+    if (!p) return;
+    this.opError.set(null);
+    this.opOk.set(null);
+    if (!this.opUbicacionId) { this.opError.set('Elegí una ubicación.'); return; }
+    if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
+    this.guardandoOp.set(true);
+    this.service.entrada({
+      productoId: p.id, ubicacionId: this.opUbicacionId, cantidad: this.opCantidad,
+      motivo: this.opMotivo.trim() || undefined,
+    }).subscribe({
+      next: () => {
+        this.opOk.set(`+${this.opCantidad} u. cargadas en stock.`);
+        this.opCantidad = null;
+        this.opMotivo = '';
+        this.guardandoOp.set(false);
+        this.cargarLista();
+      },
+      error: (e) => this.onOpError(e),
+    });
+  }
+
+  // -- Edición inline de stock --
 
   iniciarEdicionCantidad(l: StockLinea): void {
     this.stockError.set(null);
@@ -430,19 +944,18 @@ export class Stock implements OnInit {
     }
     this.stockError.set(null);
     this.filaGuardando.set(true);
-    this.service
-      .conteo({ productoId: p.id, ubicacionId, cantidadReal: this.editCantidad, motivo: 'Ajuste manual de stock' })
-      .subscribe({
-        next: () => {
-          this.filaGuardando.set(false);
-          this.cancelarEdicionCantidad();
-          this.refrescarStock(p.id);
-        },
-        error: (e) => {
-          this.stockError.set(e?.error?.message ?? 'No se pudo actualizar la cantidad.');
-          this.filaGuardando.set(false);
-        },
-      });
+    this.service.conteo({ productoId: p.id, ubicacionId, cantidadReal: this.editCantidad, motivo: 'Ajuste manual de stock' }).subscribe({
+      next: () => {
+        this.filaGuardando.set(false);
+        this.cancelarEdicionCantidad();
+        this.refrescarStock(p.id);
+        this.cargarLista();
+      },
+      error: (e) => {
+        this.stockError.set(e?.error?.message ?? 'No se pudo actualizar.');
+        this.filaGuardando.set(false);
+      },
+    });
   }
 
   pedirEliminarLinea(l: StockLinea): void {
@@ -466,12 +979,87 @@ export class Stock implements OnInit {
         this.filaGuardando.set(false);
         this.aEliminarLinea.set(null);
         this.refrescarStock(p.id);
+        this.cargarLista();
       },
       error: (e) => {
-        this.stockError.set(e?.error?.message ?? 'No se pudo eliminar la existencia.');
+        this.stockError.set(e?.error?.message ?? 'No se pudo eliminar.');
         this.filaGuardando.set(false);
       },
     });
+  }
+
+  // -- Helpers de display --
+
+  tipoClass(tipo: string): string {
+    switch (tipo) {
+      case 'ENTRADA': return 'neon-badge-green';
+      case 'SALIDA': return 'bg-red-500/15 text-red-400 border border-red-500/30';
+      case 'TRANSFERENCIA': return 'neon-badge-cyan';
+      case 'AJUSTE_POSITIVO': return 'bg-amber-500/15 text-amber-400 border border-amber-500/30';
+      case 'AJUSTE_NEGATIVO': return 'bg-orange-500/15 text-orange-400 border border-orange-500/30';
+      default: return 'neon-badge-purple';
+    }
+  }
+
+  tipoLabel(tipo: string): string {
+    switch (tipo) {
+      case 'ENTRADA': return 'Entrada';
+      case 'SALIDA': return 'Salida';
+      case 'TRANSFERENCIA': return 'Transfer.';
+      case 'AJUSTE_POSITIVO': return 'Ajuste +';
+      case 'AJUSTE_NEGATIVO': return 'Ajuste −';
+      default: return tipo;
+    }
+  }
+
+  cantidadClass(tipo: string): string {
+    switch (tipo) {
+      case 'ENTRADA':
+      case 'AJUSTE_POSITIVO': return 'text-green-400';
+      case 'SALIDA':
+      case 'AJUSTE_NEGATIVO': return 'text-red-400';
+      default: return 'text-white';
+    }
+  }
+
+  cantidadPrefix(tipo: string): string {
+    switch (tipo) {
+      case 'ENTRADA':
+      case 'AJUSTE_POSITIVO': return '+';
+      case 'SALIDA':
+      case 'AJUSTE_NEGATIVO': return '−';
+      default: return '';
+    }
+  }
+
+  ubicacionInfo(m: Movimiento): string {
+    const ubicMap = new Map(this.ubicaciones().map(u => [u.id, u.codigo]));
+    if (m.tipo === 'TRANSFERENCIA') {
+      const origen = m.ubicacionOrigenId ? ubicMap.get(m.ubicacionOrigenId) ?? `#${m.ubicacionOrigenId}` : '?';
+      const destino = m.ubicacionDestinoId ? ubicMap.get(m.ubicacionDestinoId) ?? `#${m.ubicacionDestinoId}` : '?';
+      return `${origen} → ${destino}`;
+    }
+    const ubId = m.ubicacionDestinoId ?? m.ubicacionOrigenId;
+    if (ubId) return ubicMap.get(ubId) ?? `#${ubId}`;
+    return '-';
+  }
+
+  contarPorTipo(tipo: string): number {
+    return this.movimientos().filter(m => m.tipo === tipo).length;
+  }
+
+  private onOpExito(msg: string, productoId: number): void {
+    this.opOk.set(msg);
+    this.opCantidad = null;
+    this.opMotivo = '';
+    this.guardandoOp.set(false);
+    this.refrescarStock(productoId);
+    this.cargarLista();
+  }
+
+  private onOpError(e: any): void {
+    this.opError.set(e?.error?.message ?? 'No se pudo completar la operación.');
+    this.guardandoOp.set(false);
   }
 
   private refrescarStock(productoId: number): void {

@@ -41,7 +41,18 @@ export class StockService {
     return this.http.post<ConteoResponse>(`${API_BASE_URL}/stock/conteos`, req);
   }
 
-  /** Elimina la existencia de un producto en una ubicación. */
+  salida(req: { productoId: number; ubicacionId: number; cantidad: number; motivo?: string }): Observable<Movimiento> {
+    return this.http.post<Movimiento>(`${API_BASE_URL}/stock/salidas`, req);
+  }
+
+  ajuste(req: { productoId: number; ubicacionId: number; tipo: 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO'; cantidad: number; motivo: string }): Observable<Movimiento> {
+    return this.http.post<Movimiento>(`${API_BASE_URL}/stock/ajustes`, req);
+  }
+
+  transferencia(req: { productoId: number; ubicacionOrigenId: number; ubicacionDestinoId: number; cantidad: number; motivo?: string }): Observable<Movimiento> {
+    return this.http.post<Movimiento>(`${API_BASE_URL}/stock/transferencias`, req);
+  }
+
   eliminar(productoId: number, ubicacionId: number): Observable<void> {
     const params = new HttpParams().set('productoId', productoId).set('ubicacionId', ubicacionId);
     return this.http.delete<void>(`${API_BASE_URL}/stock`, { params });

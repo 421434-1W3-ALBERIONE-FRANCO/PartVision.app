@@ -129,6 +129,16 @@ public class ProductoService {
         return conStock(productoRepository.findAllBy(pageable));
     }
 
+    @Transactional(readOnly = true)
+    public Page<ProductoListItemResponse> findAll(Boolean tieneStock, Pageable pageable) {
+        if (tieneStock == null) {
+            return findAll(pageable);
+        }
+        return conStock(tieneStock
+                ? productoRepository.findConStock(pageable)
+                : productoRepository.findSinStock(pageable));
+    }
+
     /**
      * Busqueda por texto: separa el termino en palabras y trae los productos por relevancia.
      * Usa Full-Text Search (rapido, indice invertido) como recuperacion primaria y cae a

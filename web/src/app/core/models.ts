@@ -95,6 +95,7 @@ export interface Movimiento {
   ubicacionDestinoId: number | null;
   usuarioId: number | null;
   motivo: string | null;
+  referencia: string | null;
   fecha: string | null;
 }
 

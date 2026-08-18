@@ -10,8 +10,9 @@ export class ProductoService {
   private http = inject(HttpClient);
   private base = `${API_BASE_URL}/productos`;
 
-  listar(page = 0, size = 10): Observable<Page<ProductoListItem>> {
-    const params = new HttpParams().set('page', page).set('size', size);
+  listar(page = 0, size = 10, conStock?: boolean): Observable<Page<ProductoListItem>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (conStock !== undefined) params = params.set('conStock', conStock);
     return this.http.get<Page<ProductoListItem>>(this.base, { params });
   }
 

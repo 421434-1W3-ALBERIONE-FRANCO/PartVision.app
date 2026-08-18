@@ -26,6 +26,14 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
     @EntityGraph(attributePaths = {"marca", "categoria"})
     Page<Producto> findAllBy(Pageable pageable);
 
+    @EntityGraph(attributePaths = {"marca", "categoria"})
+    @Query("SELECT p FROM Producto p WHERE EXISTS (SELECT 1 FROM Stock s WHERE s.producto = p AND s.cantidad > 0)")
+    Page<Producto> findConStock(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"marca", "categoria"})
+    @Query("SELECT p FROM Producto p WHERE NOT EXISTS (SELECT 1 FROM Stock s WHERE s.producto = p AND s.cantidad > 0)")
+    Page<Producto> findSinStock(Pageable pageable);
+
     // Busca por codigo de barras O por SKU: el operario encuentra el producto tipee lo
     // que tipee. left join para que tambien aparezcan productos sin codigo de barras cargado.
     @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
