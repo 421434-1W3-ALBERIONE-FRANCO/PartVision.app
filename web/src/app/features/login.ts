@@ -50,7 +50,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
                 [(ngModel)]="username"
                 (keyup.enter)="submit()"
                 type="text"
-                placeholder="Ej: admin"
+                placeholder="Ingrese usuario"
                 class="w-full px-4 py-3 bg-dark-surface/80 border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all text-sm font-medium"
               />
               <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-500">
@@ -70,7 +70,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
                 [(ngModel)]="password"
                 (keyup.enter)="submit()"
                 [type]="mostrarPassword() ? 'text' : 'password'"
-                placeholder="••••••••"
+                placeholder="Ingrese contraseña"
                 class="w-full pl-4 pr-12 py-3 bg-dark-surface/80 border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple focus:ring-1 focus:ring-neon-purple transition-all text-sm font-medium"
               />
               <button
@@ -107,7 +107,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
                 type="text"
                 inputmode="numeric"
                 autocomplete="one-time-code"
-                placeholder="123 456"
+                placeholder="Ingrese código"
                 maxlength="12"
                 class="w-full px-4 py-3 bg-dark-surface/80 border border-neon-cyan/40 rounded-xl text-white placeholder-gray-500 tracking-[0.3em] text-center font-mono focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all"
               />
@@ -160,7 +160,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
         <!-- Footer Info -->
         <div class="mt-8 pt-6 border-t border-dark-border/50 text-center">
           <p class="text-xs text-gray-500 font-mono">
-            PartVision IA Engine v2.4 • Motor de Visión IA
+            PartVision v2.4
           </p>
         </div>
       </div>
