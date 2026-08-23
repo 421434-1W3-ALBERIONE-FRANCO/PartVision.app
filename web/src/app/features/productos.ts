@@ -257,6 +257,16 @@ import { UbicacionService } from '../core/ubicacion.service';
           }
         </div>
 
+        @if (busquedaError()) {
+          <div class="p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+            <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span>{{ busquedaError() }}</span>
+            <button (click)="cargar()" class="ml-auto px-3 py-1 rounded-lg text-xs font-semibold neon-button-secondary cursor-pointer shrink-0">Reintentar</button>
+          </div>
+        }
+
         @if (cargando()) {
           <div class="py-12 text-center text-gray-400 font-mono">
             <svg class="animate-spin h-8 w-8 text-neon-purple mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -267,7 +277,7 @@ import { UbicacionService } from '../core/ubicacion.service';
           </div>
         } @else if (productos().length === 0) {
           <div class="py-12 text-center text-gray-500">
-            No se encontraron productos registrados.
+            {{ q.trim() ? 'No se encontraron productos para "' + q.trim() + '".' : 'No se encontraron productos registrados.' }}
           </div>
         } @else {
           <div class="overflow-x-auto">
@@ -625,6 +635,7 @@ export class Productos implements OnInit {
   totalPaginas = signal(1);
   totalElements = signal(0);
   cargando = signal(true);
+  busquedaError = signal<string | null>(null);
   q = '';
 
   mostrarNuevo = signal(false);
@@ -682,7 +693,10 @@ export class Productos implements OnInit {
         }),
         switchMap((term) =>
           (term ? this.service.buscarTexto(term, 0) : this.service.listar(0)).pipe(
-            catchError(() => of(null)),
+            catchError(() => {
+              this.busquedaError.set('No se pudo buscar. Verificá tu conexión e intentá de nuevo.');
+              return of(null);
+            }),
           ),
         ),
         takeUntilDestroyed(this.destroyRef),
@@ -692,6 +706,7 @@ export class Productos implements OnInit {
           this.productos.set(res.content);
           this.totalPaginas.set(res.totalPages);
           this.totalElements.set(res.totalElements);
+          this.busquedaError.set(null);
         }
         this.cargando.set(false);
       });
@@ -817,9 +832,13 @@ export class Productos implements OnInit {
         this.productos.set(res.content);
         this.totalPaginas.set(res.totalPages);
         this.totalElements.set(res.totalElements);
+        this.busquedaError.set(null);
         this.cargando.set(false);
       },
-      error: () => this.cargando.set(false),
+      error: () => {
+        this.busquedaError.set('No se pudieron cargar los productos. Intentá de nuevo.');
+        this.cargando.set(false);
+      },
     });
   }
 
@@ -842,6 +861,7 @@ export class Productos implements OnInit {
 
   limpiarBusqueda(): void {
     this.q = '';
+    this.busquedaError.set(null);
     this.buscar();
   }
 

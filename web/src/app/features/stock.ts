@@ -69,6 +69,16 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           }
         </div>
 
+        @if (listaError()) {
+          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+            <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span>{{ listaError() }}</span>
+            <button (click)="cargarLista()" class="ml-auto px-3 py-1 rounded-lg text-xs font-semibold neon-button-secondary cursor-pointer shrink-0">Reintentar</button>
+          </div>
+        }
+
         @if (cargandoLista()) {
           <div class="text-center py-12 text-gray-500 text-sm">Cargando productos con stock...</div>
         } @else if (listaCargados().length === 0) {
@@ -411,6 +421,16 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           }
         </div>
 
+        @if (listaError()) {
+          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+            <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span>{{ listaError() }}</span>
+            <button (click)="cargarLista()" class="ml-auto px-3 py-1 rounded-lg text-xs font-semibold neon-button-secondary cursor-pointer shrink-0">Reintentar</button>
+          </div>
+        }
+
         @if (cargandoLista()) {
           <div class="text-center py-12 text-gray-500 text-sm">Cargando productos sin stock...</div>
         } @else if (listaSinCargar().length === 0) {
@@ -556,6 +576,16 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
               Buscar
             </button>
           </div>
+
+          @if (historialError()) {
+            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+              <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span>{{ historialError() }}</span>
+              <button (click)="buscar()" class="ml-auto px-3 py-1 rounded-lg text-xs font-semibold neon-button-secondary cursor-pointer shrink-0">Reintentar</button>
+            </div>
+          }
 
           @if (buscando()) {
             <p class="text-xs text-gray-500 font-mono">Buscando...</p>
@@ -711,6 +741,10 @@ export class Stock implements OnInit {
   totalPaginas = signal(0);
   totalElementos = signal(0);
 
+  // Errores de búsqueda
+  listaError = signal<string | null>(null);
+  historialError = signal<string | null>(null);
+
   // Búsqueda (historial)
   q = '';
   resultados = signal<ProductoListItem[]>([]);
@@ -785,13 +819,19 @@ export class Stock implements OnInit {
         debounceTime(250),
         distinctUntilChanged(),
         tap(() => this.buscando.set(true)),
-        switchMap((term) => this.productos.buscarTexto(term, 0, 10).pipe(catchError(() => of(null)))),
+        switchMap((term) => this.productos.buscarTexto(term, 0, 10).pipe(
+          catchError(() => {
+            this.historialError.set('No se pudo buscar. Verificá tu conexión e intentá de nuevo.');
+            return of(null);
+          }),
+        )),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((page) => {
         if (page) {
           this.resultados.set(page.content);
           this.buscoSinResultados.set(page.content.length === 0);
+          this.historialError.set(null);
         }
         this.buscando.set(false);
       });
@@ -802,6 +842,8 @@ export class Stock implements OnInit {
     this.deseleccionar();
     this.filtroTexto = '';
     this.paginaActual.set(0);
+    this.listaError.set(null);
+    this.historialError.set(null);
     this.cargarLista();
   }
 
@@ -820,9 +862,11 @@ export class Stock implements OnInit {
         }
         this.totalPaginas.set(page.totalPages);
         this.totalElementos.set(page.totalElements);
+        this.listaError.set(null);
         this.cargandoLista.set(false);
       },
       error: () => {
+        this.listaError.set('No se pudieron cargar los productos. Intentá de nuevo.');
         this.cargandoLista.set(false);
       },
     });
@@ -847,6 +891,7 @@ export class Stock implements OnInit {
   limpiarFiltro(): void {
     this.filtroTexto = '';
     this.paginaActual.set(0);
+    this.listaError.set(null);
     this.cargarLista();
   }
 
@@ -866,14 +911,17 @@ export class Stock implements OnInit {
     if (!q) return;
     this.buscando.set(true);
     this.buscoSinResultados.set(false);
+    this.historialError.set(null);
     this.productos.buscarTexto(q, 0, 10).subscribe({
       next: (page) => {
         this.resultados.set(page.content);
         this.buscoSinResultados.set(page.content.length === 0);
+        this.historialError.set(null);
         this.buscando.set(false);
       },
       error: () => {
         this.resultados.set([]);
+        this.historialError.set('No se pudo buscar. Verificá tu conexión e intentá de nuevo.');
         this.buscando.set(false);
       },
     });
