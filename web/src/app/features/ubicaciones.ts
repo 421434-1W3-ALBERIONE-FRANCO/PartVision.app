@@ -84,7 +84,8 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input
-          [(ngModel)]="busqueda"
+          [ngModel]="busqueda()"
+          (ngModelChange)="busqueda.set($event)"
           type="text"
           placeholder="Buscar ubicación, código o descripción..."
           class="w-full pl-10 pr-4 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
@@ -237,7 +238,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
         @if (!pasilloSel()) {
           @if (pasillosFiltrados().length === 0) {
             <div class="py-12 text-center text-gray-500">
-              {{ busqueda ? 'No se encontraron ubicaciones para "' + busqueda + '".' : 'No hay ubicaciones registradas. Creá la primera con "Nueva".' }}
+              {{ busqueda() ? 'No se encontraron ubicaciones para "' + busqueda() + '".' : 'No hay ubicaciones registradas. Creá la primera con "Nueva".' }}
             </div>
           } @else {
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -271,7 +272,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
             </div>
 
             <!-- Ubicaciones con código no estándar -->
-            @if (ubicacionesNoEstandar().length > 0 && !busqueda) {
+            @if (ubicacionesNoEstandar().length > 0 && !busqueda()) {
               <div class="mt-6">
                 <h3 class="text-sm font-semibold text-gray-400 mb-3">Código personalizado</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -553,7 +554,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
         <div class="glass-panel rounded-2xl p-4 md:p-6 border border-dark-border shadow-card">
           @if (ubicacionesFiltradas().length === 0) {
             <div class="py-12 text-center text-gray-500">
-              {{ busqueda ? 'No se encontraron ubicaciones para "' + busqueda + '".' : 'No hay ubicaciones registradas.' }}
+              {{ busqueda() ? 'No se encontraron ubicaciones para "' + busqueda() + '".' : 'No hay ubicaciones registradas.' }}
             </div>
           } @else {
             <div class="overflow-x-auto">
@@ -649,7 +650,7 @@ export class Ubicaciones implements OnInit {
   posicionSel = signal<string | null>(null);
   ubicacionSel = signal<Ubicacion | null>(null);
 
-  busqueda = '';
+  busqueda = signal('');
 
   mostrarForm = signal(false);
   modoFormAsistido = signal(true);
@@ -688,7 +689,7 @@ export class Ubicaciones implements OnInit {
   });
 
   ubicacionesFiltradas = computed(() => {
-    const q = this.busqueda.toLowerCase().trim();
+    const q = this.busqueda().toLowerCase().trim();
     if (!q) return this.ubicaciones();
     return this.ubicaciones().filter(u =>
       u.codigo.toLowerCase().includes(q) ||
@@ -729,7 +730,7 @@ export class Ubicaciones implements OnInit {
 
   pasillosFiltrados = computed(() => {
     const parsed = this.ubicacionesParsed().filter(x => x.parsed);
-    const q = this.busqueda.toLowerCase().trim();
+    const q = this.busqueda().toLowerCase().trim();
     const filtrados = q
       ? parsed.filter(x =>
           x.ubicacion.codigo.toLowerCase().includes(q) ||
