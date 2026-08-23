@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 class ImportServiceTest {
 
     @Mock private ProductoImporter productoImporter;
+    @Mock private ProductoBulkImporter bulkImporter;
     @InjectMocks private ImportService importService;
 
     private MockMultipartFile csv(String contenido) {
@@ -144,5 +145,78 @@ class ImportServiceTest {
 
         assertThatThrownBy(() -> importService.importarCsv(archivo))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void importar_dedupPorSku_mismaClaveSkuMarca() {
+        String contenido = """
+                sku,marca,descripcion
+                ABC-1,Bosch,Filtro aceite
+                ABC-1,Bosch,Filtro aceite dup
+                """;
+
+        ImportResultResponse r = importService.importarCsv(csv(contenido));
+
+        assertThat(r.importados()).isEqualTo(1);
+        assertThat(r.omitidos()).isEqualTo(1);
+    }
+
+    @Test
+    void importar_dedupPorDescripcion_sinSkuNiCodigo() {
+        String contenido = """
+                marca,descripcion
+                Bosch,Filtro generico
+                Bosch,Filtro generico
+                """;
+
+        ImportResultResponse r = importService.importarCsv(csv(contenido));
+
+        assertThat(r.importados()).isEqualTo(1);
+        assertThat(r.omitidos()).isEqualTo(1);
+    }
+
+    @Test
+    void importarAsync_exitoso_completaJob() {
+        byte[] contenido = "descripcion\nFiltro\n".getBytes(StandardCharsets.UTF_8);
+        ImportJob job = new ImportJob("async-1", 1);
+
+        importService.importarAsync(contenido, job);
+
+        assertThat(job.getEstado()).isEqualTo(ImportJob.Estado.COMPLETADO);
+        verify(bulkImporter).importar(any(), any());
+    }
+
+    @Test
+    void importarAsync_errorGeneral_fallaJob() {
+        byte[] contenido = "invalido sin header\n".getBytes(StandardCharsets.UTF_8);
+        ImportJob job = new ImportJob("async-2", 1);
+
+        importService.importarAsync(contenido, job);
+
+        assertThat(job.getEstado()).isIn(ImportJob.Estado.COMPLETADO, ImportJob.Estado.ERROR);
+    }
+
+    @Test
+    void importarAsync_duplicadosEnArchivo_omiteEnJob() {
+        byte[] contenido = "descripcion,codigo\nFiltro,C001\nFiltro dup,C001\n".getBytes(StandardCharsets.UTF_8);
+        ImportJob job = new ImportJob("async-3", 2);
+
+        importService.importarAsync(contenido, job);
+
+        assertThat(job.getOmitidos()).isEqualTo(1);
+        assertThat(job.getEstado()).isEqualTo(ImportJob.Estado.COMPLETADO);
+    }
+
+    @Test
+    void importar_conProveedorYSinCodigo() {
+        String contenido = """
+                sku,marca,descripcion,proveedor
+                SKU-1,Bosch,Filtro aceite,Proveedor SA
+                """;
+
+        ImportResultResponse r = importService.importarCsv(csv(contenido));
+
+        assertThat(r.importados()).isEqualTo(1);
+        assertThat(r.errores()).isEmpty();
     }
 }

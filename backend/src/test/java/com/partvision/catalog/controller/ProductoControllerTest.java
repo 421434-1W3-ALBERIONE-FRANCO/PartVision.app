@@ -23,9 +23,13 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -130,9 +134,31 @@ class ProductoControllerTest {
     void findAll_devuelve200() throws Exception {
         var item = new ProductoListItemResponse(1L, "ABC-123", "Filtro de aceite",
                 ProductoEstado.ACTIVO, "Bosch", "Filtros");
-        when(productoService.findAll(any())).thenReturn(new PageImpl<>(List.of(item)));
+        when(productoService.findAll(any(), any(), any())).thenReturn(new PageImpl<>(List.of(item)));
 
         mvc.perform(get("/api/v1/productos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].descripcion").value("Filtro de aceite"));
+    }
+
+    @Test
+    void findAll_conStock_devuelve200() throws Exception {
+        var item = new ProductoListItemResponse(1L, "ABC-123", "Filtro de aceite",
+                ProductoEstado.ACTIVO, "Bosch", "Filtros");
+        when(productoService.findAll(any(), any(), any())).thenReturn(new PageImpl<>(List.of(item)));
+
+        mvc.perform(get("/api/v1/productos").param("conStock", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].descripcion").value("Filtro de aceite"));
+    }
+
+    @Test
+    void findAll_conTextoYStock_devuelve200() throws Exception {
+        var item = new ProductoListItemResponse(1L, "ABC-123", "Filtro de aceite",
+                ProductoEstado.ACTIVO, "Bosch", "Filtros");
+        when(productoService.findAll(any(), any(), any())).thenReturn(new PageImpl<>(List.of(item)));
+
+        mvc.perform(get("/api/v1/productos").param("q", "filtro").param("conStock", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].descripcion").value("Filtro de aceite"));
     }
@@ -163,6 +189,42 @@ class ProductoControllerTest {
                 .thenThrow(new ResourceNotFoundException("No existe un producto con el codigo: nope"));
 
         mvc.perform(get("/api/v1/productos/buscar").param("codigo", "nope"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void update_devuelve200() throws Exception {
+        when(productoService.update(eq(1L), any())).thenReturn(sampleProducto());
+
+        mvc.perform(put("/api/v1/productos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"descripcion\":\"Filtro de aceite nuevo\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void update_descripcionVacia_devuelve400() throws Exception {
+        mvc.perform(put("/api/v1/productos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"descripcion\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void darDeBaja_devuelve204() throws Exception {
+        mvc.perform(delete("/api/v1/productos/1"))
+                .andExpect(status().isNoContent());
+
+        verify(productoService).darDeBaja(1L);
+    }
+
+    @Test
+    void darDeBaja_inexistente_devuelve404() throws Exception {
+        org.mockito.Mockito.doThrow(new ResourceNotFoundException("Producto", 99L))
+                .when(productoService).darDeBaja(99L);
+
+        mvc.perform(delete("/api/v1/productos/99"))
                 .andExpect(status().isNotFound());
     }
 }

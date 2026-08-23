@@ -224,6 +224,9 @@
                     <excludes>
                         <!-- clase de arranque: solo bootstrap, sin logica testeable -->
                         <exclude>**/PartVisionApplication.class</exclude>
+                        <!-- SQL nativo contra Postgres: requiere Testcontainers/Docker, no testeable en unit -->
+                        <exclude>**/ProductoBulkImporter.class</exclude>
+                        <exclude>**/ProductoRepositoryImpl.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
