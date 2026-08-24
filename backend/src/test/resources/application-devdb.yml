@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5442/partvision_test
+    username: partvision
+    password: partvision
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.testcontainers: off
+    com.github.dockerjava: off

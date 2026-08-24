@@ -13,31 +13,23 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Busqueda por relevancia sobre la columna denormalizada 'busqueda' (descripcion + sku +
- * marca + categoria), en dos capas:
+ * Busqueda estilo Meilisearch sobre la columna denormalizada 'busqueda', en tres niveles:
  *
  * <ol>
- *   <li><b>Full-Text Search (primaria, rapida).</b> Recupera candidatos con el indice invertido
- *       {@code to_tsvector('simple', busqueda)} (config 'simple' para no romper codigos/medidas
- *       ni nombres de modelo). Para no traer decenas de miles de filas de una palabra comun, la
- *       tsquery exige el ANCLA (tipo de pieza) y deja el resto en OR:
- *       {@code ancla & (t1 | t2 | ...)}. Asi el set de candidatos queda acotado (2-5k) y el
- *       ranking es barato. Ranking: BOOST para descripcion que empieza con el ancla, luego
- *       {@code ts_rank} (cuando hay varias palabras), luego descripcion mas corta e id.</li>
- *   <li><b>Trigram (fallback).</b> Si FTS no encuentra nada (typo "pistpn", o una forma que el
- *       indice de palabras no reconoce), cae a la busqueda difusa por frase completa con
- *       {@code <%} (word_similarity), tolerante a errores de tipeo.</li>
+ *   <li><b>FTS prefix AND.</b> Todos los tokens con prefix match ({@code :*}), combinados
+ *       con AND. Maxima precision: solo devuelve productos que contienen TODOS los terminos.
+ *       Soporta busqueda as-you-type ("pist" encuentra "pistones").</li>
+ *   <li><b>FTS anchor + rest OR.</b> El ancla (tipo de pieza) es obligatorio, el resto es
+ *       opcional. Mas recall cuando algun token no matchea exacto.</li>
+ *   <li><b>Trigram fallback.</b> Similaridad difusa por frase completa ({@code <%}),
+ *       tolerante a errores de tipeo.</li>
  * </ol>
  */
 public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
-    /** Config de FTS. 'simple' = sin stemming: preserva 1.6/8v/ea111 y modelos (suran, no "sur"). */
     private static final String FTS = "simple";
+    private static final String UMBRAL_TRIGRAM = "0.3";
 
-    /** Parecido minimo (0..1) de la frase para el fallback trigram. */
-    private static final String UMBRAL_TRIGRAM = "0.35";
-
-    /** Palabras de "empaque" que no son tipo de pieza: no sirven de ancla. */
     private static final Set<String> GENERICAS = Set.of(
             "juego", "juegos", "jgo", "jgos", "kit", "kits", "set", "par", "pares");
 
@@ -55,45 +47,74 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
     }
 
     private Page<Producto> buscarInteligenteInterno(List<String> tokens, Boolean tieneStock, Pageable pageable) {
+        if (tokens.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, 0);
+        }
+
         int anchorIdx = anchorIndex(tokens);
-        String anchorFts = ftsSanitize(tokens.get(anchorIdx));
-        if (!anchorFts.isEmpty()) {
-            Page<Producto> fts = buscarFts(tokens, anchorIdx, anchorFts, tieneStock, pageable);
-            if (fts.getTotalElements() > 0) {
-                return fts;
+
+        List<String> prefixed = new ArrayList<>();
+        for (String t : tokens) {
+            String s = ftsSanitize(t);
+            if (!s.isEmpty()) {
+                prefixed.add(s + ":*");
             }
         }
+
+        if (!prefixed.isEmpty()) {
+            // Level 1: all tokens AND with prefix (most precise, as-you-type)
+            if (prefixed.size() >= 2) {
+                String tsqAll = String.join(" & ", prefixed);
+                Page<Producto> r = ejecutarFts(tsqAll, tokens, anchorIdx, tieneStock, pageable);
+                if (r.getTotalElements() > 0) {
+                    return r;
+                }
+            }
+
+            // Level 2: anchor AND rest OR with prefix (broader recall)
+            String anchorSanitized = ftsSanitize(tokens.get(anchorIdx));
+            if (!anchorSanitized.isEmpty()) {
+                List<String> rest = new ArrayList<>();
+                for (int i = 0; i < tokens.size(); i++) {
+                    if (i == anchorIdx) continue;
+                    String s = ftsSanitize(tokens.get(i));
+                    if (!s.isEmpty()) rest.add(s + ":*");
+                }
+                String tsq = rest.isEmpty()
+                        ? anchorSanitized + ":*"
+                        : anchorSanitized + ":* & (" + String.join(" | ", rest) + ")";
+                Page<Producto> r = ejecutarFts(tsq, tokens, anchorIdx, tieneStock, pageable);
+                if (r.getTotalElements() > 0) {
+                    return r;
+                }
+            }
+        }
+
+        // Level 3: trigram fallback
         return buscarTrigram(tokens, anchorIdx, tieneStock, pageable);
     }
 
-    /** Recuperacion primaria por FTS: {@code ancla & (resto en OR)}. */
-    private Page<Producto> buscarFts(List<String> tokens, int anchorIdx, String anchorFts, Boolean tieneStock, Pageable pageable) {
-        List<String> rest = new ArrayList<>();
-        for (int i = 0; i < tokens.size(); i++) {
-            if (i == anchorIdx) {
-                continue;
-            }
-            String s = ftsSanitize(tokens.get(i));
-            if (!s.isEmpty()) {
-                rest.add(s);
-            }
-        }
-        String tsquery = rest.isEmpty()
-                ? anchorFts
-                : anchorFts + " & (" + String.join(" | ", rest) + ")";
-
-        String rankOrder = rest.isEmpty()
-                ? ""
-                : " ts_rank(to_tsvector('" + FTS + "', p.busqueda), to_tsquery('" + FTS + "', :tsq)) desc,";
-
+    private Page<Producto> ejecutarFts(String tsquery, List<String> tokens, int anchorIdx,
+                                       Boolean tieneStock, Pageable pageable) {
         String stockClause = stockFilter(tieneStock);
+
+        StringBuilder order = new StringBuilder(" order by");
+        if (tokens.size() >= 2) {
+            order.append(" (case when");
+            for (int i = 0; i < tokens.size(); i++) {
+                if (i > 0) order.append(" and");
+                order.append(" lower(p.descripcion) like :dc").append(i).append(" escape '\\'");
+            }
+            order.append(" then 0 else 1 end) asc,");
+        }
+        order.append(" (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,");
+        order.append(" ts_rank(to_tsvector('").append(FTS).append("', p.busqueda), to_tsquery('")
+                .append(FTS).append("', :tsq)) desc,");
+        order.append(" char_length(p.descripcion) asc, p.id asc");
 
         String sql = "select p.* from productos p"
                 + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
-                + stockClause
-                + " order by (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,"
-                + rankOrder
-                + " char_length(p.descripcion) asc, p.id asc";
+                + stockClause + order;
         String countSql = "select count(*) from productos p"
                 + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
                 + stockClause;
@@ -101,13 +122,17 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         Query data = em.createNativeQuery(sql, Producto.class);
         Query count = em.createNativeQuery(countSql);
         data.setParameter("tsq", tsquery);
+        if (tokens.size() >= 2) {
+            for (int i = 0; i < tokens.size(); i++) {
+                data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
+            }
+        }
         data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
         count.setParameter("tsq", tsquery);
 
         return paginar(data, count, pageable);
     }
 
-    /** Fallback difuso: frase completa con similaridad trigram (tolera typos). */
     private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Boolean tieneStock, Pageable pageable) {
         em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
                 .setParameter("u", UMBRAL_TRIGRAM)
@@ -115,16 +140,31 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
         String stockClause = stockFilter(tieneStock);
         String frase = String.join(" ", tokens);
+
+        StringBuilder order = new StringBuilder(" order by");
+        if (tokens.size() >= 2) {
+            order.append(" (case when");
+            for (int i = 0; i < tokens.size(); i++) {
+                if (i > 0) order.append(" and");
+                order.append(" lower(p.descripcion) like :dc").append(i).append(" escape '\\'");
+            }
+            order.append(" then 0 else 1 end) asc,");
+        }
+        order.append(" (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,");
+        order.append(" word_similarity(:frase, p.busqueda) desc, char_length(p.descripcion) asc, p.id asc");
+
         Query data = em.createNativeQuery(
-                "select p.* from productos p where :frase <% p.busqueda"
-                        + stockClause
-                        + " order by (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,"
-                        + " word_similarity(:frase, p.busqueda) desc, char_length(p.descripcion) asc, p.id asc",
+                "select p.* from productos p where :frase <% p.busqueda" + stockClause + order,
                 Producto.class);
         Query count = em.createNativeQuery(
                 "select count(*) from productos p where :frase <% p.busqueda" + stockClause);
         data.setParameter("frase", frase);
         data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
+        if (tokens.size() >= 2) {
+            for (int i = 0; i < tokens.size(); i++) {
+                data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
+            }
+        }
         count.setParameter("frase", frase);
 
         return paginar(data, count, pageable);
@@ -139,10 +179,6 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         return new PageImpl<>(contenido, pageable, total);
     }
 
-    /**
-     * Indice de la palabra que se usa como ancla (tipo de pieza): la primera alfabetica de
-     * &ge;3 letras que no sea generica de empaque. Si no hay ninguna, cae a la primera palabra.
-     */
     private static int anchorIndex(List<String> tokens) {
         for (int i = 0; i < tokens.size(); i++) {
             String t = tokens.get(i);
@@ -153,18 +189,17 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         return 0;
     }
 
-    /**
-     * Deja el token apto para una tsquery: solo letras/digitos/punto (ya viene en minuscula),
-     * sin operadores de tsquery. Si no queda ningun caracter alfanumerico, devuelve "".
-     */
     private static String ftsSanitize(String token) {
         String limpio = token.replaceAll("[^a-z0-9.]", "");
         return limpio.chars().anyMatch(Character::isLetterOrDigit) ? limpio : "";
     }
 
-    /** Escapa los comodines de LIKE en el token y le agrega '%' para el match por prefijo. */
+    private static String likeEscape(String token) {
+        return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
     private static String likePrefix(String token) {
-        return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return likeEscape(token) + "%";
     }
 
     private static String stockFilter(Boolean tieneStock) {

@@ -168,12 +168,11 @@ public class ProductoService {
             "de", "del", "la", "el", "los", "las", "un", "una", "unos", "unas",
             "para", "con", "por", "y", "o", "al", "en", "a");
 
-    /** Palabras utiles del termino: minuscula, sin conectores, sin repetidas, min 2 chars, max 8. */
     private List<String> tokenizar(String q) {
         if (q == null || q.isBlank()) {
             return List.of();
         }
-        return Arrays.stream(q.trim().toLowerCase().split("\\s+"))
+        return Arrays.stream(q.trim().toLowerCase().split("[\\s\\-/()+,;:]+"))
                 .filter(s -> s.length() >= 2 && !VACIAS.contains(s))
                 .distinct()
                 .limit(8)
