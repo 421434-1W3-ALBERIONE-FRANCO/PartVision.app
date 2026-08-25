@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angula
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, interval, of, switchMap, tap } from 'rxjs';
 
 import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
@@ -26,8 +26,13 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
             INVENTARIO
           </span>
         </h2>
-        <p class="text-sm text-gray-400 mt-1">
-          Gestioná entradas, salidas, transferencias y ajustes de inventario.
+        <p class="text-sm text-gray-400 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>Gestioná entradas, salidas, transferencias y ajustes de inventario.</span>
+          <span class="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+            Se actualiza cada 30s
+            <button (click)="cargarLista()" class="text-neon-cyan hover:underline cursor-pointer ml-1">Actualizar ahora</button>
+          </span>
         </p>
       </div>
 
@@ -161,51 +166,55 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           </div>
         }
 
-        <!-- Panel de gestión del producto seleccionado -->
         @if (productoSel(); as p) {
-          <div class="space-y-5 animate-fade-in">
-            <!-- Info + métricas -->
-            <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-cyan/40 space-y-4">
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarModalCarga()">
+            <div class="glass-panel w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6 rounded-2xl border border-neon-cyan/40 shadow-neon animate-fade-in space-y-5" (click)="$event.stopPropagation()">
+              <!-- Header -->
               <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1 flex-1 min-w-0">
-                  <div class="flex items-center gap-3">
-                    <p class="text-xs uppercase tracking-wider text-gray-400">Producto seleccionado</p>
-                    <button (click)="deseleccionar()" class="text-xs text-gray-500 hover:text-white cursor-pointer">✕ Cerrar</button>
-                  </div>
+                  <p class="text-xs uppercase tracking-wider text-gray-400">Gestionar stock</p>
                   <p class="text-lg font-bold text-white truncate">{{ p.descripcion }}</p>
                   <p class="text-sm font-mono text-neon-cyan">
                     SKU {{ p.sku || '—' }}
                     @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
                   </p>
                 </div>
-                @if (resumen(); as r) {
-                  <div class="flex flex-wrap gap-3 shrink-0">
-                    <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
-                      <p class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }}</p>
-                      <p class="text-[10px] uppercase text-gray-400 font-semibold">Unidades</p>
+                <div class="flex items-start gap-3 shrink-0">
+                  @if (resumen(); as r) {
+                    <div class="flex gap-3">
+                      <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                        <p class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }}</p>
+                        <p class="text-[10px] uppercase text-gray-400 font-semibold">Unidades</p>
+                      </div>
+                      <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
+                        <p class="text-xl font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
+                        <p class="text-[10px] uppercase text-gray-400 font-semibold">Ubicaciones</p>
+                      </div>
                     </div>
-                    <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
-                      <p class="text-xl font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
-                      <p class="text-[10px] uppercase text-gray-400 font-semibold">Ubicaciones</p>
-                    </div>
-                  </div>
-                }
-              </div>
-            </div>
-
-            <!-- Tabs de operaciones -->
-            <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
-              <div class="flex border-b border-dark-border overflow-x-auto">
-                @for (t of opTabs; track t.key) {
-                  <button (click)="opTab.set(t.key)"
-                    [class]="opTab() === t.key
-                      ? 'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ' + t.activeClass
-                      : 'flex items-center gap-2 px-5 py-3 text-sm font-medium text-gray-400 hover:text-white border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap'">
-                    <span>{{ t.icon }}</span>
-                    {{ t.label }}
+                  }
+                  <button (click)="cerrarModalCarga()"
+                    class="text-gray-500 hover:text-white cursor-pointer p-1 transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
-                }
+                </div>
               </div>
+
+              <!-- Tabs de operaciones -->
+              <div class="rounded-2xl border border-dark-border overflow-hidden">
+                <div class="flex border-b border-dark-border overflow-x-auto">
+                  @for (t of opTabs; track t.key) {
+                    <button (click)="opTab.set(t.key)"
+                      [class]="opTab() === t.key
+                        ? 'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ' + t.activeClass
+                        : 'flex items-center gap-2 px-5 py-3 text-sm font-medium text-gray-400 hover:text-white border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap'">
+                      <span>{{ t.icon }}</span>
+                      {{ t.label }}
+                    </button>
+                  }
+                </div>
+                <p class="px-5 py-2 text-xs text-gray-500 bg-dark-surface/30 border-b border-dark-border">{{ opTabActual().desc }}</p>
 
               <div class="p-4 md:p-6 space-y-4">
                 <!-- ENTRADA -->
@@ -401,6 +410,15 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                 }
               </div>
             }
+
+              <!-- Footer -->
+              <div class="flex justify-end pt-2 border-t border-dark-border">
+                <button (click)="cerrarModalCarga()"
+                  class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+                  Cerrar
+                </button>
+              </div>
+            </div>
           </div>
         }
       }
@@ -500,53 +518,6 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           </div>
         }
 
-        <!-- Panel inline de carga rápida -->
-        @if (productoSel(); as p) {
-          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-neon-purple/40 shadow-neon space-y-4 animate-fade-in">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-xs uppercase tracking-wider text-gray-400">Cargando stock para</p>
-                <p class="text-base font-bold text-white">{{ p.descripcion }}</p>
-                <p class="text-sm font-mono text-neon-cyan">SKU {{ p.sku || '—' }}</p>
-              </div>
-              <button (click)="deseleccionar()" class="text-xs text-gray-500 hover:text-white cursor-pointer shrink-0">✕ Cancelar</button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
-                <select [(ngModel)]="opUbicacionId"
-                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
-                  <option [ngValue]="null" disabled>Elegí ubicación…</option>
-                  @for (u of ubicaciones(); track u.id) {
-                    <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
-                <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
-                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
-                <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: carga inicial"
-                  class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
-              </div>
-            </div>
-            @if (opError()) {
-              <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ opError() }}</div>
-            }
-            @if (opOk()) {
-              <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ opOk() }}</div>
-            }
-            <div class="flex justify-end">
-              <button [disabled]="guardandoOp()" (click)="ejecutarEntradaRapida()"
-                class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
-                {{ guardandoOp() ? 'Guardando...' : 'Registrar entrada' }}
-              </button>
-            </div>
-          </div>
-        }
       }
 
       <!-- ==================== HISTORIAL ==================== -->
@@ -686,6 +657,95 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
       }
     </div>
 
+    <!-- Modal: carga rápida de stock -->
+    @if (vista() === 'sin-cargar' && productoSel(); as p) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarModalCarga()">
+        <div class="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-neon-purple/40 shadow-neon space-y-5 animate-fade-in" (click)="$event.stopPropagation()">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs uppercase tracking-wider text-gray-400">Cargando stock para</p>
+              <p class="text-base font-bold text-white truncate">{{ p.descripcion }}</p>
+              <p class="text-sm font-mono text-neon-cyan">SKU {{ p.sku || '—' }}</p>
+            </div>
+            <button (click)="cerrarModalCarga()"
+              class="text-gray-500 hover:text-white cursor-pointer p-1 shrink-0 transition-colors">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
+              <select [(ngModel)]="opUbicacionId"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
+                <option [ngValue]="null" disabled>Elegí ubicación…</option>
+                @for (u of ubicaciones(); track u.id) {
+                  <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
+              <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
+              <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: carga inicial"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+            </div>
+          </div>
+
+          @if (opError()) {
+            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ opError() }}</div>
+          }
+          @if (opOk()) {
+            <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ opOk() }}</div>
+          }
+
+          <div class="flex justify-end gap-3 pt-2 border-t border-dark-border">
+            <button (click)="cerrarModalCarga()"
+              class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button [disabled]="guardandoOp()" (click)="ejecutarEntradaRapida()"
+              class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+              {{ guardandoOp() ? 'Guardando...' : 'Registrar entrada' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Modal: confirmar descarte de cambios -->
+    @if (mostrarConfirmDescarte()) {
+      <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" (click)="cancelarDescarte()">
+        <div class="glass-panel w-full max-w-sm p-6 rounded-2xl border border-amber-500/40 shadow-neon animate-fade-in" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            ¿Salir sin guardar?
+          </h3>
+          <p class="text-sm text-gray-300">
+            Tenés datos cargados que no se guardaron. ¿Querés descartarlos?
+          </p>
+          <div class="mt-6 flex flex-wrap justify-end gap-3">
+            <button (click)="cancelarDescarte()"
+              class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+              Seguir editando
+            </button>
+            <button (click)="confirmarDescarte()"
+              class="px-5 py-2.5 rounded-xl font-semibold text-sm bg-amber-600 hover:bg-amber-500 text-white transition-colors cursor-pointer">
+              Descartar
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     <!-- Modal: confirmación de eliminación -->
     @if (aEliminarLinea(); as l) {
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminarLinea()">
@@ -776,15 +836,16 @@ export class Stock implements OnInit {
   filaGuardando = signal(false);
   stockError = signal<string | null>(null);
   aEliminarLinea = signal<StockLinea | null>(null);
+  mostrarConfirmDescarte = signal(false);
 
   // Historial
   filtroTipo = signal('');
 
-  readonly opTabs: { key: OpTab; label: string; icon: string; activeClass: string; action: string }[] = [
-    { key: 'entrada', label: 'Entrada', icon: '↓', activeClass: 'text-green-400 border-green-400', action: 'Registrar entrada' },
-    { key: 'salida', label: 'Salida', icon: '↑', activeClass: 'text-red-400 border-red-400', action: 'Registrar salida' },
-    { key: 'transferencia', label: 'Transferencia', icon: '⇄', activeClass: 'text-neon-cyan border-neon-cyan', action: 'Transferir' },
-    { key: 'ajuste', label: 'Ajuste', icon: '±', activeClass: 'text-amber-400 border-amber-400', action: 'Registrar ajuste' },
+  readonly opTabs: { key: OpTab; label: string; icon: string; activeClass: string; action: string; desc: string }[] = [
+    { key: 'entrada', label: 'Entrada', icon: '↓', activeClass: 'text-green-400 border-green-400', action: 'Registrar entrada', desc: 'Agregar unidades (recibiste mercadería nueva)' },
+    { key: 'salida', label: 'Salida', icon: '↑', activeClass: 'text-red-400 border-red-400', action: 'Registrar salida', desc: 'Retirar unidades (venta, devolución)' },
+    { key: 'transferencia', label: 'Transferencia', icon: '⇄', activeClass: 'text-neon-cyan border-neon-cyan', action: 'Transferir', desc: 'Mover unidades de una ubicación a otra' },
+    { key: 'ajuste', label: 'Ajuste', icon: '±', activeClass: 'text-amber-400 border-amber-400', action: 'Registrar ajuste', desc: 'Corregir stock real (rotura, merma, error de conteo)' },
   ];
 
   readonly ubicacionesConStock = computed(() => this.resumen()?.ubicaciones ?? []);
@@ -802,6 +863,14 @@ export class Stock implements OnInit {
       error: () => this.ubicaciones.set([]),
     });
     this.cargarLista();
+
+    interval(30000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.vista() !== 'historial' && !this.productoSel()) {
+          this.cargarLista();
+        }
+      });
 
     this.filtroChanged
       .pipe(
@@ -932,6 +1001,12 @@ export class Stock implements OnInit {
     this.resultados.set([]);
     this.opOk.set(null);
     this.opError.set(null);
+    this.opUbicacionId = null;
+    this.opUbicacionDestinoId = null;
+    this.opCantidad = null;
+    this.opMotivo = '';
+    this.opTab.set('entrada');
+    this.cancelarEdicionCantidad();
     this.refrescarStock(p.id);
   }
 
@@ -951,6 +1026,30 @@ export class Stock implements OnInit {
     this.movimientos.set([]);
     this.opOk.set(null);
     this.opError.set(null);
+    this.mostrarConfirmDescarte.set(false);
+  }
+
+  cerrarModalCarga(): void {
+    if (this.formCargaDirty()) {
+      this.mostrarConfirmDescarte.set(true);
+    } else {
+      this.deseleccionar();
+    }
+  }
+
+  confirmarDescarte(): void {
+    this.mostrarConfirmDescarte.set(false);
+    this.deseleccionar();
+  }
+
+  cancelarDescarte(): void {
+    this.mostrarConfirmDescarte.set(false);
+  }
+
+  private formCargaDirty(): boolean {
+    return (this.opCantidad != null && this.opCantidad > 0)
+      || this.opMotivo.trim() !== ''
+      || this.editandoUbicacionId() !== null;
   }
 
   ejecutarOperacion(): void {
