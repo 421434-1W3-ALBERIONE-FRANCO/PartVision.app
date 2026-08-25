@@ -53,4 +53,9 @@ public class Ubicacion extends Auditable {
 
     @Column(nullable = false)
     private boolean activo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_ocupacion", nullable = false, length = 15)
+    @Builder.Default
+    private EstadoOcupacion estadoOcupacion = EstadoOcupacion.LIBRE;
 }

@@ -10,16 +10,18 @@ export class ProductoService {
   private http = inject(HttpClient);
   private base = `${API_BASE_URL}/productos`;
 
-  listar(page = 0, size = 10, conStock?: boolean, q?: string): Observable<Page<ProductoListItem>> {
+  listar(page = 0, size = 10, conStock?: boolean, q?: string, sort?: string): Observable<Page<ProductoListItem>> {
     let params = new HttpParams().set('page', page).set('size', size);
     if (conStock !== undefined) params = params.set('conStock', conStock);
     if (q) params = params.set('q', q);
+    if (sort) params = params.set('sort', sort);
     return this.http.get<Page<ProductoListItem>>(this.base, { params });
   }
 
   /** Búsqueda multi-característica: matchea descripción, SKU, marca o categoría. */
-  buscarTexto(q: string, page = 0, size = 10): Observable<Page<ProductoListItem>> {
-    const params = new HttpParams().set('q', q).set('page', page).set('size', size);
+  buscarTexto(q: string, page = 0, size = 10, sort?: string): Observable<Page<ProductoListItem>> {
+    let params = new HttpParams().set('q', q).set('page', page).set('size', size);
+    if (sort) params = params.set('sort', sort);
     return this.http.get<Page<ProductoListItem>>(`${this.base}/buscar-texto`, { params });
   }
 

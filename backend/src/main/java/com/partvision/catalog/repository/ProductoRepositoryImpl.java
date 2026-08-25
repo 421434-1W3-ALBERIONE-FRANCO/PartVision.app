@@ -7,24 +7,13 @@ import jakarta.persistence.Query;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-/**
- * Busqueda estilo Meilisearch sobre la columna denormalizada 'busqueda', en tres niveles:
- *
- * <ol>
- *   <li><b>FTS prefix AND.</b> Todos los tokens con prefix match ({@code :*}), combinados
- *       con AND. Maxima precision: solo devuelve productos que contienen TODOS los terminos.
- *       Soporta busqueda as-you-type ("pist" encuentra "pistones").</li>
- *   <li><b>FTS anchor + rest OR.</b> El ancla (tipo de pieza) es obligatorio, el resto es
- *       opcional. Mas recall cuando algun token no matchea exacto.</li>
- *   <li><b>Trigram fallback.</b> Similaridad difusa por frase completa ({@code <%}),
- *       tolerante a errores de tipeo.</li>
- * </ol>
- */
 public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     private static final String FTS = "simple";
@@ -32,6 +21,14 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     private static final Set<String> GENERICAS = Set.of(
             "juego", "juegos", "jgo", "jgos", "kit", "kits", "set", "par", "pares");
+
+    private static final Map<String, String> SORT_COLUMNS = Map.of(
+            "sku", "p.sku",
+            "descripcion", "p.descripcion",
+            "estado", "p.estado",
+            "marca.nombre", "m.nombre",
+            "categoria.nombre", "c.nombre",
+            "id", "p.id");
 
     @PersistenceContext
     private EntityManager em;
@@ -52,6 +49,7 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         }
 
         int anchorIdx = anchorIndex(tokens);
+        boolean userSort = hasUserSort(pageable);
 
         List<String> prefixed = new ArrayList<>();
         for (String t : tokens) {
@@ -62,16 +60,14 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         }
 
         if (!prefixed.isEmpty()) {
-            // Level 1: all tokens AND with prefix (most precise, as-you-type)
             if (prefixed.size() >= 2) {
                 String tsqAll = String.join(" & ", prefixed);
-                Page<Producto> r = ejecutarFts(tsqAll, tokens, anchorIdx, tieneStock, pageable);
+                Page<Producto> r = ejecutarFts(tsqAll, tokens, anchorIdx, tieneStock, pageable, userSort);
                 if (r.getTotalElements() > 0) {
                     return r;
                 }
             }
 
-            // Level 2: anchor AND rest OR with prefix (broader recall)
             String anchorSanitized = ftsSanitize(tokens.get(anchorIdx));
             if (!anchorSanitized.isEmpty()) {
                 List<String> rest = new ArrayList<>();
@@ -83,21 +79,120 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
                 String tsq = rest.isEmpty()
                         ? anchorSanitized + ":*"
                         : anchorSanitized + ":* & (" + String.join(" | ", rest) + ")";
-                Page<Producto> r = ejecutarFts(tsq, tokens, anchorIdx, tieneStock, pageable);
+                Page<Producto> r = ejecutarFts(tsq, tokens, anchorIdx, tieneStock, pageable, userSort);
                 if (r.getTotalElements() > 0) {
                     return r;
                 }
             }
         }
 
-        // Level 3: trigram fallback
-        return buscarTrigram(tokens, anchorIdx, tieneStock, pageable);
+        return buscarTrigram(tokens, anchorIdx, tieneStock, pageable, userSort);
     }
 
     private Page<Producto> ejecutarFts(String tsquery, List<String> tokens, int anchorIdx,
-                                       Boolean tieneStock, Pageable pageable) {
+                                       Boolean tieneStock, Pageable pageable, boolean userSort) {
         String stockClause = stockFilter(tieneStock);
+        String sortJoins = userSort ? buildSortJoins(pageable) : "";
+        String order = userSort
+                ? buildUserOrderBy(pageable)
+                : buildRelevanceOrderFts(tokens, anchorIdx);
 
+        String ftsWhere = " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)";
+
+        String sql = "select p.* from productos p" + sortJoins + ftsWhere + stockClause + order;
+        String countSql = "select count(*) from productos p" + ftsWhere + stockClause;
+
+        Query data = em.createNativeQuery(sql, Producto.class);
+        Query count = em.createNativeQuery(countSql);
+        data.setParameter("tsq", tsquery);
+        count.setParameter("tsq", tsquery);
+
+        if (!userSort) {
+            if (tokens.size() >= 2) {
+                for (int i = 0; i < tokens.size(); i++) {
+                    data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
+                }
+            }
+            data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
+        }
+
+        return paginar(data, count, pageable);
+    }
+
+    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Boolean tieneStock,
+                                         Pageable pageable, boolean userSort) {
+        em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
+                .setParameter("u", UMBRAL_TRIGRAM)
+                .getSingleResult();
+
+        String stockClause = stockFilter(tieneStock);
+        String frase = String.join(" ", tokens);
+        String sortJoins = userSort ? buildSortJoins(pageable) : "";
+        String order = userSort
+                ? buildUserOrderBy(pageable)
+                : buildRelevanceOrderTrigram(tokens, anchorIdx);
+
+        String trigramWhere = " where :frase <% p.busqueda";
+
+        Query data = em.createNativeQuery(
+                "select p.* from productos p" + sortJoins + trigramWhere + stockClause + order,
+                Producto.class);
+        Query count = em.createNativeQuery(
+                "select count(*) from productos p" + trigramWhere + stockClause);
+
+        data.setParameter("frase", frase);
+        count.setParameter("frase", frase);
+
+        if (!userSort) {
+            data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
+            if (tokens.size() >= 2) {
+                for (int i = 0; i < tokens.size(); i++) {
+                    data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
+                }
+            }
+        }
+
+        return paginar(data, count, pageable);
+    }
+
+    // ── Sort helpers ──────────────────────────────────────────────────────
+
+    private static boolean hasUserSort(Pageable pageable) {
+        return pageable.getSort().isSorted();
+    }
+
+    private static String buildSortJoins(Pageable pageable) {
+        boolean needsMarca = false, needsCategoria = false;
+        for (Sort.Order o : pageable.getSort()) {
+            if (o.getProperty().startsWith("marca.")) needsMarca = true;
+            if (o.getProperty().startsWith("categoria.")) needsCategoria = true;
+        }
+        StringBuilder sb = new StringBuilder();
+        if (needsMarca) sb.append(" left join marcas m on p.marca_id = m.id");
+        if (needsCategoria) sb.append(" left join categorias c on p.categoria_id = c.id");
+        return sb.toString();
+    }
+
+    private static String buildUserOrderBy(Pageable pageable) {
+        StringBuilder order = new StringBuilder(" order by ");
+        boolean first = true;
+        for (Sort.Order o : pageable.getSort()) {
+            String col = SORT_COLUMNS.get(o.getProperty());
+            if (col == null) continue;
+            if (!first) order.append(", ");
+            first = false;
+            order.append(col);
+            order.append(o.isAscending() ? " asc" : " desc");
+            order.append(" nulls last");
+        }
+        if (first) return " order by p.id asc";
+        order.append(", p.id asc");
+        return order.toString();
+    }
+
+    // ── Relevance ORDER BY (used when no user sort) ───────────────────────
+
+    private static String buildRelevanceOrderFts(List<String> tokens, int anchorIdx) {
         StringBuilder order = new StringBuilder(" order by");
         if (tokens.size() >= 2) {
             order.append(" (case when");
@@ -111,36 +206,10 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         order.append(" ts_rank(to_tsvector('").append(FTS).append("', p.busqueda), to_tsquery('")
                 .append(FTS).append("', :tsq)) desc,");
         order.append(" char_length(p.descripcion) asc, p.id asc");
-
-        String sql = "select p.* from productos p"
-                + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
-                + stockClause + order;
-        String countSql = "select count(*) from productos p"
-                + " where to_tsvector('" + FTS + "', p.busqueda) @@ to_tsquery('" + FTS + "', :tsq)"
-                + stockClause;
-
-        Query data = em.createNativeQuery(sql, Producto.class);
-        Query count = em.createNativeQuery(countSql);
-        data.setParameter("tsq", tsquery);
-        if (tokens.size() >= 2) {
-            for (int i = 0; i < tokens.size(); i++) {
-                data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
-            }
-        }
-        data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
-        count.setParameter("tsq", tsquery);
-
-        return paginar(data, count, pageable);
+        return order.toString();
     }
 
-    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Boolean tieneStock, Pageable pageable) {
-        em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
-                .setParameter("u", UMBRAL_TRIGRAM)
-                .getSingleResult();
-
-        String stockClause = stockFilter(tieneStock);
-        String frase = String.join(" ", tokens);
-
+    private static String buildRelevanceOrderTrigram(List<String> tokens, int anchorIdx) {
         StringBuilder order = new StringBuilder(" order by");
         if (tokens.size() >= 2) {
             order.append(" (case when");
@@ -152,23 +221,10 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         }
         order.append(" (case when lower(p.descripcion) like :pref escape '\\' then 0 else 1 end) asc,");
         order.append(" word_similarity(:frase, p.busqueda) desc, char_length(p.descripcion) asc, p.id asc");
-
-        Query data = em.createNativeQuery(
-                "select p.* from productos p where :frase <% p.busqueda" + stockClause + order,
-                Producto.class);
-        Query count = em.createNativeQuery(
-                "select count(*) from productos p where :frase <% p.busqueda" + stockClause);
-        data.setParameter("frase", frase);
-        data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
-        if (tokens.size() >= 2) {
-            for (int i = 0; i < tokens.size(); i++) {
-                data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
-            }
-        }
-        count.setParameter("frase", frase);
-
-        return paginar(data, count, pageable);
+        return order.toString();
     }
+
+    // ── Utilities ─────────────────────────────────────────────────────────
 
     private Page<Producto> paginar(Query data, Query count, Pageable pageable) {
         data.setFirstResult((int) pageable.getOffset());

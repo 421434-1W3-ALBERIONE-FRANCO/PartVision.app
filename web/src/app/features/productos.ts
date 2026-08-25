@@ -284,13 +284,58 @@ import { UbicacionService } from '../core/ubicacion.service';
             <table class="w-full text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                  <th class="py-3 px-4">SKU</th>
-                  <th class="py-3 px-4">Descripción</th>
-                  <th class="py-3 px-4">Marca</th>
-                  <th class="py-3 px-4">Categoría</th>
+                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('sku')">
+                    <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'sku'">
+                      SKU
+                      @if (sortColumn() === 'sku') {
+                        <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
+                      } @else {
+                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
+                      }
+                    </span>
+                  </th>
+                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('descripcion')">
+                    <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'descripcion'">
+                      Descripción
+                      @if (sortColumn() === 'descripcion') {
+                        <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
+                      } @else {
+                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
+                      }
+                    </span>
+                  </th>
+                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('marca.nombre')">
+                    <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'marca.nombre'">
+                      Marca
+                      @if (sortColumn() === 'marca.nombre') {
+                        <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
+                      } @else {
+                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
+                      }
+                    </span>
+                  </th>
+                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('categoria.nombre')">
+                    <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'categoria.nombre'">
+                      Categoría
+                      @if (sortColumn() === 'categoria.nombre') {
+                        <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
+                      } @else {
+                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
+                      }
+                    </span>
+                  </th>
                   <th class="py-3 px-4">Ubicación</th>
                   <th class="py-3 px-4 text-right">Cantidad</th>
-                  <th class="py-3 px-4">Estado</th>
+                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('estado')">
+                    <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'estado'">
+                      Estado
+                      @if (sortColumn() === 'estado') {
+                        <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
+                      } @else {
+                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
+                      }
+                    </span>
+                  </th>
                   <th class="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -638,6 +683,14 @@ export class Productos implements OnInit {
   busquedaError = signal<string | null>(null);
   q = '';
 
+  sortColumn = signal<string | null>(null);
+  sortDir = signal<'asc' | 'desc'>('asc');
+
+  get sortParam(): string | undefined {
+    const col = this.sortColumn();
+    return col ? `${col},${this.sortDir()}` : undefined;
+  }
+
   mostrarNuevo = signal(false);
   editandoId = signal<number | null>(null);
   sku = '';
@@ -692,7 +745,10 @@ export class Productos implements OnInit {
           this.cargando.set(true);
         }),
         switchMap((term) =>
-          (term ? this.service.buscarTexto(term, 0) : this.service.listar(0)).pipe(
+          (term
+            ? this.service.buscarTexto(term, 0, 10, this.sortParam)
+            : this.service.listar(0, 10, undefined, undefined, this.sortParam)
+          ).pipe(
             catchError(() => {
               this.busquedaError.set('No se pudo buscar. Verificá tu conexión e intentá de nuevo.');
               return of(null);
@@ -824,9 +880,10 @@ export class Productos implements OnInit {
   cargar(): void {
     this.cargando.set(true);
     const term = this.q.trim();
+    const sort = this.sortParam;
     const req = term
-      ? this.service.buscarTexto(term, this.pagina())
-      : this.service.listar(this.pagina());
+      ? this.service.buscarTexto(term, this.pagina(), 10, sort)
+      : this.service.listar(this.pagina(), 10, undefined, undefined, sort);
     req.subscribe({
       next: (res) => {
         this.productos.set(res.content);
@@ -863,6 +920,22 @@ export class Productos implements OnInit {
     this.q = '';
     this.busquedaError.set(null);
     this.buscar();
+  }
+
+  toggleSort(col: string): void {
+    if (this.sortColumn() === col) {
+      if (this.sortDir() === 'asc') {
+        this.sortDir.set('desc');
+      } else {
+        this.sortColumn.set(null);
+        this.sortDir.set('asc');
+      }
+    } else {
+      this.sortColumn.set(col);
+      this.sortDir.set('asc');
+    }
+    this.pagina.set(0);
+    this.cargar();
   }
 
   cambiarPagina(delta: number): void {

@@ -2,7 +2,8 @@ import { Component, OnInit, inject, signal, computed, ViewChild, ElementRef } fr
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from '../core/models';
+import { EstadoOcupacion, StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from '../core/models';
+import { StockService } from '../core/stock.service';
 import { UbicacionService } from '../core/ubicacion.service';
 
 interface ParsedCodigo {
@@ -389,23 +390,35 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                           [class]="
                             row.pasillo === pasilloSel() && slot.pos === posicionSel()
                               ? 'bg-neon-cyan/25 border-neon-cyan text-neon-cyan font-bold shadow-[0_0_8px_rgba(34,211,238,0.3)]'
-                              : row.pasillo === pasilloSel()
-                                ? (slot.tieneStock ? 'bg-neon-cyan/8 border-neon-cyan/20 text-gray-300' : 'bg-dark-surface border-dark-border text-gray-500')
-                                : (slot.tieneStock ? 'bg-neon-cyan/5 border-neon-cyan/10 text-gray-400' : 'bg-dark-surface/50 border-dark-border/50 text-gray-600')
+                              : slot.estado === 'LLENA'
+                                ? (row.pasillo === pasilloSel() ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-red-500/15 border-red-500/25 text-red-400')
+                                : slot.estado === 'INTERMEDIA'
+                                  ? (row.pasillo === pasilloSel() ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-amber-500/15 border-amber-500/25 text-amber-400')
+                                  : slot.tieneStock
+                                    ? (row.pasillo === pasilloSel() ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400')
+                                    : (row.pasillo === pasilloSel() ? 'bg-dark-surface border-dark-border text-gray-500' : 'bg-dark-surface/50 border-dark-border/50 text-gray-600')
                           "
                         >{{ slot.pos }}</button>
                       }
                     </div>
                   </div>
                 }
-                <div class="flex items-center justify-center gap-4 pt-2 border-t border-dark-border/50 mt-2">
+                <div class="flex flex-wrap items-center justify-center gap-3 pt-2 border-t border-dark-border/50 mt-2">
                   <div class="flex items-center gap-1.5">
                     <div class="w-3 h-3 rounded-sm bg-neon-cyan/25 border border-neon-cyan"></div>
                     <span class="text-[10px] text-gray-500">Actual</span>
                   </div>
                   <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 rounded-sm bg-neon-cyan/5 border border-neon-cyan/10"></div>
-                    <span class="text-[10px] text-gray-500">Con stock</span>
+                    <div class="w-3 h-3 rounded-sm bg-emerald-500/15 border border-emerald-500/30"></div>
+                    <span class="text-[10px] text-gray-500">Libre</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 rounded-sm bg-amber-500/20 border border-amber-500/40"></div>
+                    <span class="text-[10px] text-gray-500">Intermedia</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 rounded-sm bg-red-500/20 border border-red-500/40"></div>
+                    <span class="text-[10px] text-gray-500">Llena</span>
                   </div>
                   <div class="flex items-center gap-1.5">
                     <div class="w-3 h-3 rounded-sm bg-dark-surface/50 border border-dark-border/50"></div>
@@ -496,6 +509,37 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                     <span class="text-[10px]" [class]="u.activo ? 'text-neon-green' : 'text-gray-500'">{{ u.activo ? 'Activa' : 'Inactiva' }}</span>
                   </div>
 
+                  <!-- Estado de ocupación -->
+                  <div class="border-t border-dark-border pt-2">
+                    <h4 class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Estado de ocupación</h4>
+                    <div class="flex gap-1">
+                      <button
+                        (click)="cambiarEstado(u, 'LIBRE')"
+                        class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer"
+                        [class]="u.estadoOcupacion === 'LIBRE'
+                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_6px_rgba(16,185,129,0.2)]'
+                          : 'bg-dark-surface border-dark-border text-gray-500 hover:border-emerald-500/30 hover:text-emerald-400'"
+                      >LIBRE</button>
+                      <button
+                        (click)="cambiarEstado(u, 'INTERMEDIA')"
+                        class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer"
+                        [class]="u.estadoOcupacion === 'INTERMEDIA'
+                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-[0_0_6px_rgba(245,158,11,0.2)]'
+                          : 'bg-dark-surface border-dark-border text-gray-500 hover:border-amber-500/30 hover:text-amber-400'"
+                      >INTERMEDIA</button>
+                      <button
+                        (click)="cambiarEstado(u, 'LLENA')"
+                        class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer"
+                        [class]="u.estadoOcupacion === 'LLENA'
+                          ? 'bg-red-500/20 border-red-500/50 text-red-300 shadow-[0_0_6px_rgba(239,68,68,0.2)]'
+                          : 'bg-dark-surface border-dark-border text-gray-500 hover:border-red-500/30 hover:text-red-400'"
+                      >LLENA</button>
+                    </div>
+                    @if (cambioEstadoOk()) {
+                      <p class="text-[10px] text-emerald-400 mt-1">{{ cambioEstadoOk() }}</p>
+                    }
+                  </div>
+
                   <!-- Productos en esta ubicación -->
                   <div class="border-t border-dark-border pt-2">
                     <h4 class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Productos</h4>
@@ -506,7 +550,11 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                     } @else {
                       <div class="space-y-1.5 max-h-44 overflow-y-auto">
                         @for (p of productosDetalle(); track p.productoId) {
-                          <div class="bg-dark-surface rounded-lg p-2 flex items-start justify-between gap-2">
+                          <button
+                            (click)="abrirAjusteProducto(p)"
+                            class="w-full bg-dark-surface rounded-lg p-2 flex items-start justify-between gap-2 hover:bg-dark-surface/80 hover:ring-1 hover:ring-neon-cyan/30 transition-all cursor-pointer text-left"
+                            title="Click para ajustar stock"
+                          >
                             <div class="min-w-0 flex-1">
                               <p class="text-[11px] font-semibold text-white truncate">{{ p.descripcion }}</p>
                               <div class="flex flex-wrap items-center gap-1 mt-0.5">
@@ -521,11 +569,16 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                                 }
                               </div>
                             </div>
-                            <div class="text-right shrink-0">
-                              <span class="text-sm font-bold font-mono text-neon-cyan">{{ p.cantidad }}</span>
-                              <span class="text-[9px] text-gray-500 block">u.</span>
+                            <div class="text-right shrink-0 flex items-center gap-1.5">
+                              <div>
+                                <span class="text-sm font-bold font-mono text-neon-cyan">{{ p.cantidad }}</span>
+                                <span class="text-[9px] text-gray-500 block">u.</span>
+                              </div>
+                              <svg class="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
                             </div>
-                          </div>
+                          </button>
                         }
                       </div>
                     }
@@ -607,6 +660,107 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
       }
     </div>
 
+    <!-- Modal de ajuste de stock desde ubicación -->
+    @if (productoAjuste(); as pa) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarAjuste()">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-neon-purple/40 shadow-neon animate-fade-in" (click)="$event.stopPropagation()">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Ajustar stock
+            </h3>
+            <button (click)="cerrarAjuste()" class="text-gray-500 hover:text-white cursor-pointer">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="bg-dark-surface rounded-xl p-3 mb-4">
+            <p class="text-sm font-semibold text-white">{{ pa.descripcion }}</p>
+            <div class="flex items-center gap-2 mt-1 text-xs text-gray-400">
+              @if (pa.marcaNombre) { <span>{{ pa.marcaNombre }}</span> }
+              @if (pa.sku) { <span class="font-mono">{{ pa.sku }}</span> }
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-xs text-gray-400">Stock actual:</span>
+              <span class="text-sm font-bold font-mono text-neon-cyan">{{ pa.cantidad }} u.</span>
+              <span class="text-xs text-gray-400 ml-1">en</span>
+              <span class="text-sm font-mono text-neon-purple">{{ ubicacionSel()?.codigo }}</span>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Nueva cantidad</label>
+              <input
+                [(ngModel)]="ajusteCantidad"
+                type="number" min="0"
+                placeholder="Cantidad"
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo</label>
+              <input
+                [(ngModel)]="ajusteMotivo"
+                type="text"
+                placeholder="Motivo del ajuste..."
+                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple text-sm"
+              />
+            </div>
+          </div>
+
+          @if (ajusteError()) {
+            <div class="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ ajusteError() }}</div>
+          }
+          @if (ajusteOk()) {
+            <div class="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs">{{ ajusteOk() }}</div>
+          }
+
+          <div class="mt-5 flex flex-wrap justify-end gap-3">
+            <button (click)="cerrarAjuste()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button
+              [disabled]="guardandoAjuste() || ajusteCantidad == null"
+              (click)="confirmarAjusteStock()"
+              class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50"
+            >
+              {{ guardandoAjuste() ? 'Guardando...' : 'Confirmar ajuste' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Modal de confirmación de guardar ubicación -->
+    @if (confirmarGuardarUbicacion()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="confirmarGuardarUbicacion.set(false)">
+        <div class="glass-panel w-full max-w-sm p-6 rounded-2xl border border-amber-500/40 shadow-neon" (click)="$event.stopPropagation()">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-3">
+            <svg class="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            Confirmar guardado
+          </h3>
+          <p class="text-sm text-gray-300">
+            {{ editandoId() ? '¿Confirmar la modificación de esta ubicación?' : '¿Confirmar la creación de una nueva ubicación?' }}
+          </p>
+          <div class="mt-5 flex flex-wrap justify-end gap-3">
+            <button (click)="confirmarGuardarUbicacion.set(false)" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button (click)="guardarConfirmado()" class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer">
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     <!-- Modal de confirmación de borrado -->
     @if (aEliminar(); as u) {
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelarEliminar()">
@@ -639,6 +793,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
 })
 export class Ubicaciones implements OnInit {
   private service = inject(UbicacionService);
+  private stockService = inject(StockService);
   @ViewChild('formPanel') formPanel?: ElementRef<HTMLElement>;
 
   ubicaciones = signal<Ubicacion[]>([]);
@@ -668,6 +823,16 @@ export class Ubicaciones implements OnInit {
 
   productosDetalle = signal<StockDetalleUbicacion[]>([]);
   cargandoDetalle = signal(false);
+
+  productoAjuste = signal<StockDetalleUbicacion | null>(null);
+  ajusteCantidad: number | null = null;
+  ajusteMotivo = '';
+  guardandoAjuste = signal(false);
+  ajusteError = signal<string | null>(null);
+  ajusteOk = signal<string | null>(null);
+
+  confirmarGuardarUbicacion = signal(false);
+  cambioEstadoOk = signal<string | null>(null);
 
   parseCodigo = parseUbicacionCodigo;
 
@@ -842,7 +1007,8 @@ export class Ubicaciones implements OnInit {
   mapaDeposito = computed(() => {
     const parsed = this.ubicacionesParsed().filter(x => x.parsed);
     const sm = this.stockMap();
-    const pasilloMap = new Map<string, Map<string, boolean>>();
+    const estadoPrioridad: Record<string, number> = { LIBRE: 0, INTERMEDIA: 1, LLENA: 2 };
+    const pasilloMap = new Map<string, Map<string, { tieneStock: boolean; estado: EstadoOcupacion }>>();
 
     for (const item of parsed) {
       const p = item.parsed!.pasillo;
@@ -851,7 +1017,13 @@ export class Ubicaciones implements OnInit {
       const posMap = pasilloMap.get(p)!;
       const s = sm[item.ubicacion.id];
       const tieneStock = (s?.cantidadTotal ?? 0) > 0;
-      if (!posMap.has(pos) || tieneStock) posMap.set(pos, posMap.get(pos) || tieneStock);
+      const estado = item.ubicacion.estadoOcupacion ?? 'LIBRE';
+      const prev = posMap.get(pos);
+      if (!prev || estadoPrioridad[estado] > estadoPrioridad[prev.estado]) {
+        posMap.set(pos, { tieneStock: prev?.tieneStock || tieneStock, estado });
+      } else if (tieneStock && !prev.tieneStock) {
+        posMap.set(pos, { ...prev, tieneStock: true });
+      }
     }
 
     return Array.from(pasilloMap.entries())
@@ -860,7 +1032,7 @@ export class Ubicaciones implements OnInit {
         pasillo,
         posiciones: Array.from(posMap.entries())
           .sort(([a], [b]) => a.localeCompare(b))
-          .map(([pos, stock]) => ({ pos, tieneStock: stock })),
+          .map(([pos, data]) => ({ pos, tieneStock: data.tieneStock, estado: data.estado })),
       }));
   });
 
@@ -954,8 +1126,16 @@ export class Ubicaciones implements OnInit {
       return;
     }
     this.error.set(null);
-    this.guardando.set(true);
+    this.confirmarGuardarUbicacion.set(true);
+  }
 
+  guardarConfirmado(): void {
+    this.confirmarGuardarUbicacion.set(false);
+    const codigoFinal = this.editandoId()
+      ? this.codigo.trim()
+      : (this.modoFormAsistido() ? this.codigoGenerado() : this.codigo.trim());
+
+    this.guardando.set(true);
     const req = { codigo: codigoFinal, descripcion: this.descripcion.trim() || null };
     const id = this.editandoId();
     const op = id ? this.service.actualizar(id, req) : this.service.crear(req);
@@ -1001,6 +1181,66 @@ export class Ubicaciones implements OnInit {
       error: (e) => {
         this.error.set(e?.error?.message ?? 'No se pudo eliminar la ubicación');
         this.eliminando.set(false);
+      },
+    });
+  }
+
+  cambiarEstado(u: Ubicacion, estado: EstadoOcupacion): void {
+    if (u.estadoOcupacion === estado) return;
+    this.cambioEstadoOk.set(null);
+    this.service.cambiarEstadoOcupacion(u.id, estado).subscribe({
+      next: (updated) => {
+        this.ubicaciones.update(list => list.map(x => x.id === u.id ? updated : x));
+        this.ubicacionSel.update(sel => sel?.id === u.id ? updated : sel);
+        this.cambioEstadoOk.set('Estado actualizado');
+        setTimeout(() => this.cambioEstadoOk.set(null), 2000);
+      },
+    });
+  }
+
+  abrirAjusteProducto(p: StockDetalleUbicacion): void {
+    this.productoAjuste.set(p);
+    this.ajusteCantidad = p.cantidad;
+    this.ajusteMotivo = '';
+    this.ajusteError.set(null);
+    this.ajusteOk.set(null);
+  }
+
+  cerrarAjuste(): void {
+    this.productoAjuste.set(null);
+    this.ajusteCantidad = null;
+    this.ajusteMotivo = '';
+    this.ajusteError.set(null);
+    this.ajusteOk.set(null);
+  }
+
+  confirmarAjusteStock(): void {
+    const pa = this.productoAjuste();
+    const u = this.ubicacionSel();
+    if (!pa || !u || this.ajusteCantidad == null) return;
+
+    this.guardandoAjuste.set(true);
+    this.ajusteError.set(null);
+    this.ajusteOk.set(null);
+
+    this.stockService.conteo({
+      productoId: pa.productoId,
+      ubicacionId: u.id,
+      cantidadReal: this.ajusteCantidad,
+      motivo: this.ajusteMotivo.trim() || 'Ajuste desde ubicaciones',
+    }).subscribe({
+      next: () => {
+        this.guardandoAjuste.set(false);
+        this.ajusteOk.set('Stock ajustado correctamente');
+        this.cargarDetalle(u.id);
+        this.service.stockResumen().subscribe({ next: (map) => this.stockMap.set(map) });
+        setTimeout(() => {
+          this.cerrarAjuste();
+        }, 1200);
+      },
+      error: (e) => {
+        this.ajusteError.set(e?.error?.message ?? 'No se pudo ajustar el stock');
+        this.guardandoAjuste.set(false);
       },
     });
   }

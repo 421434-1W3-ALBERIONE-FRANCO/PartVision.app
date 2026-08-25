@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from './models';
+import { EstadoOcupacion, StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from './models';
 
 export interface UbicacionInput {
   codigo: string;
@@ -35,6 +35,10 @@ export class UbicacionService {
 
   stockDetalle(ubicacionId: number): Observable<StockDetalleUbicacion[]> {
     return this.http.get<StockDetalleUbicacion[]>(`${this.base}/${ubicacionId}/stock-detalle`);
+  }
+
+  cambiarEstadoOcupacion(id: number, estado: EstadoOcupacion): Observable<Ubicacion> {
+    return this.http.patch<Ubicacion>(`${this.base}/${id}/estado-ocupacion`, null, { params: { estado } });
   }
 
   eliminar(id: number): Observable<void> {

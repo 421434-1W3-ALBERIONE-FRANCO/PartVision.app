@@ -99,6 +99,8 @@ export interface Movimiento {
   fecha: string | null;
 }
 
+export type EstadoOcupacion = 'LIBRE' | 'INTERMEDIA' | 'LLENA';
+
 export interface Ubicacion {
   id: number;
   tipo: string | null;
@@ -107,6 +109,7 @@ export interface Ubicacion {
   path: string;
   activo: boolean;
   parentId: number | null;
+  estadoOcupacion: EstadoOcupacion;
 }
 
 export interface StockPorUbicacion {

@@ -5,6 +5,7 @@ import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.inventory.repository.MovimientoStockRepository;
 import com.partvision.inventory.repository.StockRepository;
+import com.partvision.location.domain.EstadoOcupacion;
 import com.partvision.location.domain.Ubicacion;
 import com.partvision.location.dto.StockDetalleUbicacionResponse;
 import com.partvision.location.dto.StockPorUbicacionResponse;
@@ -133,6 +134,13 @@ public class UbicacionService {
                         (String) row[4],
                         ((Number) row[5]).intValue()))
                 .toList();
+    }
+
+    @Transactional
+    public UbicacionResponse cambiarEstadoOcupacion(Long id, EstadoOcupacion estado) {
+        Ubicacion ubicacion = getEntity(id);
+        ubicacion.setEstadoOcupacion(estado);
+        return UbicacionResponse.from(ubicacionRepository.save(ubicacion));
     }
 
     private void validarCodigoLibre(String codigo, Long idActual) {

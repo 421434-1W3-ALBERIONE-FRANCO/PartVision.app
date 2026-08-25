@@ -1,5 +1,6 @@
 package com.partvision.location.dto;
 
+import com.partvision.location.domain.EstadoOcupacion;
 import com.partvision.location.domain.TipoUbicacion;
 import com.partvision.location.domain.Ubicacion;
 
@@ -10,7 +11,8 @@ public record UbicacionResponse(
         String descripcion,
         String path,
         boolean activo,
-        Long parentId
+        Long parentId,
+        EstadoOcupacion estadoOcupacion
 ) {
     public static UbicacionResponse from(Ubicacion ubicacion) {
         Ubicacion parent = ubicacion.getParent();
@@ -21,6 +23,7 @@ public record UbicacionResponse(
                 ubicacion.getDescripcion(),
                 ubicacion.getPath(),
                 ubicacion.isActivo(),
-                parent == null ? null : parent.getId());
+                parent == null ? null : parent.getId(),
+                ubicacion.getEstadoOcupacion());
     }
 }
