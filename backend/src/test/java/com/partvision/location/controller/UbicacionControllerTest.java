@@ -5,6 +5,7 @@ import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.common.exception.ResourceNotFoundException;
+import com.partvision.location.domain.EstadoOcupacion;
 import com.partvision.location.domain.TipoUbicacion;
 import com.partvision.location.dto.UbicacionResponse;
 import com.partvision.location.service.UbicacionService;
@@ -43,7 +44,7 @@ class UbicacionControllerTest {
     @Test
     void create_devuelve201() throws Exception {
         when(ubicacionService.create(any()))
-                .thenReturn(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null));
+                .thenReturn(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null, EstadoOcupacion.LIBRE));
 
         mvc.perform(post("/api/v1/ubicaciones")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -56,7 +57,7 @@ class UbicacionControllerTest {
     void create_sinTipo_devuelve201() throws Exception {
         // El tipo ahora es opcional (modelo plano): crear sin tipo es valido.
         when(ubicacionService.create(any()))
-                .thenReturn(new UbicacionResponse(1L, null, "A", null, "A", true, null));
+                .thenReturn(new UbicacionResponse(1L, null, "A", null, "A", true, null, EstadoOcupacion.LIBRE));
 
         mvc.perform(post("/api/v1/ubicaciones")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -77,7 +78,7 @@ class UbicacionControllerTest {
     @Test
     void findById_devuelve200() throws Exception {
         when(ubicacionService.findById(1L))
-                .thenReturn(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null));
+                .thenReturn(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null, EstadoOcupacion.LIBRE));
 
         mvc.perform(get("/api/v1/ubicaciones/1"))
                 .andExpect(status().isOk())
@@ -95,7 +96,7 @@ class UbicacionControllerTest {
     @Test
     void findRaices_devuelve200() throws Exception {
         when(ubicacionService.findRaices())
-                .thenReturn(List.of(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null)));
+                .thenReturn(List.of(new UbicacionResponse(1L, TipoUbicacion.DEPOSITO, "A", null, "A", true, null, EstadoOcupacion.LIBRE)));
 
         mvc.perform(get("/api/v1/ubicaciones"))
                 .andExpect(status().isOk())
@@ -105,7 +106,7 @@ class UbicacionControllerTest {
     @Test
     void findHijos_devuelve200() throws Exception {
         when(ubicacionService.findHijos(1L))
-                .thenReturn(List.of(new UbicacionResponse(2L, TipoUbicacion.PASILLO, "1", null, "A/1", true, 1L)));
+                .thenReturn(List.of(new UbicacionResponse(2L, TipoUbicacion.PASILLO, "1", null, "A/1", true, 1L, EstadoOcupacion.LIBRE)));
 
         mvc.perform(get("/api/v1/ubicaciones/1/hijos"))
                 .andExpect(status().isOk())
