@@ -39,4 +39,14 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
             "WHERE s.ubicacion.id = :ubicacionId AND s.cantidad > 0 " +
             "ORDER BY s.cantidad DESC")
     List<Object[]> findStockDetalleByUbicacionId(@Param("ubicacionId") Long ubicacionId);
+
+    @Query("SELECT DISTINCT s.ubicacion.id FROM Stock s " +
+            "LEFT JOIN s.producto.marca m " +
+            "LEFT JOIN s.producto.codigos pc " +
+            "WHERE s.cantidad > 0 AND (" +
+            "LOWER(s.producto.descripcion) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+            "LOWER(s.producto.sku) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+            "LOWER(m.nombre) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+            "LOWER(pc.codigo) LIKE LOWER(CONCAT('%', :q, '%')))")
+    List<Long> findUbicacionIdsByProductoTexto(@Param("q") String q);
 }

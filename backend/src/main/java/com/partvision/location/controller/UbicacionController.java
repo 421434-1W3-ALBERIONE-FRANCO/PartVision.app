@@ -74,6 +74,11 @@ public class UbicacionController {
         return ResponseEntity.ok(ubicacionService.stockDetalle(id));
     }
 
+    @GetMapping("/buscar-por-producto")
+    public ResponseEntity<List<Long>> buscarPorProducto(@RequestParam String q) {
+        return ResponseEntity.ok(ubicacionService.buscarUbicacionesPorProducto(q));
+    }
+
     @PatchMapping("/{id}/estado-ocupacion")
     public ResponseEntity<UbicacionResponse> cambiarEstadoOcupacion(
             @PathVariable Long id,

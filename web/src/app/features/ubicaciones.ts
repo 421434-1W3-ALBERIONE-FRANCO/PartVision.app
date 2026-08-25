@@ -1,6 +1,8 @@
-import { Component, OnInit, inject, signal, computed, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, ViewChild, ElementRef, effect, DestroyRef } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject, debounceTime, distinctUntilChanged, switchMap, of } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { EstadoOcupacion, StockDetalleUbicacion, StockPorUbicacion, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
@@ -86,12 +88,23 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
         </svg>
         <input
           [ngModel]="busqueda()"
-          (ngModelChange)="busqueda.set($event)"
+          (ngModelChange)="onBusquedaChange($event)"
           type="text"
-          placeholder="Buscar ubicación, código o descripción..."
+          placeholder="Buscar ubicación, producto, SKU o marca..."
           class="w-full pl-10 pr-4 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm"
         />
+        @if (buscandoProducto()) {
+          <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neon-cyan animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        }
       </div>
+      @if (busqueda() && matchPorProducto().size > 0) {
+        <p class="text-xs text-neon-purple -mt-4">
+          Se encontraron {{ matchPorProducto().size }} ubicaciones con productos que coinciden con "{{ busqueda() }}"
+        </p>
+      }
 
       <!-- Métricas -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -834,6 +847,11 @@ export class Ubicaciones implements OnInit {
   confirmarGuardarUbicacion = signal(false);
   cambioEstadoOk = signal<string | null>(null);
 
+  matchPorProducto = signal<Set<number>>(new Set());
+  buscandoProducto = signal(false);
+  private busqueda$ = new Subject<string>();
+  private destroyRef = inject(DestroyRef);
+
   parseCodigo = parseUbicacionCodigo;
 
   codigoGenerado = computed(() => {
@@ -856,9 +874,11 @@ export class Ubicaciones implements OnInit {
   ubicacionesFiltradas = computed(() => {
     const q = this.busqueda().toLowerCase().trim();
     if (!q) return this.ubicaciones();
+    const prodMatch = this.matchPorProducto();
     return this.ubicaciones().filter(u =>
       u.codigo.toLowerCase().includes(q) ||
-      (u.descripcion?.toLowerCase().includes(q) ?? false)
+      (u.descripcion?.toLowerCase().includes(q) ?? false) ||
+      prodMatch.has(u.id)
     );
   });
 
@@ -896,10 +916,12 @@ export class Ubicaciones implements OnInit {
   pasillosFiltrados = computed(() => {
     const parsed = this.ubicacionesParsed().filter(x => x.parsed);
     const q = this.busqueda().toLowerCase().trim();
+    const prodMatch = this.matchPorProducto();
     const filtrados = q
       ? parsed.filter(x =>
           x.ubicacion.codigo.toLowerCase().includes(q) ||
-          (x.ubicacion.descripcion?.toLowerCase().includes(q) ?? false))
+          (x.ubicacion.descripcion?.toLowerCase().includes(q) ?? false) ||
+          prodMatch.has(x.ubicacion.id))
       : parsed;
 
     const groups = new Map<string, typeof filtrados>();
@@ -1038,6 +1060,27 @@ export class Ubicaciones implements OnInit {
 
   ngOnInit(): void {
     this.cargar();
+    this.busqueda$.pipe(
+      debounceTime(350),
+      distinctUntilChanged(),
+      switchMap(q => {
+        if (!q.trim()) {
+          this.buscandoProducto.set(false);
+          return of([]);
+        }
+        this.buscandoProducto.set(true);
+        return this.service.buscarPorProducto(q.trim());
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(ids => {
+      this.matchPorProducto.set(new Set(ids));
+      this.buscandoProducto.set(false);
+    });
+  }
+
+  onBusquedaChange(val: string): void {
+    this.busqueda.set(val);
+    this.busqueda$.next(val);
   }
 
   cargar(): void {

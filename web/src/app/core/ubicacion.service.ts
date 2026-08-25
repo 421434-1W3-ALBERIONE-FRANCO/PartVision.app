@@ -37,6 +37,10 @@ export class UbicacionService {
     return this.http.get<StockDetalleUbicacion[]>(`${this.base}/${ubicacionId}/stock-detalle`);
   }
 
+  buscarPorProducto(q: string): Observable<number[]> {
+    return this.http.get<number[]>(`${this.base}/buscar-por-producto`, { params: { q } });
+  }
+
   cambiarEstadoOcupacion(id: number, estado: EstadoOcupacion): Observable<Ubicacion> {
     return this.http.patch<Ubicacion>(`${this.base}/${id}/estado-ocupacion`, null, { params: { estado } });
   }

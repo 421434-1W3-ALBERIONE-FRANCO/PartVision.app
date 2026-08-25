@@ -136,6 +136,12 @@ public class UbicacionService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<Long> buscarUbicacionesPorProducto(String texto) {
+        if (texto == null || texto.isBlank()) return List.of();
+        return stockRepository.findUbicacionIdsByProductoTexto(texto.trim());
+    }
+
     @Transactional
     public UbicacionResponse cambiarEstadoOcupacion(Long id, EstadoOcupacion estado) {
         Ubicacion ubicacion = getEntity(id);
