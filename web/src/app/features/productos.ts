@@ -1,5 +1,6 @@
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 
@@ -13,7 +14,7 @@ import { UbicacionService } from '../core/ubicacion.service';
 @Component({
   selector: 'app-productos',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, DecimalPipe],
   template: `
     <div class="space-y-8 animate-fade-in max-w-7xl mx-auto">
       <!-- Header -->
@@ -326,17 +327,17 @@ import { UbicacionService } from '../core/ubicacion.service';
                   </th>
                   <th class="py-3 px-4">Ubicación</th>
                   <th class="py-3 px-4 text-right">Cantidad</th>
-                  <th class="py-3 px-4 cursor-pointer select-none group" (click)="toggleSort('estado')">
+                  <th class="py-3 px-4 text-right">P. Costo</th>
+                  <th class="py-3 px-4 text-right">P. Venta</th>
+                  <th class="py-3 px-2 text-center cursor-pointer select-none group w-8" (click)="toggleSort('estado')" title="Estado">
                     <span class="inline-flex items-center gap-1 transition-colors" [class.text-neon-cyan]="sortColumn() === 'estado'">
-                      Estado
+                      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
                       @if (sortColumn() === 'estado') {
                         <span class="text-[10px]">{{ sortDir() === 'asc' ? '▲' : '▼' }}</span>
-                      } @else {
-                        <span class="text-[10px] opacity-0 group-hover:opacity-50 transition-opacity">▲</span>
                       }
                     </span>
                   </th>
-                  <th class="py-3 px-4 text-right">Acciones</th>
+                  <th class="py-3 px-2 w-8"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-dark-border/50">
@@ -375,16 +376,23 @@ import { UbicacionService } from '../core/ubicacion.service';
                         [class]="p.stockTotal > 0 ? 'text-neon-green' : 'text-gray-500'">
                       {{ p.stockTotal }}
                     </td>
-                    <td class="py-3.5 px-4">
-                      <span class="px-2.5 py-1 rounded-md text-xs font-semibold"
-                            [class]="p.estado === 'ACTIVO' ? 'neon-badge-green' : 'bg-gray-500/15 text-gray-400 border border-gray-500/30'">
-                        {{ p.estado }}
+                    <td class="py-3.5 px-4 text-right font-mono text-sm"
+                        [class]="p.precioCosto ? 'text-gray-300' : 'text-gray-600'">
+                      {{ p.precioCosto ? '$' + (p.precioCosto | number:'1.2-2') : '—' }}
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-mono font-bold text-sm"
+                        [class]="p.precioVenta ? 'text-amber-400' : 'text-gray-600'">
+                      {{ p.precioVenta ? '$' + (p.precioVenta | number:'1.2-2') : '—' }}
+                    </td>
+                    <td class="py-3.5 px-2 text-center" [title]="p.estado">
+                      <span class="inline-block w-2.5 h-2.5 rounded-full"
+                            [class]="p.estado === 'ACTIVO' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]' : 'bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]'">
                       </span>
                     </td>
-                    <td class="py-3.5 px-4 text-right">
+                    <td class="py-3.5 px-2 text-center">
                       <button
                         (click)="abrirMenu(p)"
-                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-dark-surface border border-dark-border hover:border-neon-cyan text-neon-cyan text-lg font-bold cursor-pointer"
+                        class="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-dark-surface border border-dark-border hover:border-neon-cyan text-neon-cyan text-sm font-bold cursor-pointer"
                         title="Acciones"
                       >
                         +
@@ -393,7 +401,7 @@ import { UbicacionService } from '../core/ubicacion.service';
                   </tr>
                   @if (agregandoCodigoId() === p.id) {
                     <tr class="bg-dark-surface/40">
-                      <td colspan="8" class="py-3 px-4">
+                      <td colspan="10" class="py-3 px-4">
                         <div class="flex flex-wrap items-center gap-2">
                           <span class="text-xs text-gray-400">Código de barras para <span class="text-white font-semibold">{{ p.descripcion }}</span>:</span>
                           <input

@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Page, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
+import { ConfiguracionPrecio, Page, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
@@ -68,5 +68,13 @@ export class ProductoService {
 
   sincronizarPrecios(): Observable<SyncResult> {
     return this.http.post<SyncResult>(`${API_BASE_URL}/precios/sync`, {});
+  }
+
+  listarConfigPrecios(): Observable<ConfiguracionPrecio[]> {
+    return this.http.get<ConfiguracionPrecio[]>(`${API_BASE_URL}/precios/configuracion`);
+  }
+
+  actualizarConfigPrecio(id: number, margen: number, activo: boolean): Observable<ConfiguracionPrecio> {
+    return this.http.put<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion/${id}`, { margen, activo });
   }
 }

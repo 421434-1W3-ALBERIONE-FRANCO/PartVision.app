@@ -2,8 +2,10 @@ package com.partvision.pricing;
 
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.pricing.domain.ConfiguracionPrecio;
 import com.partvision.pricing.dto.ProveedorProducto;
 import com.partvision.pricing.dto.SyncResultResponse;
+import com.partvision.pricing.repository.ConfiguracionPrecioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class PrecioSyncService {
     private final ProductoRepository productoRepository;
     private final ProveedorApiClient apiClient;
     private final ProveedorProperties props;
+    private final ConfiguracionPrecioRepository configuracionRepo;
 
     private final AtomicBoolean sincronizando = new AtomicBoolean(false);
 
@@ -55,7 +58,10 @@ public class PrecioSyncService {
         log.info("Iniciando sincronización de precios: {} productos con SKU", productosConSku.size());
 
         String token = apiClient.login();
-        BigDecimal multiplicador = props.multiplicadorMargen();
+        BigDecimal margenDb = configuracionRepo.findByProveedorIgnoreCase("Autopartes del Sur")
+                .map(ConfiguracionPrecio::getMargen)
+                .orElse(props.margen());
+        BigDecimal multiplicador = BigDecimal.ONE.add(margenDb.divide(BigDecimal.valueOf(100)));
 
         int actualizados = 0;
         int noEncontrados = 0;
@@ -93,7 +99,7 @@ public class PrecioSyncService {
 
         String mensaje = String.format(
                 "Sincronización completada: %d actualizados, %d no encontrados, %d errores (margen %.2f%%)",
-                actualizados, noEncontrados, errores, props.margen());
+                actualizados, noEncontrados, errores, margenDb);
 
         log.info(mensaje);
         return new SyncResultResponse(productosConSku.size(), actualizados, noEncontrados, errores, mensaje);

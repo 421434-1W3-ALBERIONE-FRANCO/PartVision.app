@@ -14,6 +14,7 @@ import { CargaIa } from './features/carga-ia';
 import { Configuracion } from './features/configuracion';
 import { Importacion } from './features/importacion';
 import { Usuarios } from './features/usuarios';
+import { Precios } from './features/precios';
 import { Seguridad } from './features/seguridad';
 
 export const routes: Routes = [
@@ -34,6 +35,7 @@ export const routes: Routes = [
       { path: 'extracciones', component: Extracciones },
       { path: 'seguridad', component: Seguridad },
       { path: 'configuracion', component: Configuracion },
+      { path: 'precios', component: Precios, canActivate: [adminGuard] },
       { path: 'importacion', component: Importacion, canActivate: [adminGuard] },
       { path: 'usuarios', component: Usuarios, canActivate: [adminGuard] },
     ],

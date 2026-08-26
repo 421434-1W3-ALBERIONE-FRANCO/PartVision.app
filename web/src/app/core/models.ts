@@ -169,6 +169,14 @@ export interface SugerenciaAccion {
   candidatos: CandidatoCoincidencia[];
 }
 
+export interface ConfiguracionPrecio {
+  id: number;
+  proveedor: string;
+  margen: number;
+  activo: boolean;
+  updatedAt: string;
+}
+
 export interface ImportResult {
   totalFilas: number;
   importados: number;
