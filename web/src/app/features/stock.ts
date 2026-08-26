@@ -9,7 +9,7 @@ import { StockService } from '../core/stock.service';
 import { ProductoService } from '../core/producto.service';
 import { UbicacionService } from '../core/ubicacion.service';
 
-type Vista = 'cargados' | 'sin-cargar' | 'historial';
+type Vista = 'productos' | 'historial';
 type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
 @Component({
@@ -38,17 +38,11 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
       <!-- Tabs principales -->
       <div class="flex items-center gap-1 bg-dark-surface/60 rounded-xl p-1 w-fit overflow-x-auto">
-        <button (click)="cambiarVista('cargados')"
-          [class]="vista() === 'cargados'
+        <button (click)="cambiarVista('productos')"
+          [class]="vista() === 'productos'
             ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-neon-green/15 text-neon-green border border-neon-green/30 transition-all cursor-pointer whitespace-nowrap'
             : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
-          Productos cargados
-        </button>
-        <button (click)="cambiarVista('sin-cargar')"
-          [class]="vista() === 'sin-cargar'
-            ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 transition-all cursor-pointer whitespace-nowrap'
-            : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
-          Sin cargar
+          Productos
         </button>
         <button (click)="cambiarVista('historial')"
           [class]="vista() === 'historial'
@@ -58,8 +52,8 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
         </button>
       </div>
 
-      <!-- ==================== PRODUCTOS CARGADOS ==================== -->
-      @if (vista() === 'cargados') {
+      <!-- ==================== PRODUCTOS ==================== -->
+      @if (vista() === 'productos') {
         <!-- Buscador -->
         <div class="flex flex-col sm:flex-row gap-3 items-end">
           <div class="flex-1">
@@ -85,18 +79,17 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
         }
 
         @if (cargandoLista()) {
-          <div class="text-center py-12 text-gray-500 text-sm">Cargando productos con stock...</div>
-        } @else if (listaCargados().length === 0) {
+          <div class="text-center py-12 text-gray-500 text-sm">Cargando productos...</div>
+        } @else if (listaProductos().length === 0) {
           <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
             @if (filtroTexto) {
-              <p class="text-gray-400">No se encontraron productos con stock para "{{ filtroTexto }}".</p>
+              <p class="text-gray-400">No se encontraron productos para "{{ filtroTexto }}".</p>
             } @else {
-              <p class="text-gray-400">No hay productos con stock cargado.</p>
-              <p class="text-xs text-gray-500 mt-2">Seleccioná un producto desde "Sin cargar" para registrar una entrada.</p>
+              <p class="text-gray-400">No hay productos registrados en el catálogo.</p>
             }
           </div>
         } @else {
-          <!-- Tabla de productos con stock -->
+          <!-- Tabla unificada de productos -->
           <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
             <div class="overflow-x-auto">
               <table class="w-full text-left text-sm border-collapse min-w-[700px]">
@@ -111,7 +104,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-dark-border/50">
-                  @for (p of listaCargados(); track p.id) {
+                  @for (p of listaProductos(); track p.id) {
                     <tr class="hover:bg-dark-surface/40 transition-colors"
                         [class.bg-neon-cyan/5]="productoSel()?.id === p.id">
                       <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
@@ -123,20 +116,28 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                           <span class="text-gray-500 text-xs">—</span>
                         }
                       </td>
-                      <td class="py-3 px-4 font-mono font-extrabold text-neon-green text-right">{{ p.stockTotal }} u.</td>
+                      <td class="py-3 px-4 font-mono font-extrabold text-right"
+                          [class]="p.stockTotal > 0 ? 'text-neon-green' : 'text-gray-500'">
+                        {{ p.stockTotal }} u.
+                      </td>
                       <td class="py-3 px-4 text-xs text-gray-300">
-                        @for (u of p.ubicaciones; track u.codigo; let i = $index) {
-                          @if (i < 3) {
-                            <span class="font-mono text-neon-purple">{{ u.codigo }}</span><span class="text-gray-500">({{ u.cantidad }})</span>@if (i < p.ubicaciones.length - 1 && i < 2) {<span class="text-gray-600">, </span>}
+                        @if (p.ubicaciones.length > 0) {
+                          @for (u of p.ubicaciones; track u.codigo; let i = $index) {
+                            @if (i < 3) {
+                              <span class="font-mono text-neon-purple">{{ u.codigo }}</span><span class="text-gray-500">({{ u.cantidad }})</span>@if (i < p.ubicaciones.length - 1 && i < 2) {<span class="text-gray-600">, </span>}
+                            }
                           }
-                        }
-                        @if (p.ubicaciones.length > 3) {
-                          <span class="text-gray-500"> +{{ p.ubicaciones.length - 3 }}</span>
+                          @if (p.ubicaciones.length > 3) {
+                            <span class="text-gray-500"> +{{ p.ubicaciones.length - 3 }}</span>
+                          }
+                        } @else {
+                          <span class="text-gray-500">Sin ubicación</span>
                         }
                       </td>
                       <td class="py-3 px-4 text-center whitespace-nowrap">
-                        <button (click)="seleccionar(p)" class="text-xs font-semibold text-neon-cyan hover:underline cursor-pointer">
-                          {{ productoSel()?.id === p.id ? 'Seleccionado' : 'Gestionar' }}
+                        <button (click)="seleccionar(p)" class="text-xs font-semibold cursor-pointer"
+                          [class]="p.stockTotal > 0 ? 'text-neon-cyan hover:underline' : 'text-amber-400 hover:underline'">
+                          {{ p.stockTotal > 0 ? 'Gestionar' : 'Cargar stock' }}
                         </button>
                       </td>
                     </tr>
@@ -423,103 +424,6 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
         }
       }
 
-      <!-- ==================== SIN CARGAR ==================== -->
-      @if (vista() === 'sin-cargar') {
-        <!-- Buscador -->
-        <div class="flex flex-col sm:flex-row gap-3 items-end">
-          <div class="flex-1">
-            <input [(ngModel)]="filtroTexto" (keyup.enter)="buscarEnLista()" (input)="onFiltroInput()" type="text"
-              placeholder="Buscar producto por nombre, SKU o marca..."
-              class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 text-sm" />
-          </div>
-          @if (filtroTexto) {
-            <button (click)="limpiarFiltro()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-400 bg-dark-surface border border-dark-border hover:text-white cursor-pointer transition-colors shrink-0">
-              Limpiar
-            </button>
-          }
-        </div>
-
-        @if (listaError()) {
-          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
-            <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            <span>{{ listaError() }}</span>
-            <button (click)="cargarLista()" class="ml-auto px-3 py-1 rounded-lg text-xs font-semibold neon-button-secondary cursor-pointer shrink-0">Reintentar</button>
-          </div>
-        }
-
-        @if (cargandoLista()) {
-          <div class="text-center py-12 text-gray-500 text-sm">Cargando productos sin stock...</div>
-        } @else if (listaSinCargar().length === 0) {
-          <div class="glass-panel rounded-2xl p-8 border border-dark-border text-center">
-            @if (filtroTexto) {
-              <p class="text-gray-400">No se encontraron productos sin stock para "{{ filtroTexto }}".</p>
-            } @else {
-              <p class="text-gray-400">Todos los productos del catálogo tienen stock cargado.</p>
-            }
-          </div>
-        } @else {
-          <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-sm border-collapse min-w-[600px]">
-                <thead>
-                  <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
-                    <th class="py-3 px-4">SKU</th>
-                    <th class="py-3 px-4">Descripción</th>
-                    <th class="py-3 px-4">Marca</th>
-                    <th class="py-3 px-4">Categoría</th>
-                    <th class="py-3 px-4 text-center">Acción</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-dark-border/50">
-                  @for (p of listaSinCargar(); track p.id) {
-                    <tr class="hover:bg-dark-surface/40 transition-colors">
-                      <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
-                      <td class="py-3 px-4 text-white text-sm max-w-[350px] truncate">{{ p.descripcion }}</td>
-                      <td class="py-3 px-4">
-                        @if (p.marcaNombre) {
-                          <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>
-                        } @else {
-                          <span class="text-gray-500 text-xs">—</span>
-                        }
-                      </td>
-                      <td class="py-3 px-4 text-gray-400 text-xs">{{ p.categoriaNombre || '—' }}</td>
-                      <td class="py-3 px-4 text-center">
-                        <button (click)="cargarDesde(p)"
-                          class="px-3 py-1.5 rounded-lg text-xs font-semibold neon-button-primary cursor-pointer">
-                          Cargar stock
-                        </button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Paginación -->
-            @if (totalPaginas() > 1) {
-              <div class="flex items-center justify-between px-4 py-3 border-t border-dark-border bg-dark-surface/20">
-                <span class="text-xs text-gray-500">
-                  Página {{ paginaActual() + 1 }} de {{ totalPaginas() }} · {{ totalElementos() }} productos sin stock
-                </span>
-                <div class="flex gap-2">
-                  <button [disabled]="paginaActual() === 0" (click)="irPagina(paginaActual() - 1)"
-                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
-                    ← Anterior
-                  </button>
-                  <button [disabled]="paginaActual() >= totalPaginas() - 1" (click)="irPagina(paginaActual() + 1)"
-                    class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-dark-surface border border-dark-border text-gray-300 hover:border-neon-cyan disabled:opacity-30 cursor-pointer transition-colors">
-                    Siguiente →
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
-        }
-
-      }
-
       <!-- ==================== HISTORIAL ==================== -->
       @if (vista() === 'historial') {
         <!-- Buscador -->
@@ -657,68 +561,6 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
       }
     </div>
 
-    <!-- Modal: carga rápida de stock -->
-    @if (vista() === 'sin-cargar' && productoSel(); as p) {
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarModalCarga()">
-        <div class="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-neon-purple/40 shadow-neon space-y-5 animate-fade-in" (click)="$event.stopPropagation()">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-xs uppercase tracking-wider text-gray-400">Cargando stock para</p>
-              <p class="text-base font-bold text-white truncate">{{ p.descripcion }}</p>
-              <p class="text-sm font-mono text-neon-cyan">SKU {{ p.sku || '—' }}</p>
-            </div>
-            <button (click)="cerrarModalCarga()"
-              class="text-gray-500 hover:text-white cursor-pointer p-1 shrink-0 transition-colors">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación</label>
-              <select [(ngModel)]="opUbicacionId"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-cyan text-sm">
-                <option [ngValue]="null" disabled>Elegí ubicación…</option>
-                @for (u of ubicaciones(); track u.id) {
-                  <option [ngValue]="u.id">{{ u.codigo }}{{ u.descripcion ? ' — ' + u.descripcion : '' }}</option>
-                }
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Cantidad</label>
-              <input [(ngModel)]="opCantidad" type="number" min="1" placeholder="0"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white font-mono focus:outline-none focus:border-neon-cyan text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Motivo (opcional)</label>
-              <input [(ngModel)]="opMotivo" type="text" placeholder="Ej: carga inicial"
-                class="w-full px-3.5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
-            </div>
-          </div>
-
-          @if (opError()) {
-            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{{ opError() }}</div>
-          }
-          @if (opOk()) {
-            <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-xs">{{ opOk() }}</div>
-          }
-
-          <div class="flex justify-end gap-3 pt-2 border-t border-dark-border">
-            <button (click)="cerrarModalCarga()"
-              class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 transition-colors cursor-pointer">
-              Cancelar
-            </button>
-            <button [disabled]="guardandoOp()" (click)="ejecutarEntradaRapida()"
-              class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
-              {{ guardandoOp() ? 'Guardando...' : 'Registrar entrada' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    }
-
     <!-- Modal: confirmar descarte de cambios -->
     @if (mostrarConfirmDescarte()) {
       <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" (click)="cancelarDescarte()">
@@ -787,15 +629,14 @@ export class Stock implements OnInit {
   private destroyRef = inject(DestroyRef);
   private queryChanged = new Subject<string>();
 
-  vista = signal<Vista>('cargados');
+  vista = signal<Vista>('productos');
 
-  // Filtro de texto (tabs cargados/sin-cargar)
+  // Filtro de texto
   filtroTexto = '';
   private filtroChanged = new Subject<string>();
 
-  // Listas paginadas
-  listaCargados = signal<ProductoListItem[]>([]);
-  listaSinCargar = signal<ProductoListItem[]>([]);
+  // Lista paginada unificada
+  listaProductos = signal<ProductoListItem[]>([]);
   cargandoLista = signal(false);
   paginaActual = signal(0);
   totalPaginas = signal(0);
@@ -867,7 +708,7 @@ export class Stock implements OnInit {
     interval(30000)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        if (this.vista() !== 'historial' && !this.productoSel()) {
+        if (this.vista() === 'productos' && !this.productoSel()) {
           this.cargarLista();
         }
       });
@@ -917,18 +758,12 @@ export class Stock implements OnInit {
   }
 
   cargarLista(): void {
-    const v = this.vista();
-    if (v === 'historial') return;
+    if (this.vista() === 'historial') return;
     this.cargandoLista.set(true);
-    const conStock = v === 'cargados';
     const q = this.filtroTexto.trim() || undefined;
-    this.productos.listar(this.paginaActual(), 20, conStock, q).subscribe({
+    this.productos.listar(this.paginaActual(), 20, undefined, q).subscribe({
       next: (page) => {
-        if (conStock) {
-          this.listaCargados.set(page.content);
-        } else {
-          this.listaSinCargar.set(page.content);
-        }
+        this.listaProductos.set(page.content);
         this.totalPaginas.set(page.totalPages);
         this.totalElementos.set(page.totalElements);
         this.listaError.set(null);
@@ -1008,16 +843,6 @@ export class Stock implements OnInit {
     this.opTab.set('entrada');
     this.cancelarEdicionCantidad();
     this.refrescarStock(p.id);
-  }
-
-  cargarDesde(p: ProductoListItem): void {
-    this.productoSel.set(p);
-    this.opTab.set('entrada');
-    this.opOk.set(null);
-    this.opError.set(null);
-    this.opUbicacionId = null;
-    this.opCantidad = null;
-    this.opMotivo = '';
   }
 
   deseleccionar(): void {
@@ -1114,29 +939,6 @@ export class Stock implements OnInit {
         error: (e) => this.onOpError(e),
       });
     }
-  }
-
-  ejecutarEntradaRapida(): void {
-    const p = this.productoSel();
-    if (!p) return;
-    this.opError.set(null);
-    this.opOk.set(null);
-    if (!this.opUbicacionId) { this.opError.set('Elegí una ubicación.'); return; }
-    if (!this.opCantidad || this.opCantidad < 1) { this.opError.set('La cantidad debe ser ≥ 1.'); return; }
-    this.guardandoOp.set(true);
-    this.service.entrada({
-      productoId: p.id, ubicacionId: this.opUbicacionId, cantidad: this.opCantidad,
-      motivo: this.opMotivo.trim() || undefined,
-    }).subscribe({
-      next: () => {
-        this.opOk.set(`+${this.opCantidad} u. cargadas en stock.`);
-        this.opCantidad = null;
-        this.opMotivo = '';
-        this.guardandoOp.set(false);
-        this.cargarLista();
-      },
-      error: (e) => this.onOpError(e),
-    });
   }
 
   // -- Edición inline de stock --
