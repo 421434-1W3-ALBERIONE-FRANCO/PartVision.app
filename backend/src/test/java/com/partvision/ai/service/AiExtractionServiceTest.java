@@ -66,7 +66,7 @@ class AiExtractionServiceTest {
 
     private ProductoResponse productoResp() {
         return new ProductoResponse(50L, null, null, null, null, null, "Filtro de aceite",
-                ProductoEstado.ACTIVO, Map.of(), List.of(), null);
+                ProductoEstado.ACTIVO, Map.of(), List.of(), null, null, null, null, null);
     }
 
     @Test
@@ -169,7 +169,7 @@ class AiExtractionServiceTest {
         List<ProductoCodigoResponse> cs = java.util.Arrays.stream(codigos)
                 .map(c -> new ProductoCodigoResponse(1L, c, "BARRA")).toList();
         return new ProductoResponse(id, null, null, null, null, null, desc,
-                ProductoEstado.ACTIVO, Map.of(), cs, null);
+                ProductoEstado.ACTIVO, Map.of(), cs, null, null, null, null, null);
     }
 
     @Test

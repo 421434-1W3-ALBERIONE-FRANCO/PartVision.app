@@ -5,6 +5,8 @@ import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.domain.ProductoEstado;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -19,7 +21,11 @@ public record ProductoResponse(
         ProductoEstado estado,
         Map<String, Object> detallesExtra,
         List<ProductoCodigoResponse> codigos,
-        String proveedor
+        String proveedor,
+        BigDecimal precioCosto,
+        BigDecimal precioLista,
+        BigDecimal precioVenta,
+        LocalDateTime precioActualizadoEn
 ) {
     public static ProductoResponse from(Producto producto) {
         Marca marca = producto.getMarca();
@@ -38,6 +44,10 @@ public record ProductoResponse(
                 producto.getEstado(),
                 producto.getDetallesExtra(),
                 codigos,
-                producto.getProveedor());
+                producto.getProveedor(),
+                producto.getPrecioCosto(),
+                producto.getPrecioLista(),
+                producto.getPrecioVenta(),
+                producto.getPrecioActualizadoEn());
     }
 }

@@ -48,6 +48,10 @@ export interface Producto {
   estado: string;
   detallesExtra: Record<string, unknown>;
   codigos: ProductoCodigo[];
+  precioCosto: number | null;
+  precioLista: number | null;
+  precioVenta: number | null;
+  precioActualizadoEn: string | null;
 }
 
 export interface ProductoStockUbicacion {
@@ -64,6 +68,16 @@ export interface ProductoListItem {
   categoriaNombre: string | null;
   stockTotal: number;
   ubicaciones: ProductoStockUbicacion[];
+  precioCosto: number | null;
+  precioVenta: number | null;
+}
+
+export interface SyncResult {
+  totalProductos: number;
+  actualizados: number;
+  noEncontrados: number;
+  errores: number;
+  mensaje: string;
 }
 
 export interface StockLinea {

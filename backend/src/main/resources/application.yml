@@ -45,6 +45,11 @@ partvision:
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME:noreply@partvision.com}}
     base-url: ${APP_BASE_URL:http://localhost:4200}
+  proveedor:
+    url: ${PROVEEDOR_API_URL:https://catalogo.autopartesdelsur.com.ar}
+    username: ${PROVEEDOR_API_USERNAME:}
+    password: ${PROVEEDOR_API_PASSWORD:}
+    margen: ${PROVEEDOR_MARGEN:22.5}
   recovery:
     token-expiration-minutes: ${RECOVERY_TOKEN_EXPIRATION_MINUTES:30}
   servlet:

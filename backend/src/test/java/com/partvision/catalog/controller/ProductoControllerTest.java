@@ -49,7 +49,8 @@ class ProductoControllerTest {
 
     private ProductoResponse sampleProducto() {
         return new ProductoResponse(1L, "ABC-123", 5L, "Bosch", 7L, "Filtros",
-                "Filtro de aceite", ProductoEstado.ACTIVO, Map.of("origen", "Argentina"), List.of(), "Autopartes SA");
+                "Filtro de aceite", ProductoEstado.ACTIVO, Map.of("origen", "Argentina"), List.of(), "Autopartes SA",
+                null, null, null, null);
     }
 
     @Test

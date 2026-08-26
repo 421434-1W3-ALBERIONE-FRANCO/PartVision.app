@@ -5,6 +5,7 @@ import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.domain.ProductoEstado;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -19,7 +20,9 @@ public record ProductoListItemResponse(
         String marcaNombre,
         String categoriaNombre,
         int stockTotal,
-        List<StockUbicacion> ubicaciones
+        List<StockUbicacion> ubicaciones,
+        BigDecimal precioCosto,
+        BigDecimal precioVenta
 ) {
     /** Cantidad de un producto en una ubicación (por su código, sin IDs). */
     public record StockUbicacion(String codigo, int cantidad) {
@@ -28,7 +31,7 @@ public record ProductoListItemResponse(
     /** Compat: sin datos de stock (total 0, sin ubicaciones). */
     public ProductoListItemResponse(Long id, String sku, String descripcion, ProductoEstado estado,
                                     String marcaNombre, String categoriaNombre) {
-        this(id, sku, descripcion, estado, marcaNombre, categoriaNombre, 0, List.of());
+        this(id, sku, descripcion, estado, marcaNombre, categoriaNombre, 0, List.of(), null, null);
     }
 
     public static ProductoListItemResponse from(Producto producto) {
@@ -54,6 +57,8 @@ public record ProductoListItemResponse(
                 marca == null ? null : marca.getNombre(),
                 categoria == null ? null : categoria.getNombre(),
                 stockTotal,
-                ubicaciones);
+                ubicaciones,
+                producto.getPrecioCosto(),
+                producto.getPrecioVenta());
     }
 }

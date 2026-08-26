@@ -22,6 +22,8 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -68,6 +70,18 @@ public class Producto extends Auditable {
     @Column(name = "detalles_extra", nullable = false, columnDefinition = "jsonb")
     @Builder.Default
     private Map<String, Object> detallesExtra = new HashMap<>();
+
+    @Column(name = "precio_costo", precision = 12, scale = 2)
+    private BigDecimal precioCosto;
+
+    @Column(name = "precio_lista", precision = 12, scale = 2)
+    private BigDecimal precioLista;
+
+    @Column(name = "precio_venta", precision = 12, scale = 2)
+    private BigDecimal precioVenta;
+
+    @Column(name = "precio_actualizado_en")
+    private LocalDateTime precioActualizadoEn;
 
     @OneToMany(mappedBy = "producto", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default

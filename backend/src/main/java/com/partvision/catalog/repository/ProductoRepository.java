@@ -40,6 +40,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
     @Query("select distinct p from Producto p left join p.codigos c where c.codigo = :codigo or p.sku = :codigo")
     Optional<Producto> findByCodigo(@Param("codigo") String codigo);
 
+    List<Producto> findBySkuIsNotNull();
+
     // La busqueda por texto ahora es por palabras (token-AND, cualquier orden): ver
     // ProductoRepositoryCustom#buscarInteligente / ProductoRepositoryImpl.
 

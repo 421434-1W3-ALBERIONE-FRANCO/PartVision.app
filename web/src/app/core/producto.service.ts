@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Page, Producto, ProductoCodigo, ProductoListItem } from './models';
+import { Page, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
@@ -64,5 +64,9 @@ export class ProductoService {
   /** Baja lógica: marca el producto como INACTIVO (conserva el historial). */
   darDeBaja(id: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/${id}`);
+  }
+
+  sincronizarPrecios(): Observable<SyncResult> {
+    return this.http.post<SyncResult>(`${API_BASE_URL}/precios/sync`, {});
   }
 }

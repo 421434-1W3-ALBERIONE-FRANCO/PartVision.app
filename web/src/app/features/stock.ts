@@ -1,10 +1,10 @@
 import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, catchError, debounceTime, distinctUntilChanged, interval, of, switchMap, tap } from 'rxjs';
 
-import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
+import { Movimiento, ProductoListItem, StockLinea, StockResumen, SyncResult, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
 import { ProductoService } from '../core/producto.service';
 import { UbicacionService } from '../core/ubicacion.service';
@@ -15,7 +15,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 @Component({
   selector: 'app-stock',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, DecimalPipe],
   template: `
     <div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <!-- Header -->
@@ -33,6 +33,10 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
             Se actualiza cada 30s
             <button (click)="cargarLista()" class="text-neon-cyan hover:underline cursor-pointer ml-1">Actualizar ahora</button>
           </span>
+          <button [disabled]="sincronizando()" (click)="sincronizarPrecios()"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer disabled:opacity-50">
+            {{ sincronizando() ? 'Sincronizando...' : 'Sync Precios Proveedor' }}
+          </button>
         </p>
       </div>
 
@@ -54,6 +58,22 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
       <!-- ==================== PRODUCTOS ==================== -->
       @if (vista() === 'productos') {
+        @if (syncResultado()) {
+          <div class="p-3 rounded-xl text-sm flex items-center gap-2"
+            [class]="syncResultado()!.errores > 0
+              ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+              : 'bg-green-500/10 border border-green-500/30 text-green-400'">
+            <span>{{ syncResultado()!.mensaje }}</span>
+            <button (click)="syncResultado.set(null)" class="ml-auto text-xs opacity-60 hover:opacity-100 cursor-pointer">✕</button>
+          </div>
+        }
+        @if (syncError()) {
+          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+            <span>{{ syncError() }}</span>
+            <button (click)="syncError.set(null)" class="ml-auto text-xs opacity-60 hover:opacity-100 cursor-pointer">✕</button>
+          </div>
+        }
+
         <!-- Buscador -->
         <div class="flex flex-col sm:flex-row gap-3 items-end">
           <div class="flex-1">
@@ -92,13 +112,15 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           <!-- Tabla unificada de productos -->
           <div class="glass-panel rounded-2xl border border-dark-border shadow-card overflow-hidden">
             <div class="overflow-x-auto">
-              <table class="w-full text-left text-sm border-collapse min-w-[700px]">
+              <table class="w-full text-left text-sm border-collapse min-w-[900px]">
                 <thead>
                   <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
                     <th class="py-3 px-4">SKU</th>
                     <th class="py-3 px-4">Descripción</th>
                     <th class="py-3 px-4">Marca</th>
                     <th class="py-3 px-4 text-right">Stock total</th>
+                    <th class="py-3 px-4 text-right">P. Costo</th>
+                    <th class="py-3 px-4 text-right">P. Venta</th>
                     <th class="py-3 px-4">Ubicaciones</th>
                     <th class="py-3 px-4 text-center">Acciones</th>
                   </tr>
@@ -119,6 +141,14 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                       <td class="py-3 px-4 font-mono font-extrabold text-right"
                           [class]="p.stockTotal > 0 ? 'text-neon-green' : 'text-gray-500'">
                         {{ p.stockTotal }} u.
+                      </td>
+                      <td class="py-3 px-4 font-mono text-right text-sm"
+                          [class]="p.precioCosto ? 'text-gray-300' : 'text-gray-600'">
+                        {{ p.precioCosto ? '$' + (p.precioCosto | number:'1.2-2') : '—' }}
+                      </td>
+                      <td class="py-3 px-4 font-mono font-bold text-right text-sm"
+                          [class]="p.precioVenta ? 'text-amber-400' : 'text-gray-600'">
+                        {{ p.precioVenta ? '$' + (p.precioVenta | number:'1.2-2') : '—' }}
                       </td>
                       <td class="py-3 px-4 text-xs text-gray-300">
                         @if (p.ubicaciones.length > 0) {
@@ -679,6 +709,11 @@ export class Stock implements OnInit {
   aEliminarLinea = signal<StockLinea | null>(null);
   mostrarConfirmDescarte = signal(false);
 
+  // Sync precios
+  sincronizando = signal(false);
+  syncResultado = signal<SyncResult | null>(null);
+  syncError = signal<string | null>(null);
+
   // Historial
   filtroTipo = signal('');
 
@@ -1061,6 +1096,23 @@ export class Stock implements OnInit {
     const ubId = m.ubicacionDestinoId ?? m.ubicacionOrigenId;
     if (ubId) return ubicMap.get(ubId) ?? `#${ubId}`;
     return '-';
+  }
+
+  sincronizarPrecios(): void {
+    this.sincronizando.set(true);
+    this.syncResultado.set(null);
+    this.syncError.set(null);
+    this.productos.sincronizarPrecios().subscribe({
+      next: (result) => {
+        this.syncResultado.set(result);
+        this.sincronizando.set(false);
+        this.cargarLista();
+      },
+      error: (e) => {
+        this.syncError.set(e?.error?.message ?? 'Error al sincronizar precios con el proveedor.');
+        this.sincronizando.set(false);
+      },
+    });
   }
 
   contarPorTipo(tipo: string): number {
