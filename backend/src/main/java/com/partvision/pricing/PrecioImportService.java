@@ -85,7 +85,13 @@ public class PrecioImportService {
                     for (Cell cell : headerRow) {
                         columnas.add(cellToString(cell));
                     }
-                    totalFilas = sheet.getLastRowNum();
+                    int count = 0;
+                    for (Row row : sheet) {
+                        if (row.getRowNum() > 0) count++;
+                    }
+                    totalFilas = count;
+                    log.info("Excel detectado: {} filas de datos, {} columnas (lastRowNum={}, physicalRows={})",
+                            totalFilas, columnas.size(), sheet.getLastRowNum(), sheet.getPhysicalNumberOfRows());
                 }
             } else {
                 try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
@@ -377,22 +383,23 @@ public class PrecioImportService {
             int colSkuIdx = -1, colPrecioIdx = -1;
             for (Cell cell : headerRow) {
                 String nombre = cellToString(cell);
-                if (nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
-                if (nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
+                if (nombre != null && nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
+                if (nombre != null && nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
             }
             if (colSkuIdx < 0) throw new IllegalArgumentException("Columna SKU '" + colSku + "' no encontrada");
             if (colPrecioIdx < 0) throw new IllegalArgumentException("Columna precio '" + colPrecio + "' no encontrada");
 
             List<String[]> filas = new ArrayList<>();
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0) continue;
                 String sku = cellToString(row.getCell(colSkuIdx));
                 String precio = cellToString(row.getCell(colPrecioIdx));
                 if (sku != null && !sku.isBlank()) {
                     filas.add(new String[]{sku.trim(), precio != null ? precio.trim() : null});
                 }
             }
+            log.info("Excel parseado: {} filas con datos (columnas: sku={} idx={}, precio={} idx={})",
+                    filas.size(), colSku, colSkuIdx, colPrecio, colPrecioIdx);
             return filas;
         } catch (IllegalArgumentException e) {
             throw e;

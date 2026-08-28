@@ -156,17 +156,24 @@ import { ProductoService } from '../core/producto.service';
 
         <!-- Paso 1: Subir archivo -->
         @if (impPaso() === 1) {
-          <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
-              <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
-                class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
+          @if (sincronizando()) {
+            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs flex items-center gap-2">
+              <svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              Esperá a que termine la sincronización API antes de importar un archivo.
             </div>
-            <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
-              class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
-              {{ impSubiendo() ? 'Subiendo...' : 'Detectar Columnas' }}
-            </button>
-          </div>
+          } @else {
+            <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
+                <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
+                  class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
+              </div>
+              <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
+                class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
+                {{ impSubiendo() ? 'Analizando...' : 'Detectar Columnas' }}
+              </button>
+            </div>
+          }
         }
 
         <!-- Paso 2: Mapear columnas -->
@@ -180,14 +187,14 @@ import { ProductoService } from '../core/producto.service';
                 <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Columna SKU / Código</label>
                 <select [(ngModel)]="impColSku" class="w-full px-3 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-purple text-sm">
                   <option value="">Seleccionar...</option>
-                  @for (col of impColumnas(); track col) { <option [value]="col">{{ col }}</option> }
+                  @for (col of impColumnasId(); track col) { <option [value]="col">{{ col }}</option> }
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Columna Precio Costo</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Columna Precio</label>
                 <select [(ngModel)]="impColPrecio" class="w-full px-3 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-white focus:outline-none focus:border-neon-purple text-sm">
                   <option value="">Seleccionar...</option>
-                  @for (col of impColumnas(); track col) { <option [value]="col">{{ col }}</option> }
+                  @for (col of impColumnasPrecio(); track col) { <option [value]="col">{{ col }}</option> }
                 </select>
               </div>
               <div>
@@ -443,6 +450,8 @@ export class Precios implements OnInit, OnDestroy {
   impSubiendo = signal(false);
   impUploadId = signal('');
   impColumnas = signal<string[]>([]);
+  impColumnasId = signal<string[]>([]);
+  impColumnasPrecio = signal<string[]>([]);
   impTotalFilas = signal(0);
   impColSku = '';
   impColPrecio = '';
@@ -580,6 +589,18 @@ export class Precios implements OnInit, OnDestroy {
         this.impUploadId.set(res.uploadId);
         this.impColumnas.set(res.columnas);
         this.impTotalFilas.set(res.totalFilas);
+
+        const idPat = /c[oó]d|sku|^id$/i;
+        const precioPat = /precio|costo|lista|neto|venta|importe|monto|valor|price|cost/i;
+        const colsId = res.columnas.filter((c: string) => idPat.test(c));
+        const colsPrecio = res.columnas.filter((c: string) => precioPat.test(c));
+        this.impColumnasId.set(colsId.length > 0 ? colsId : res.columnas);
+        this.impColumnasPrecio.set(colsPrecio.length > 0 ? colsPrecio : res.columnas);
+
+        if (colsId.length === 1) this.impColSku = colsId[0];
+        else if (colsId.length > 1) this.impColSku = colsId[0];
+        if (colsPrecio.length === 1) this.impColPrecio = colsPrecio[0];
+
         this.impPaso.set(2);
         this.impSubiendo.set(false);
       },
@@ -638,6 +659,7 @@ export class Precios implements OnInit, OnDestroy {
     this.stopImportPoll();
     this.impPaso.set(1); this.impArchivo.set(null); this.impNombreArchivo.set('');
     this.impUploadId.set(''); this.impColumnas.set([]); this.impTotalFilas.set(0);
+    this.impColumnasId.set([]); this.impColumnasPrecio.set([]);
     this.impColSku = ''; this.impColPrecio = ''; this.impProveedor = '';
     this.impPreview.set(null); this.impResultado.set(null); this.impError.set(null);
     this.impAplicando.set(false); this.impProgreso.set(0); this.impProgresoTotal.set(0);
