@@ -4,7 +4,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, catchError, debounceTime, distinctUntilChanged, interval, of, switchMap, tap } from 'rxjs';
 
-import { Movimiento, ProductoListItem, StockLinea, StockResumen, SyncResult, Ubicacion } from '../core/models';
+import { Movimiento, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { StockService } from '../core/stock.service';
 import { ProductoService } from '../core/producto.service';
 import { UbicacionService } from '../core/ubicacion.service';
@@ -33,10 +33,6 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
             Se actualiza cada 30s
             <button (click)="cargarLista()" class="text-neon-cyan hover:underline cursor-pointer ml-1">Actualizar ahora</button>
           </span>
-          <button [disabled]="sincronizando()" (click)="sincronizarPrecios()"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer disabled:opacity-50">
-            {{ sincronizando() ? 'Sincronizando...' : 'Sync Precios Proveedor' }}
-          </button>
         </p>
       </div>
 
@@ -58,22 +54,6 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
       <!-- ==================== PRODUCTOS ==================== -->
       @if (vista() === 'productos') {
-        @if (syncResultado()) {
-          <div class="p-3 rounded-xl text-sm flex items-center gap-2"
-            [class]="syncResultado()!.errores > 0
-              ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-              : 'bg-green-500/10 border border-green-500/30 text-green-400'">
-            <span>{{ syncResultado()!.mensaje }}</span>
-            <button (click)="syncResultado.set(null)" class="ml-auto text-xs opacity-60 hover:opacity-100 cursor-pointer">✕</button>
-          </div>
-        }
-        @if (syncError()) {
-          <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
-            <span>{{ syncError() }}</span>
-            <button (click)="syncError.set(null)" class="ml-auto text-xs opacity-60 hover:opacity-100 cursor-pointer">✕</button>
-          </div>
-        }
-
         <!-- Buscador -->
         <div class="flex flex-col sm:flex-row gap-3 items-end">
           <div class="flex-1">
@@ -709,11 +689,6 @@ export class Stock implements OnInit {
   aEliminarLinea = signal<StockLinea | null>(null);
   mostrarConfirmDescarte = signal(false);
 
-  // Sync precios
-  sincronizando = signal(false);
-  syncResultado = signal<SyncResult | null>(null);
-  syncError = signal<string | null>(null);
-
   // Historial
   filtroTipo = signal('');
 
@@ -1096,37 +1071,6 @@ export class Stock implements OnInit {
     const ubId = m.ubicacionDestinoId ?? m.ubicacionOrigenId;
     if (ubId) return ubicMap.get(ubId) ?? `#${ubId}`;
     return '-';
-  }
-
-  sincronizarPrecios(): void {
-    this.sincronizando.set(true);
-    this.syncResultado.set(null);
-    this.syncError.set(null);
-    this.productos.sincronizarPrecios().subscribe({
-      next: () => {
-        this.pollSyncEstado();
-      },
-      error: (e) => {
-        this.syncError.set(e?.error?.message ?? 'Error al iniciar sincronización.');
-        this.sincronizando.set(false);
-      },
-    });
-  }
-
-  private pollSyncEstado(): void {
-    const timer = setInterval(() => {
-      this.productos.estadoSync().subscribe({
-        next: (estado) => {
-          if (!estado.sincronizando) {
-            this.sincronizando.set(false);
-            if (estado.ultimoResultado) this.syncResultado.set(estado.ultimoResultado);
-            clearInterval(timer);
-            this.cargarLista();
-          }
-        },
-        error: () => {},
-      });
-    }, 3000);
   }
 
   contarPorTipo(tipo: string): number {

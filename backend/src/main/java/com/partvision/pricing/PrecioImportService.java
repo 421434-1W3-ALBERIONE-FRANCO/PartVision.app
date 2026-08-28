@@ -327,21 +327,6 @@ public class PrecioImportService {
                 .toList();
     }
 
-    @Transactional
-    public ImportPrecioBatch crearBatchApiSync(String proveedor, int total, int aplicados) {
-        ImportPrecioBatch batch = new ImportPrecioBatch();
-        batch.setProveedor(proveedor);
-        batch.setFuente("API_SYNC");
-        batch.setTotal(total);
-        batch.setAplicados(aplicados);
-        return batchRepo.save(batch);
-    }
-
-    @Transactional
-    public void guardarHistorial(List<HistorialPrecio> historiales) {
-        if (!historiales.isEmpty()) historialRepo.saveAll(historiales);
-    }
-
     // --- Helpers ---
 
     private BigDecimal obtenerMargen(String proveedor) {

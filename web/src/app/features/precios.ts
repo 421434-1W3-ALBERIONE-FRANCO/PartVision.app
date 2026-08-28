@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, PrecioPreviewFila, SyncResult } from '../core/models';
+import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, PrecioPreviewFila } from '../core/models';
 import { ProductoService } from '../core/producto.service';
 
 @Component({
@@ -23,7 +23,7 @@ import { ProductoService } from '../core/producto.service';
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">
-          Configuración de márgenes, sincronización API, importación de listas y rollback de precios.
+          Configuración de márgenes, importación de listas y rollback de precios.
         </p>
       </div>
 
@@ -104,44 +104,7 @@ import { ProductoService } from '../core/producto.service';
         }
       </div>
 
-      <!-- === SECCIÓN 2: Sync API === -->
-      <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card">
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Sincronización API (Autopartes del Sur)
-        </h3>
-        <p class="text-sm text-gray-400 mb-4">Actualiza precios de costo desde la API del proveedor (67k+ productos). Se ejecuta en segundo plano (~2 min).</p>
-        <button [disabled]="sincronizando()" (click)="sincronizar()"
-          class="px-6 py-3 rounded-xl font-semibold text-sm bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2">
-          @if (sincronizando()) {
-            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            Sincronizando en segundo plano...
-          } @else { Sincronizar Precios (ADS) }
-        </button>
-
-        @if (sincronizando()) {
-          <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs flex items-center gap-2">
-            <svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            La sincronización está procesando ~67,000 productos del catálogo ADS. Podés navegar a otra sección mientras tanto.
-          </div>
-        }
-
-        @if (syncResult()) {
-          <div class="mt-5 p-4 rounded-xl bg-dark-surface/60 border border-dark-border">
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <div><p class="text-lg font-bold font-mono text-white">{{ syncResult()!.totalProductos }}</p><p class="text-[10px] uppercase text-gray-400">Total</p></div>
-              <div><p class="text-lg font-bold font-mono text-neon-green">{{ syncResult()!.actualizados }}</p><p class="text-[10px] uppercase text-gray-400">Actualizados</p></div>
-              <div><p class="text-lg font-bold font-mono text-amber-400">{{ syncResult()!.noEncontrados }}</p><p class="text-[10px] uppercase text-gray-400">No encontrados</p></div>
-              <div><p class="text-lg font-bold font-mono text-red-400">{{ syncResult()!.errores }}</p><p class="text-[10px] uppercase text-gray-400">Errores</p></div>
-            </div>
-            <p class="text-xs text-gray-500 mt-3">{{ syncResult()!.mensaje }}</p>
-          </div>
-        }
-      </div>
-
-      <!-- === SECCIÓN 3: Importar precios por CSV === -->
+      <!-- === SECCIÓN 2: Importar precios === -->
       <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card">
         <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
           <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,24 +119,17 @@ import { ProductoService } from '../core/producto.service';
 
         <!-- Paso 1: Subir archivo -->
         @if (impPaso() === 1) {
-          @if (sincronizando()) {
-            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs flex items-center gap-2">
-              <svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              Esperá a que termine la sincronización API antes de importar un archivo.
+          <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
+              <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
+                class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
             </div>
-          } @else {
-            <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
-                <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
-                  class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
-              </div>
-              <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
-                class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
-                {{ impSubiendo() ? 'Analizando...' : 'Detectar Columnas' }}
-              </button>
-            </div>
-          }
+            <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
+              class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
+              {{ impSubiendo() ? 'Analizando...' : 'Detectar Columnas' }}
+            </button>
+          </div>
         }
 
         <!-- Paso 2: Mapear columnas -->
@@ -431,7 +387,6 @@ import { ProductoService } from '../core/producto.service';
 })
 export class Precios implements OnInit, OnDestroy {
   private service = inject(ProductoService);
-  private syncPollTimer: ReturnType<typeof setInterval> | null = null;
   private importPollTimer: ReturnType<typeof setInterval> | null = null;
 
   configs = signal<ConfiguracionPrecio[]>([]);
@@ -439,9 +394,6 @@ export class Precios implements OnInit, OnDestroy {
   guardandoId = signal<number | null>(null);
   error = signal<string | null>(null);
   exito = signal<string | null>(null);
-
-  sincronizando = signal(false);
-  syncResult = signal<SyncResult | null>(null);
 
   // Import CSV
   impPaso = signal(1);
@@ -477,11 +429,9 @@ export class Precios implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.cargar();
     this.cargarBatches();
-    this.checkSyncEstado();
   }
 
   ngOnDestroy(): void {
-    this.stopSyncPoll();
     this.stopImportPoll();
   }
 
@@ -527,49 +477,6 @@ export class Precios implements OnInit, OnDestroy {
         this.error.set(msg);
       },
     });
-  }
-
-  sincronizar(): void {
-    this.sincronizando.set(true); this.syncResult.set(null); this.error.set(null);
-    this.service.sincronizarPrecios().subscribe({
-      next: () => { this.startSyncPoll(); },
-      error: (e) => {
-        this.error.set(e?.error?.message ?? 'Error al iniciar sincronización.');
-        this.sincronizando.set(false);
-      },
-    });
-  }
-
-  private checkSyncEstado(): void {
-    this.service.estadoSync().subscribe({
-      next: (estado) => {
-        this.sincronizando.set(estado.sincronizando);
-        if (estado.ultimoResultado) this.syncResult.set(estado.ultimoResultado);
-        if (estado.sincronizando) this.startSyncPoll();
-      },
-      error: () => {},
-    });
-  }
-
-  private startSyncPoll(): void {
-    this.stopSyncPoll();
-    this.syncPollTimer = setInterval(() => {
-      this.service.estadoSync().subscribe({
-        next: (estado) => {
-          if (!estado.sincronizando) {
-            this.sincronizando.set(false);
-            if (estado.ultimoResultado) this.syncResult.set(estado.ultimoResultado);
-            this.stopSyncPoll();
-            this.cargarBatches();
-          }
-        },
-        error: () => {},
-      });
-    }, 3000);
-  }
-
-  private stopSyncPoll(): void {
-    if (this.syncPollTimer) { clearInterval(this.syncPollTimer); this.syncPollTimer = null; }
   }
 
   // --- Import CSV ---

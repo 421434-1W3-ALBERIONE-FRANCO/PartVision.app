@@ -72,14 +72,6 @@ export interface ProductoListItem {
   precioVenta: number | null;
 }
 
-export interface SyncResult {
-  totalProductos: number;
-  actualizados: number;
-  noEncontrados: number;
-  errores: number;
-  mensaje: string;
-}
-
 export interface StockLinea {
   ubicacionId: number;
   ubicacionPath: string;
