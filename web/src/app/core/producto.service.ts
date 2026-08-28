@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { ConfiguracionPrecio, Page, PrecioBatch, PrecioImportColumnas, PrecioImportPreview, PrecioImportResult, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
+import { ConfiguracionPrecio, Page, PrecioBatch, PrecioImportColumnas, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
@@ -100,7 +100,7 @@ export class ProductoService {
   }
 
   importAplicar(uploadId: string, colSku: string, colPrecio: string, proveedor: string,
-                excluidos: string[], archivo: string): Observable<PrecioImportResult> {
+                excluidos: string[], archivo: string): Observable<{ message: string }> {
     let params = new HttpParams()
       .set('uploadId', uploadId).set('colSku', colSku)
       .set('colPrecio', colPrecio).set('proveedor', proveedor)
@@ -108,7 +108,11 @@ export class ProductoService {
     for (const sku of excluidos) {
       params = params.append('excluidos', sku);
     }
-    return this.http.post<PrecioImportResult>(`${API_BASE_URL}/precios/import/aplicar`, null, { params });
+    return this.http.post<{ message: string }>(`${API_BASE_URL}/precios/import/aplicar`, null, { params });
+  }
+
+  progresoImport(): Observable<PrecioImportProgreso> {
+    return this.http.get<PrecioImportProgreso>(`${API_BASE_URL}/precios/import/progreso`);
   }
 
   listarBatches(): Observable<PrecioBatch[]> {

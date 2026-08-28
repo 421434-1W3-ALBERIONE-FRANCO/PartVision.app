@@ -9,6 +9,7 @@ import com.partvision.pricing.dto.PrecioBatchResponse;
 import com.partvision.pricing.dto.PrecioImportColumnasResponse;
 import com.partvision.pricing.dto.PrecioImportPreviewResponse;
 import com.partvision.pricing.dto.PrecioImportPreviewResponse.PreviewFila;
+import com.partvision.pricing.dto.PrecioImportProgresoResponse;
 import com.partvision.pricing.dto.PrecioImportResultResponse;
 import com.partvision.pricing.repository.ConfiguracionPrecioRepository;
 import com.partvision.pricing.repository.HistorialPrecioRepository;
@@ -22,6 +23,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.scheduling.annotation.Async;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -31,6 +34,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,6 +51,21 @@ public class PrecioImportService {
 
     private record UploadInfo(byte[] contenido, boolean esExcel) {}
     private final Map<String, UploadInfo> uploads = new ConcurrentHashMap<>();
+
+    private final AtomicBoolean importando = new AtomicBoolean(false);
+    private final AtomicInteger progresoActual = new AtomicInteger(0);
+    private final AtomicInteger progresoTotal = new AtomicInteger(0);
+    private final AtomicReference<PrecioImportResultResponse> ultimoResultadoImport = new AtomicReference<>();
+
+    public boolean iniciarImport() {
+        return importando.compareAndSet(false, true);
+    }
+
+    public PrecioImportProgresoResponse getProgresoImport() {
+        return new PrecioImportProgresoResponse(
+                importando.get(), progresoActual.get(), progresoTotal.get(),
+                ultimoResultadoImport.get());
+    }
 
     public PrecioImportColumnasResponse detectarColumnas(byte[] contenido, String nombreArchivo) {
         String uploadId = UUID.randomUUID().toString();
@@ -141,8 +162,33 @@ public class PrecioImportService {
         return new PrecioImportPreviewResponse(preview, preview.size(), ok, conflictos, noEncontrados, margen);
     }
 
+    public void validarAplicar(String uploadId, String proveedor) {
+        if (!uploads.containsKey(uploadId)) {
+            throw new IllegalArgumentException("Archivo expirado. Volvé a subirlo.");
+        }
+        obtenerMargen(proveedor);
+    }
+
+    @Async("importExecutor")
     @Transactional
-    public PrecioImportResultResponse aplicar(String uploadId, String colSku, String colPrecio,
+    public void ejecutarImportAsync(String uploadId, String colSku, String colPrecio,
+                                     String proveedor, Set<String> skusExcluidos, String archivo) {
+        progresoActual.set(0);
+        progresoTotal.set(0);
+        ultimoResultadoImport.set(null);
+        try {
+            PrecioImportResultResponse result = aplicar(uploadId, colSku, colPrecio, proveedor, skusExcluidos, archivo);
+            ultimoResultadoImport.set(result);
+        } catch (Exception e) {
+            log.error("Error en importación async", e);
+            ultimoResultadoImport.set(new PrecioImportResultResponse(0, 0, 0, 0, 0,
+                    "Error durante la importación: " + e.getMessage()));
+        } finally {
+            importando.set(false);
+        }
+    }
+
+    private PrecioImportResultResponse aplicar(String uploadId, String colSku, String colPrecio,
                                                String proveedor, Set<String> skusExcluidos, String archivo) {
         UploadInfo info = uploads.remove(uploadId);
         if (info == null) {
@@ -153,6 +199,7 @@ public class PrecioImportService {
         BigDecimal multiplicador = BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100)));
 
         List<String[]> filas = parsearFilas(info, colSku, colPrecio);
+        progresoTotal.set(filas.size());
 
         Set<String> skusUnicos = filas.stream()
                 .map(f -> f[0])
@@ -177,6 +224,8 @@ public class PrecioImportService {
         for (String[] fila : filas) {
             String sku = fila[0];
             BigDecimal precioCsv = parsearPrecio(fila[1]);
+            progresoActual.incrementAndGet();
+
             if (sku == null || sku.isBlank() || precioCsv == null) continue;
 
             if (skusExcluidos != null && skusExcluidos.contains(sku)) {

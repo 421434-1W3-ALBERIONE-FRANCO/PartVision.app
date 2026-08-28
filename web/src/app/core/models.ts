@@ -214,6 +214,13 @@ export interface PrecioImportResult {
   mensaje: string;
 }
 
+export interface PrecioImportProgreso {
+  importando: boolean;
+  progreso: number;
+  total: number;
+  ultimoResultado?: PrecioImportResult;
+}
+
 export interface PrecioBatch {
   id: number;
   proveedor: string;

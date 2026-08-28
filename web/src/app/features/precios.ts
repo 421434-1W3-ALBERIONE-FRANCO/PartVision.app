@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportResult, PrecioPreviewFila, SyncResult } from '../core/models';
+import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, PrecioPreviewFila, SyncResult } from '../core/models';
 import { ProductoService } from '../core/producto.service';
 
 @Component({
@@ -274,16 +274,40 @@ import { ProductoService } from '../core/producto.service';
               </table>
             </div>
 
-            <div class="flex gap-2 pt-2">
-              <button (click)="resetImport()" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-400 hover:text-white cursor-pointer">Cancelar</button>
-              <button (click)="impPaso.set(2)" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-400 hover:text-white cursor-pointer">Volver</button>
-              @if (impPreview()!.ok > 0) {
-                <button [disabled]="impAplicando()" (click)="aplicarImport()"
-                  class="px-6 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
-                  {{ impAplicando() ? 'Aplicando...' : 'Aplicar ' + impPreview()!.ok + ' precios' }}
-                </button>
-              }
-            </div>
+            @if (impAplicando()) {
+              <div class="mt-4 p-4 rounded-xl bg-neon-purple/5 border border-neon-purple/30 space-y-3">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-300 flex items-center gap-2">
+                    <svg class="animate-spin w-4 h-4 text-neon-purple" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Importando precios...
+                  </span>
+                  <span class="font-mono text-neon-purple font-semibold">
+                    @if (impProgresoTotal() > 0) {
+                      {{ impProgreso() }} / {{ impProgresoTotal() }}
+                      ({{ ((impProgreso() / impProgresoTotal()) * 100) | number:'1.0-0' }}%)
+                    } @else {
+                      Preparando...
+                    }
+                  </span>
+                </div>
+                <div class="w-full h-2.5 bg-dark-surface rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-neon-purple to-neon-cyan rounded-full transition-all duration-300"
+                       [style.width.%]="impProgresoTotal() > 0 ? (impProgreso() / impProgresoTotal()) * 100 : 0"></div>
+                </div>
+                <p class="text-[11px] text-gray-500">Podés navegar a otra sección mientras se procesan los precios.</p>
+              </div>
+            } @else {
+              <div class="flex gap-2 pt-2">
+                <button (click)="resetImport()" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-400 hover:text-white cursor-pointer">Cancelar</button>
+                <button (click)="impPaso.set(2)" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-400 hover:text-white cursor-pointer">Volver</button>
+                @if (impPreview()!.ok > 0) {
+                  <button (click)="aplicarImport()"
+                    class="px-6 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer">
+                    Aplicar {{ impPreview()!.ok }} precios
+                  </button>
+                }
+              </div>
+            }
           </div>
         }
 
@@ -401,6 +425,7 @@ import { ProductoService } from '../core/producto.service';
 export class Precios implements OnInit, OnDestroy {
   private service = inject(ProductoService);
   private syncPollTimer: ReturnType<typeof setInterval> | null = null;
+  private importPollTimer: ReturnType<typeof setInterval> | null = null;
 
   configs = signal<ConfiguracionPrecio[]>([]);
   cargando = signal(true);
@@ -425,6 +450,8 @@ export class Precios implements OnInit, OnDestroy {
   impPreviewing = signal(false);
   impPreview = signal<PrecioImportPreview | null>(null);
   impAplicando = signal(false);
+  impProgreso = signal(0);
+  impProgresoTotal = signal(0);
   impResultado = signal<PrecioImportResult | null>(null);
   impError = signal<string | null>(null);
 
@@ -446,6 +473,7 @@ export class Precios implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopSyncPoll();
+    this.stopImportPoll();
   }
 
   cargar(): void {
@@ -571,19 +599,48 @@ export class Precios implements OnInit, OnDestroy {
     const preview = this.impPreview();
     if (!preview) return;
     this.impAplicando.set(true); this.impError.set(null);
+    this.impProgreso.set(0); this.impProgresoTotal.set(0);
     const excluidos = preview.filas.filter(f => f.estado !== 'OK').map(f => f.skuCsv);
     this.service.importAplicar(this.impUploadId(), this.impColSku, this.impColPrecio,
         this.impProveedor, excluidos, this.impNombreArchivo()).subscribe({
-      next: (res) => { this.impResultado.set(res); this.impPaso.set(0); this.impAplicando.set(false); this.cargarBatches(); },
+      next: () => { this.startImportPoll(); },
       error: (e) => { this.impError.set(e?.error?.message ?? 'Error al aplicar.'); this.impAplicando.set(false); },
     });
   }
 
+  private startImportPoll(): void {
+    this.stopImportPoll();
+    this.importPollTimer = setInterval(() => {
+      this.service.progresoImport().subscribe({
+        next: (p) => {
+          this.impProgreso.set(p.progreso);
+          this.impProgresoTotal.set(p.total);
+          if (!p.importando) {
+            this.stopImportPoll();
+            this.impAplicando.set(false);
+            if (p.ultimoResultado) {
+              this.impResultado.set(p.ultimoResultado);
+              this.impPaso.set(0);
+              this.cargarBatches();
+            }
+          }
+        },
+        error: () => {},
+      });
+    }, 1000);
+  }
+
+  private stopImportPoll(): void {
+    if (this.importPollTimer) { clearInterval(this.importPollTimer); this.importPollTimer = null; }
+  }
+
   resetImport(): void {
+    this.stopImportPoll();
     this.impPaso.set(1); this.impArchivo.set(null); this.impNombreArchivo.set('');
     this.impUploadId.set(''); this.impColumnas.set([]); this.impTotalFilas.set(0);
     this.impColSku = ''; this.impColPrecio = ''; this.impProveedor = '';
     this.impPreview.set(null); this.impResultado.set(null); this.impError.set(null);
+    this.impAplicando.set(false); this.impProgreso.set(0); this.impProgresoTotal.set(0);
   }
 
   // --- Batches / Rollback ---

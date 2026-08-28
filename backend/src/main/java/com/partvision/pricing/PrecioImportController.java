@@ -3,8 +3,10 @@ package com.partvision.pricing;
 import com.partvision.pricing.dto.PrecioBatchResponse;
 import com.partvision.pricing.dto.PrecioImportColumnasResponse;
 import com.partvision.pricing.dto.PrecioImportPreviewResponse;
+import com.partvision.pricing.dto.PrecioImportProgresoResponse;
 import com.partvision.pricing.dto.PrecioImportResultResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @RestController
@@ -39,14 +42,26 @@ public class PrecioImportController {
     }
 
     @PostMapping("/aplicar")
-    public ResponseEntity<PrecioImportResultResponse> aplicar(
+    public ResponseEntity<?> aplicar(
             @RequestParam String uploadId,
             @RequestParam String colSku,
             @RequestParam String colPrecio,
             @RequestParam String proveedor,
             @RequestParam(required = false) Set<String> excluidos,
             @RequestParam(required = false) String archivo) {
-        return ResponseEntity.ok(importService.aplicar(uploadId, colSku, colPrecio, proveedor, excluidos, archivo));
+        importService.validarAplicar(uploadId, proveedor);
+        if (!importService.iniciarImport()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "Ya hay una importación en curso"));
+        }
+        importService.ejecutarImportAsync(uploadId, colSku, colPrecio, proveedor, excluidos, archivo);
+        return ResponseEntity.accepted()
+                .body(Map.of("message", "Importación iniciada en segundo plano"));
+    }
+
+    @GetMapping("/progreso")
+    public PrecioImportProgresoResponse progreso() {
+        return importService.getProgresoImport();
     }
 
     @GetMapping("/batches")
