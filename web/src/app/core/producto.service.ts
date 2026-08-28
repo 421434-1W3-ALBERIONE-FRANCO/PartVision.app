@@ -82,6 +82,10 @@ export class ProductoService {
     return this.http.put<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion/${id}`, { margen, activo });
   }
 
+  crearConfigPrecio(proveedor: string, margen: number): Observable<ConfiguracionPrecio> {
+    return this.http.post<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion`, { proveedor, margen, activo: true });
+  }
+
   importDetectarColumnas(archivo: File): Observable<PrecioImportColumnas> {
     const fd = new FormData();
     fd.append('archivo', archivo);

@@ -25,7 +25,8 @@ public class PrecioImportController {
     @PostMapping("/columnas")
     public ResponseEntity<PrecioImportColumnasResponse> detectarColumnas(
             @RequestParam("archivo") MultipartFile archivo) throws IOException {
-        return ResponseEntity.ok(importService.detectarColumnas(archivo.getBytes()));
+        return ResponseEntity.ok(importService.detectarColumnas(archivo.getBytes(),
+                archivo.getOriginalFilename()));
     }
 
     @PostMapping("/preview")

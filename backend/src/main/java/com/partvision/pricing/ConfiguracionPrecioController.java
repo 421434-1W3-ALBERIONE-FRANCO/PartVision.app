@@ -6,6 +6,7 @@ import com.partvision.pricing.dto.ConfiguracionPrecioResponse;
 import com.partvision.pricing.repository.ConfiguracionPrecioRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +26,22 @@ public class ConfiguracionPrecioController {
         return repo.findAll().stream()
                 .map(ConfiguracionPrecioResponse::from)
                 .toList();
+    }
+
+    @PostMapping
+    public ResponseEntity<ConfiguracionPrecioResponse> crear(@Valid @RequestBody ConfiguracionPrecioRequest req) {
+        if (req.proveedor() == null || req.proveedor().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (repo.findByProveedorIgnoreCase(req.proveedor()).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        ConfiguracionPrecio config = new ConfiguracionPrecio();
+        config.setProveedor(req.proveedor());
+        config.setMargen(req.margen());
+        config.setActivo(req.activo() != null ? req.activo() : true);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ConfiguracionPrecioResponse.from(repo.save(config)));
     }
 
     @PutMapping("/{id}")

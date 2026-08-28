@@ -23,7 +23,7 @@ import { ProductoService } from '../core/producto.service';
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">
-          Configuración de márgenes, sincronización API, importación CSV y rollback de precios.
+          Configuración de márgenes, sincronización API, importación de listas y rollback de precios.
         </p>
       </div>
 
@@ -66,6 +66,27 @@ import { ProductoService } from '../core/producto.service';
                 </div>
               </div>
             }
+          </div>
+
+          <!-- Agregar nuevo proveedor -->
+          <div class="mt-5 p-4 rounded-xl bg-dark-surface/40 border border-dashed border-dark-border">
+            <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Agregar nuevo proveedor</p>
+            <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+              <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Nombre</label>
+                <input type="text" [(ngModel)]="nuevoProvNombre" placeholder="Ej: EGSA"
+                  class="w-44 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Margen %</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="nuevoProvMargen"
+                  class="w-28 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm focus:outline-none focus:border-neon-cyan text-right" />
+              </div>
+              <button [disabled]="!nuevoProvNombre.trim() || creandoProv()" (click)="crearProveedor()"
+                class="px-5 py-2 rounded-lg text-sm font-semibold neon-button-secondary cursor-pointer disabled:opacity-50">
+                {{ creandoProv() ? 'Creando...' : '+ Agregar' }}
+              </button>
+            </div>
           </div>
         }
 
@@ -126,10 +147,10 @@ import { ProductoService } from '../core/producto.service';
           <svg class="w-5 h-5 text-neon-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          Importar Precios por CSV
+          Importar Lista de Precios
         </h3>
         <p class="text-sm text-gray-400 mb-5">
-          Subí el CSV del proveedor (ADS, EGSA u otro). Seleccionás qué columna es el SKU y cuál el precio de costo,
+          Subí el archivo del proveedor (CSV o Excel). Seleccionás qué columna es el SKU y cuál el precio de costo,
           y el sistema matchea contra los productos existentes aplicando el margen configurado.
         </p>
 
@@ -137,8 +158,8 @@ import { ProductoService } from '../core/producto.service';
         @if (impPaso() === 1) {
           <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo CSV</label>
-              <input type="file" accept=".csv" (change)="onArchivoSeleccionado($event)"
+              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
+              <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
                 class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
             </div>
             <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
@@ -407,6 +428,11 @@ export class Precios implements OnInit, OnDestroy {
   impResultado = signal<PrecioImportResult | null>(null);
   impError = signal<string | null>(null);
 
+  // Nuevo proveedor
+  nuevoProvNombre = '';
+  nuevoProvMargen = 0;
+  creandoProv = signal(false);
+
   // Batches / rollback
   batches = signal<PrecioBatch[]>([]);
   rollbackBatch = signal<PrecioBatch | null>(null);
@@ -443,6 +469,26 @@ export class Precios implements OnInit, OnDestroy {
         this.exito.set(`Margen de "${updated.proveedor}" actualizado a ${updated.margen}%.`);
       },
       error: (e) => { this.guardandoId.set(null); this.error.set(e?.error?.message ?? 'No se pudo guardar.'); },
+    });
+  }
+
+  crearProveedor(): void {
+    const nombre = this.nuevoProvNombre.trim();
+    if (!nombre) return;
+    this.creandoProv.set(true); this.error.set(null);
+    this.service.crearConfigPrecio(nombre, this.nuevoProvMargen).subscribe({
+      next: (created) => {
+        this.configs.set([...this.configs(), created]);
+        this.nuevoProvNombre = '';
+        this.nuevoProvMargen = 0;
+        this.creandoProv.set(false);
+        this.exito.set(`Proveedor "${created.proveedor}" creado con margen ${created.margen}%.`);
+      },
+      error: (e) => {
+        this.creandoProv.set(false);
+        const msg = e.status === 409 ? 'Ya existe un proveedor con ese nombre.' : (e?.error?.message ?? 'No se pudo crear el proveedor.');
+        this.error.set(msg);
+      },
     });
   }
 

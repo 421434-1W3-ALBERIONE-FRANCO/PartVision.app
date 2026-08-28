@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,36 +43,59 @@ public class PrecioImportService {
     private final ImportPrecioBatchRepository batchRepo;
     private final HistorialPrecioRepository historialRepo;
 
-    private final Map<String, byte[]> uploads = new ConcurrentHashMap<>();
+    private record UploadInfo(byte[] contenido, boolean esExcel) {}
+    private final Map<String, UploadInfo> uploads = new ConcurrentHashMap<>();
 
-    public PrecioImportColumnasResponse detectarColumnas(byte[] contenido) {
+    public PrecioImportColumnasResponse detectarColumnas(byte[] contenido, String nombreArchivo) {
         String uploadId = UUID.randomUUID().toString();
-        uploads.put(uploadId, contenido);
+        boolean esExcel = esArchivoExcel(nombreArchivo);
+        uploads.put(uploadId, new UploadInfo(contenido, esExcel));
 
-        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
-             CSVParser parser = CSVParser.parse(reader, csvFormat())) {
+        try {
+            List<String> columnas;
+            int totalFilas;
 
-            List<String> columnas = parser.getHeaderNames();
-            int totalFilas = (int) parser.stream().count();
+            if (esExcel) {
+                try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
+                    Sheet sheet = wb.getSheetAt(0);
+                    Row headerRow = sheet.getRow(0);
+                    if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
+                    columnas = new ArrayList<>();
+                    for (Cell cell : headerRow) {
+                        columnas.add(cellToString(cell));
+                    }
+                    totalFilas = sheet.getLastRowNum();
+                }
+            } else {
+                try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
+                     CSVParser parser = CSVParser.parse(reader, csvFormat())) {
+                    columnas = parser.getHeaderNames();
+                    totalFilas = (int) parser.stream().count();
+                }
+            }
+
             return new PrecioImportColumnasResponse(uploadId, columnas, totalFilas);
+        } catch (IllegalArgumentException e) {
+            uploads.remove(uploadId);
+            throw e;
         } catch (Exception e) {
             uploads.remove(uploadId);
-            throw new IllegalArgumentException("No se pudo leer el archivo CSV: " + e.getMessage());
+            throw new IllegalArgumentException("No se pudo leer el archivo: " + e.getMessage());
         }
     }
 
     public PrecioImportPreviewResponse preview(String uploadId, String colSku, String colPrecio, String proveedor) {
-        byte[] contenido = uploads.get(uploadId);
-        if (contenido == null) {
+        UploadInfo info = uploads.get(uploadId);
+        if (info == null) {
             throw new IllegalArgumentException("Archivo no encontrado. Volvé a subirlo.");
         }
 
         BigDecimal margen = obtenerMargen(proveedor);
         BigDecimal multiplicador = BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100)));
 
-        List<String[]> filasCsv = parsearFilas(contenido, colSku, colPrecio);
+        List<String[]> filas = parsearFilas(info, colSku, colPrecio);
 
-        Set<String> skusUnicos = filasCsv.stream()
+        Set<String> skusUnicos = filas.stream()
                 .map(f -> f[0])
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
@@ -83,8 +107,8 @@ public class PrecioImportService {
         List<PreviewFila> preview = new ArrayList<>();
         int ok = 0, conflictos = 0, noEncontrados = 0;
 
-        for (int i = 0; i < filasCsv.size(); i++) {
-            String[] fila = filasCsv.get(i);
+        for (int i = 0; i < filas.size(); i++) {
+            String[] fila = filas.get(i);
             String sku = fila[0];
             BigDecimal precioCsv = parsearPrecio(fila[1]);
 
@@ -120,17 +144,17 @@ public class PrecioImportService {
     @Transactional
     public PrecioImportResultResponse aplicar(String uploadId, String colSku, String colPrecio,
                                                String proveedor, Set<String> skusExcluidos, String archivo) {
-        byte[] contenido = uploads.remove(uploadId);
-        if (contenido == null) {
+        UploadInfo info = uploads.remove(uploadId);
+        if (info == null) {
             throw new IllegalArgumentException("Archivo expirado. Volvé a subirlo.");
         }
 
         BigDecimal margen = obtenerMargen(proveedor);
         BigDecimal multiplicador = BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100)));
 
-        List<String[]> filasCsv = parsearFilas(contenido, colSku, colPrecio);
+        List<String[]> filas = parsearFilas(info, colSku, colPrecio);
 
-        Set<String> skusUnicos = filasCsv.stream()
+        Set<String> skusUnicos = filas.stream()
                 .map(f -> f[0])
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
@@ -150,7 +174,7 @@ public class PrecioImportService {
         List<HistorialPrecio> historiales = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();
 
-        for (String[] fila : filasCsv) {
+        for (String[] fila : filas) {
             String sku = fila[0];
             BigDecimal precioCsv = parsearPrecio(fila[1]);
             if (sku == null || sku.isBlank() || precioCsv == null) continue;
@@ -263,6 +287,8 @@ public class PrecioImportService {
         if (!historiales.isEmpty()) historialRepo.saveAll(historiales);
     }
 
+    // --- Helpers ---
+
     private BigDecimal obtenerMargen(String proveedor) {
         return configuracionRepo.findByProveedorIgnoreCase(proveedor)
                 .map(ConfiguracionPrecio::getMargen)
@@ -270,7 +296,14 @@ public class PrecioImportService {
                         "No hay configuración de margen para el proveedor: " + proveedor));
     }
 
-    private List<String[]> parsearFilas(byte[] contenido, String colSku, String colPrecio) {
+    private List<String[]> parsearFilas(UploadInfo info, String colSku, String colPrecio) {
+        if (info.esExcel()) {
+            return parsearFilasExcel(info.contenido(), colSku, colPrecio);
+        }
+        return parsearFilasCsv(info.contenido(), colSku, colPrecio);
+    }
+
+    private List<String[]> parsearFilasCsv(byte[] contenido, String colSku, String colPrecio) {
         try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
              CSVParser parser = CSVParser.parse(reader, csvFormat())) {
 
@@ -284,6 +317,65 @@ public class PrecioImportService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Error al leer el CSV: " + e.getMessage());
         }
+    }
+
+    private List<String[]> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
+        try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
+            Sheet sheet = wb.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
+
+            int colSkuIdx = -1, colPrecioIdx = -1;
+            for (Cell cell : headerRow) {
+                String nombre = cellToString(cell);
+                if (nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
+                if (nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
+            }
+            if (colSkuIdx < 0) throw new IllegalArgumentException("Columna SKU '" + colSku + "' no encontrada");
+            if (colPrecioIdx < 0) throw new IllegalArgumentException("Columna precio '" + colPrecio + "' no encontrada");
+
+            List<String[]> filas = new ArrayList<>();
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+                String sku = cellToString(row.getCell(colSkuIdx));
+                String precio = cellToString(row.getCell(colPrecioIdx));
+                if (sku != null && !sku.isBlank()) {
+                    filas.add(new String[]{sku.trim(), precio != null ? precio.trim() : null});
+                }
+            }
+            return filas;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error al leer el archivo Excel: " + e.getMessage());
+        }
+    }
+
+    private String cellToString(Cell cell) {
+        if (cell == null) return null;
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> {
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val) && !Double.isInfinite(val)) {
+                    yield String.valueOf((long) val);
+                }
+                yield String.valueOf(val);
+            }
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> {
+                try { yield String.valueOf(cell.getNumericCellValue()); }
+                catch (Exception e) { yield cell.getStringCellValue(); }
+            }
+            default -> null;
+        };
+    }
+
+    private boolean esArchivoExcel(String nombre) {
+        if (nombre == null) return false;
+        String lower = nombre.toLowerCase();
+        return lower.endsWith(".xls") || lower.endsWith(".xlsx");
     }
 
     private String valor(CSVRecord record, String columna) {

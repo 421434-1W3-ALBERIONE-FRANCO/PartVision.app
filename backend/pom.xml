@@ -111,6 +111,13 @@
             <version>1.12.0</version>
         </dependency>
 
+        <!-- Lectura de archivos Excel (XLS/XLSX) para importacion de listas de precios -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
+
         <!-- SDK oficial de Anthropic para el proveedor de vision real (Fase 7) -->
         <dependency>
             <groupId>com.anthropic</groupId>
