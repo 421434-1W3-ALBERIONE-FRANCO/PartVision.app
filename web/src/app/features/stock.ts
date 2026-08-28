@@ -198,8 +198,8 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
         }
 
         @if (productoSel(); as p) {
-          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarModalCarga()">
-            <div class="glass-panel w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6 rounded-2xl border border-neon-cyan/40 shadow-neon animate-fade-in space-y-5" (click)="$event.stopPropagation()">
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4" (click)="cerrarModalCarga()">
+            <div class="glass-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl border border-neon-cyan/40 shadow-neon animate-fade-in space-y-5" (click)="$event.stopPropagation()">
               <!-- Header -->
               <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1 flex-1 min-w-0">
@@ -210,15 +210,15 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                     @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
                   </p>
                 </div>
-                <div class="flex items-start gap-3 shrink-0">
+                <div class="flex items-start gap-2 shrink-0">
                   @if (resumen(); as r) {
-                    <div class="flex gap-3">
-                      <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
-                        <p class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }}</p>
+                    <div class="flex gap-2">
+                      <div class="text-center px-3 py-1.5 rounded-xl bg-dark-surface/60 border border-dark-border">
+                        <p class="text-lg font-extrabold text-neon-green font-mono">{{ r.total }}</p>
                         <p class="text-[10px] uppercase text-gray-400 font-semibold">Unidades</p>
                       </div>
-                      <div class="text-center px-4 py-2 rounded-xl bg-dark-surface/60 border border-dark-border">
-                        <p class="text-xl font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
+                      <div class="text-center px-3 py-1.5 rounded-xl bg-dark-surface/60 border border-dark-border">
+                        <p class="text-lg font-extrabold text-neon-purple font-mono">{{ r.ubicaciones.length }}</p>
                         <p class="text-[10px] uppercase text-gray-400 font-semibold">Ubicaciones</p>
                       </div>
                     </div>
@@ -250,7 +250,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
               <div class="p-4 md:p-6 space-y-4">
                 <!-- ENTRADA -->
                 @if (opTab() === 'entrada') {
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación destino</label>
                       <select [(ngModel)]="opUbicacionId"
@@ -276,7 +276,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
 
                 <!-- SALIDA -->
                 @if (opTab() === 'salida') {
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Ubicación origen</label>
                       <select [(ngModel)]="opUbicacionId"

@@ -145,7 +145,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                 />
               </div>
               <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Posición</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Rack</label>
                 <input
                   [(ngModel)]="formPosicion"
                   type="text" maxlength="2" placeholder="02"
@@ -181,7 +181,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
             </div>
             @if (!editandoId()) {
               <button (click)="modoFormAsistido.set(true)" class="text-xs text-gray-500 hover:text-gray-300 mb-3 cursor-pointer">
-                Usar modo asistido (Pasillo + Posición + Altura)
+                Usar modo asistido (Pasillo + Rack + Altura)
               </button>
             }
           }
@@ -243,7 +243,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
             }
             @if (posicionSel()) {
               <span class="text-gray-500">/</span>
-              <span class="text-white font-semibold">Posición {{ posicionSel() }}</span>
+              <span class="text-white font-semibold">Rack {{ posicionSel() }}</span>
             }
           </div>
         }
@@ -268,7 +268,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                     </svg>
                   </div>
                   <div class="text-xs text-gray-400 mb-3">
-                    {{ p.posiciones }} posiciones · {{ p.ubicaciones }} ubicaciones
+                    {{ p.posiciones }} racks · {{ p.ubicaciones }} ubicaciones
                   </div>
                   <div class="w-full bg-dark-surface rounded-full h-2 mb-2">
                     <div
@@ -317,7 +317,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
               ← Volver
             </button>
             <span class="text-gray-400 text-sm">
-              {{ posicionesDelPasillo().length }} posiciones · {{ ubicacionesDelPasillo().length }} ubicaciones
+              {{ posicionesDelPasillo().length }} racks · {{ ubicacionesDelPasillo().length }} ubicaciones
             </span>
           </div>
 
@@ -329,7 +329,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
               >
                 <div class="px-4 pt-4 pb-2">
                   <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-bold text-white group-hover:text-neon-cyan transition-colors">POSICIÓN {{ pos.id }}</span>
+                    <span class="text-sm font-bold text-white group-hover:text-neon-cyan transition-colors">RACK {{ pos.id }}</span>
                     <span class="text-xs text-gray-500">{{ pos.alturas.length }} alturas</span>
                   </div>
                   <div class="text-xs text-gray-400 mb-2">
@@ -398,7 +398,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                       @for (slot of row.posiciones; track slot.pos) {
                         <button
                           (click)="irAPasillo(row.pasillo); irAPosicion(slot.pos)"
-                          [title]="'Pasillo ' + row.pasillo + ' · Posición ' + slot.pos"
+                          [title]="'Pasillo ' + row.pasillo + ' · Rack ' + slot.pos"
                           class="flex-1 h-8 rounded flex items-center justify-center text-[10px] font-mono border transition-all cursor-pointer"
                           [class]="
                             row.pasillo === pasilloSel() && slot.pos === posicionSel()
@@ -448,7 +448,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
                 <h3 class="text-xs font-bold text-white uppercase tracking-wider">
-                  P{{ pasilloSel() }} · Posición {{ posicionSel() }}
+                  P{{ pasilloSel() }} · Rack {{ posicionSel() }}
                 </h3>
               </div>
               <div>
@@ -497,7 +497,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                 <div class="p-4 space-y-3">
                   @if (parseCodigo(u.codigo); as parsed) {
                     <div class="text-xs text-gray-300">
-                      Pasillo {{ parsed.pasillo }} · Posición {{ parsed.posicion }} · Altura {{ parsed.altura }}
+                      Pasillo {{ parsed.pasillo }} · Rack {{ parsed.posicion }} · Altura {{ parsed.altura }}
                     </div>
                   }
                   @if (u.descripcion) {
@@ -629,7 +629,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                   <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface/30">
                     <th class="py-3 px-4">Código</th>
                     <th class="py-3 px-4">Pasillo</th>
-                    <th class="py-3 px-4">Posición</th>
+                    <th class="py-3 px-4">Rack</th>
                     <th class="py-3 px-4">Altura</th>
                     <th class="py-3 px-4">Descripción</th>
                     <th class="py-3 px-4 text-right">Stock</th>
@@ -1104,23 +1104,30 @@ export class Ubicaciones implements OnInit {
   irAPasillo(pasillo: string): void {
     this.pasilloSel.set(pasillo);
     this.posicionSel.set(null);
-    this.ubicacionSel.set(null);
+    this.limpiarDetalle();
   }
 
   irAPosicion(posicion: string): void {
     this.posicionSel.set(posicion);
-    this.ubicacionSel.set(null);
+    this.limpiarDetalle();
   }
 
   volverAMapa(): void {
     this.pasilloSel.set(null);
     this.posicionSel.set(null);
-    this.ubicacionSel.set(null);
+    this.limpiarDetalle();
   }
 
   seleccionarUbicacion(u: Ubicacion): void {
+    this.cambioEstadoOk.set(null);
     this.ubicacionSel.set(u);
     this.cargarDetalle(u.id);
+  }
+
+  private limpiarDetalle(): void {
+    this.ubicacionSel.set(null);
+    this.productosDetalle.set([]);
+    this.cambioEstadoOk.set(null);
   }
 
   private cargarDetalle(ubicacionId: number): void {
