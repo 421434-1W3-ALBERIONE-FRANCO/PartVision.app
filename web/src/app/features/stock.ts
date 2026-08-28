@@ -1103,16 +1103,30 @@ export class Stock implements OnInit {
     this.syncResultado.set(null);
     this.syncError.set(null);
     this.productos.sincronizarPrecios().subscribe({
-      next: (result) => {
-        this.syncResultado.set(result);
-        this.sincronizando.set(false);
-        this.cargarLista();
+      next: () => {
+        this.pollSyncEstado();
       },
       error: (e) => {
-        this.syncError.set(e?.error?.message ?? 'Error al sincronizar precios con el proveedor.');
+        this.syncError.set(e?.error?.message ?? 'Error al iniciar sincronización.');
         this.sincronizando.set(false);
       },
     });
+  }
+
+  private pollSyncEstado(): void {
+    const timer = setInterval(() => {
+      this.productos.estadoSync().subscribe({
+        next: (estado) => {
+          if (!estado.sincronizando) {
+            this.sincronizando.set(false);
+            if (estado.ultimoResultado) this.syncResultado.set(estado.ultimoResultado);
+            clearInterval(timer);
+            this.cargarLista();
+          }
+        },
+        error: () => {},
+      });
+    }, 3000);
   }
 
   contarPorTipo(tipo: string): number {

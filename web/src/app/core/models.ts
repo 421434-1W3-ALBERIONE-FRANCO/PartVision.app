@@ -177,6 +177,55 @@ export interface ConfiguracionPrecio {
   updatedAt: string;
 }
 
+export interface PrecioImportColumnas {
+  uploadId: string;
+  columnas: string[];
+  totalFilas: number;
+}
+
+export interface PrecioPreviewFila {
+  fila: number;
+  skuCsv: string;
+  precioCostoCsv: number;
+  estado: 'OK' | 'CONFLICTO' | 'NO_ENCONTRADO';
+  productoId: number | null;
+  productoDescripcion: string | null;
+  productoMarca: string | null;
+  precioActual: number | null;
+  precioNuevoCalculado: number | null;
+  cantidadMatches: number;
+}
+
+export interface PrecioImportPreview {
+  filas: PrecioPreviewFila[];
+  total: number;
+  ok: number;
+  conflictos: number;
+  noEncontrados: number;
+  margenAplicado: number;
+}
+
+export interface PrecioImportResult {
+  batchId: number;
+  total: number;
+  aplicados: number;
+  omitidos: number;
+  conflictos: number;
+  mensaje: string;
+}
+
+export interface PrecioBatch {
+  id: number;
+  proveedor: string;
+  fuente: string;
+  archivo: string | null;
+  total: number;
+  aplicados: number;
+  conflictos: number;
+  estado: string;
+  createdAt: string;
+}
+
 export interface ImportResult {
   totalFilas: number;
   importados: number;

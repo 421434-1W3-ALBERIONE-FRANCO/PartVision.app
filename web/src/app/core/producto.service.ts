@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { ConfiguracionPrecio, Page, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
+import { ConfiguracionPrecio, Page, PrecioBatch, PrecioImportColumnas, PrecioImportPreview, PrecioImportResult, Producto, ProductoCodigo, ProductoListItem, SyncResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
@@ -66,8 +66,12 @@ export class ProductoService {
     return this.http.delete<void>(`${this.base}/${id}`);
   }
 
-  sincronizarPrecios(): Observable<SyncResult> {
-    return this.http.post<SyncResult>(`${API_BASE_URL}/precios/sync`, {});
+  sincronizarPrecios(): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${API_BASE_URL}/precios/sync`, {});
+  }
+
+  estadoSync(): Observable<{ sincronizando: boolean; ultimoResultado?: SyncResult }> {
+    return this.http.get<{ sincronizando: boolean; ultimoResultado?: SyncResult }>(`${API_BASE_URL}/precios/sync/estado`);
   }
 
   listarConfigPrecios(): Observable<ConfiguracionPrecio[]> {
@@ -76,5 +80,38 @@ export class ProductoService {
 
   actualizarConfigPrecio(id: number, margen: number, activo: boolean): Observable<ConfiguracionPrecio> {
     return this.http.put<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion/${id}`, { margen, activo });
+  }
+
+  importDetectarColumnas(archivo: File): Observable<PrecioImportColumnas> {
+    const fd = new FormData();
+    fd.append('archivo', archivo);
+    return this.http.post<PrecioImportColumnas>(`${API_BASE_URL}/precios/import/columnas`, fd);
+  }
+
+  importPreview(uploadId: string, colSku: string, colPrecio: string, proveedor: string): Observable<PrecioImportPreview> {
+    const params = new HttpParams()
+      .set('uploadId', uploadId).set('colSku', colSku)
+      .set('colPrecio', colPrecio).set('proveedor', proveedor);
+    return this.http.post<PrecioImportPreview>(`${API_BASE_URL}/precios/import/preview`, null, { params });
+  }
+
+  importAplicar(uploadId: string, colSku: string, colPrecio: string, proveedor: string,
+                excluidos: string[], archivo: string): Observable<PrecioImportResult> {
+    let params = new HttpParams()
+      .set('uploadId', uploadId).set('colSku', colSku)
+      .set('colPrecio', colPrecio).set('proveedor', proveedor)
+      .set('archivo', archivo);
+    for (const sku of excluidos) {
+      params = params.append('excluidos', sku);
+    }
+    return this.http.post<PrecioImportResult>(`${API_BASE_URL}/precios/import/aplicar`, null, { params });
+  }
+
+  listarBatches(): Observable<PrecioBatch[]> {
+    return this.http.get<PrecioBatch[]>(`${API_BASE_URL}/precios/import/batches`);
+  }
+
+  rollbackBatch(id: number): Observable<PrecioBatch> {
+    return this.http.post<PrecioBatch>(`${API_BASE_URL}/precios/import/batches/${id}/rollback`, {});
   }
 }

@@ -42,6 +42,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
 
     List<Producto> findBySkuIsNotNull();
 
+    @EntityGraph(attributePaths = {"marca"})
+    List<Producto> findBySkuIn(java.util.Collection<String> skus);
+
     // La busqueda por texto ahora es por palabras (token-AND, cualquier orden): ver
     // ProductoRepositoryCustom#buscarInteligente / ProductoRepositoryImpl.
 
