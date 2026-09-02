@@ -42,6 +42,8 @@ spring:
     test-connection: false
 
 partvision:
+  compras:
+    api-key: ${COMPRAS_API_KEY:}
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME:noreply@partvision.com}}
     base-url: ${APP_BASE_URL:http://localhost:4200}

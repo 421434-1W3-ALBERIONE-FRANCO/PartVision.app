@@ -110,7 +110,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                     <tr class="hover:bg-dark-surface/40 transition-colors"
                         [class.bg-neon-cyan/5]="productoSel()?.id === p.id">
                       <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
-                      <td class="py-3 px-4 text-white text-sm max-w-[300px] truncate">{{ p.descripcion }}</td>
+                      <td class="py-3 px-4 text-white text-sm max-w-[380px] whitespace-normal break-words align-top">{{ p.descripcion }}</td>
                       <td class="py-3 px-4">
                         @if (p.marcaNombre) {
                           <span class="neon-badge-purple px-2 py-0.5 rounded text-[11px] font-mono">{{ p.marcaNombre }}</span>

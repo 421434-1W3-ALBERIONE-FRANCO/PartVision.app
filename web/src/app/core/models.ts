@@ -252,3 +252,28 @@ export interface Usuario {
   activo: boolean;
   roles: string[];
 }
+
+export interface CompraLinea {
+  id: number;
+  codigo: string;
+  descripcion: string;
+  cantidad: number;
+  productoId: number | null;
+  productoDescripcion: string | null;
+  productoMarca: string | null;
+}
+
+export interface Compra {
+  id: number;
+  numeroFactura: string;
+  fechaFactura: string;
+  proveedor: string | null;
+  estado: 'EN_TRANSITO' | 'INGRESADA';
+  ubicacionIngresoId: number | null;
+  ubicacionIngresoCodigo: string | null;
+  totalLineas: number;
+  totalUnidades: number;
+  lineasMatcheadas: number;
+  createdAt: string;
+  lineas: CompraLinea[];
+}
