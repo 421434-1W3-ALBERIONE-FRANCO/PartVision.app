@@ -184,7 +184,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
               <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1 flex-1 min-w-0">
                   <p class="text-xs uppercase tracking-wider text-gray-400">Gestionar stock</p>
-                  <p class="text-lg font-bold text-white truncate">{{ p.descripcion }}</p>
+                  <p class="text-lg font-bold text-white break-words">{{ p.descripcion }}</p>
                   <p class="text-sm font-mono text-neon-cyan">
                     SKU {{ p.sku || '—' }}
                     @if (p.marcaNombre) { <span class="text-gray-400"> · {{ p.marcaNombre }}</span> }
