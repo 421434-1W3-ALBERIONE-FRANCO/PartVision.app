@@ -141,9 +141,9 @@ public class ProductoService {
                     : productoRepository.findSinStock(pageable));
         }
         if (tieneStock == null) {
-            return conStock(productoRepository.buscarInteligente(tokens, pageable));
+            return conStock(productoRepository.buscarInteligente(tokens, q, pageable));
         }
-        return conStock(productoRepository.buscarInteligenteConStock(tokens, tieneStock, pageable));
+        return conStock(productoRepository.buscarInteligenteConStock(tokens, q, tieneStock, pageable));
     }
 
     /**
@@ -160,7 +160,7 @@ public class ProductoService {
         if (tokens.isEmpty()) {
             return conStock(productoRepository.findAllBy(pageable));
         }
-        return conStock(productoRepository.buscarInteligente(tokens, pageable));
+        return conStock(productoRepository.buscarInteligente(tokens, q, pageable));
     }
 
     /** Conectores que no aportan a la busqueda (se descartan para no exigirlos como palabra). */

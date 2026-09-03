@@ -34,16 +34,16 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
     private EntityManager em;
 
     @Override
-    public Page<Producto> buscarInteligente(List<String> tokens, Pageable pageable) {
-        return buscarInteligenteInterno(tokens, null, pageable);
+    public Page<Producto> buscarInteligente(List<String> tokens, String rawQuery, Pageable pageable) {
+        return buscarInteligenteInterno(tokens, rawQuery, null, pageable);
     }
 
     @Override
-    public Page<Producto> buscarInteligenteConStock(List<String> tokens, boolean tieneStock, Pageable pageable) {
-        return buscarInteligenteInterno(tokens, tieneStock, pageable);
+    public Page<Producto> buscarInteligenteConStock(List<String> tokens, String rawQuery, boolean tieneStock, Pageable pageable) {
+        return buscarInteligenteInterno(tokens, rawQuery, tieneStock, pageable);
     }
 
-    private Page<Producto> buscarInteligenteInterno(List<String> tokens, Boolean tieneStock, Pageable pageable) {
+    private Page<Producto> buscarInteligenteInterno(List<String> tokens, String rawQuery, Boolean tieneStock, Pageable pageable) {
         if (tokens.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, 0);
         }
@@ -62,7 +62,7 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         if (!prefixed.isEmpty()) {
             if (prefixed.size() >= 2) {
                 String tsqAll = String.join(" & ", prefixed);
-                Page<Producto> r = ejecutarFts(tsqAll, tokens, anchorIdx, tieneStock, pageable, userSort);
+                Page<Producto> r = ejecutarFts(tsqAll, tokens, anchorIdx, rawQuery, tieneStock, pageable, userSort);
                 if (r.getTotalElements() > 0) {
                     return r;
                 }
@@ -79,18 +79,18 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
                 String tsq = rest.isEmpty()
                         ? anchorSanitized + ":*"
                         : anchorSanitized + ":* & (" + String.join(" | ", rest) + ")";
-                Page<Producto> r = ejecutarFts(tsq, tokens, anchorIdx, tieneStock, pageable, userSort);
+                Page<Producto> r = ejecutarFts(tsq, tokens, anchorIdx, rawQuery, tieneStock, pageable, userSort);
                 if (r.getTotalElements() > 0) {
                     return r;
                 }
             }
         }
 
-        return buscarTrigram(tokens, anchorIdx, tieneStock, pageable, userSort);
+        return buscarTrigram(tokens, anchorIdx, rawQuery, tieneStock, pageable, userSort);
     }
 
     private Page<Producto> ejecutarFts(String tsquery, List<String> tokens, int anchorIdx,
-                                       Boolean tieneStock, Pageable pageable, boolean userSort) {
+                                       String rawQuery, Boolean tieneStock, Pageable pageable, boolean userSort) {
         String stockClause = stockFilter(tieneStock);
         String sortJoins = userSort ? buildSortJoins(pageable) : "";
         String order = userSort
@@ -108,6 +108,8 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         count.setParameter("tsq", tsquery);
 
         if (!userSort) {
+            data.setParameter("skuExact", rawQuery.trim().toLowerCase());
+            data.setParameter("skuPref", likeEscape(rawQuery.trim().toLowerCase()) + "%");
             if (tokens.size() >= 2) {
                 for (int i = 0; i < tokens.size(); i++) {
                     data.setParameter("dc" + i, "%" + likeEscape(tokens.get(i)) + "%");
@@ -119,8 +121,8 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         return paginar(data, count, pageable);
     }
 
-    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, Boolean tieneStock,
-                                         Pageable pageable, boolean userSort) {
+    private Page<Producto> buscarTrigram(List<String> tokens, int anchorIdx, String rawQuery,
+                                         Boolean tieneStock, Pageable pageable, boolean userSort) {
         em.createNativeQuery("SELECT set_config('pg_trgm.word_similarity_threshold', :u, true)")
                 .setParameter("u", UMBRAL_TRIGRAM)
                 .getSingleResult();
@@ -144,6 +146,8 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         count.setParameter("frase", frase);
 
         if (!userSort) {
+            data.setParameter("skuExact", rawQuery.trim().toLowerCase());
+            data.setParameter("skuPref", likeEscape(rawQuery.trim().toLowerCase()) + "%");
             data.setParameter("pref", likePrefix(tokens.get(anchorIdx)));
             if (tokens.size() >= 2) {
                 for (int i = 0; i < tokens.size(); i++) {
@@ -194,6 +198,8 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     private static String buildRelevanceOrderFts(List<String> tokens, int anchorIdx) {
         StringBuilder order = new StringBuilder(" order by");
+        order.append(" (case when lower(p.sku) = :skuExact then 0")
+                .append(" when lower(p.sku) like :skuPref escape '\\' then 1 else 2 end) asc,");
         if (tokens.size() >= 2) {
             order.append(" (case when");
             for (int i = 0; i < tokens.size(); i++) {
@@ -211,6 +217,8 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
 
     private static String buildRelevanceOrderTrigram(List<String> tokens, int anchorIdx) {
         StringBuilder order = new StringBuilder(" order by");
+        order.append(" (case when lower(p.sku) = :skuExact then 0")
+                .append(" when lower(p.sku) like :skuPref escape '\\' then 1 else 2 end) asc,");
         if (tokens.size() >= 2) {
             order.append(" (case when");
             for (int i = 0; i < tokens.size(); i++) {
