@@ -214,7 +214,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
           </span>
         </header>
 
-        <main class="flex-1 overflow-y-auto bg-dark p-4 md:p-8 relative z-10">
+        <main class="flex-1 overflow-y-auto bg-dark p-4 md:p-8 relative">
           <!-- Ambient top light -->
           <div class="absolute top-0 right-1/4 w-96 h-32 bg-neon-purple/10 rounded-full blur-[90px] pointer-events-none"></div>
           <router-outlet />
