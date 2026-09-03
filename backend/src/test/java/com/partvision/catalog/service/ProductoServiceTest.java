@@ -273,7 +273,7 @@ class ProductoServiceTest {
     @Test
     void findAll_conTextoSinStock_usaBuscarInteligente() {
         Producto p = Producto.builder().id(1L).descripcion("Filtro").estado(ProductoEstado.ACTIVO).build();
-        when(productoRepository.buscarInteligente(List.of("filtro"), PageRequest.of(0, 20)))
+        when(productoRepository.buscarInteligente(List.of("filtro"), "filtro", PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(p)));
 
         var page = service().findAll("filtro", null, PageRequest.of(0, 20));
@@ -285,7 +285,7 @@ class ProductoServiceTest {
     @Test
     void findAll_conTextoYConStock_usaBuscarInteligenteConStock() {
         Producto p = Producto.builder().id(1L).descripcion("Filtro").estado(ProductoEstado.ACTIVO).build();
-        when(productoRepository.buscarInteligenteConStock(List.of("filtro"), true, PageRequest.of(0, 20)))
+        when(productoRepository.buscarInteligenteConStock(List.of("filtro"), "filtro", true, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(p)));
 
         var page = service().findAll("filtro", true, PageRequest.of(0, 20));
@@ -345,7 +345,7 @@ class ProductoServiceTest {
     void buscarPorTexto_mapeaAListItem() {
         Producto p = Producto.builder().id(1L).sku("VW-1").descripcion("Aros Volkswagen")
                 .estado(ProductoEstado.ACTIVO).build();
-        when(productoRepository.buscarInteligente(List.of("volks"), PageRequest.of(0, 20)))
+        when(productoRepository.buscarInteligente(List.of("volks"), "volks", PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(p)));
 
         var page = service().buscarPorTexto("volks", PageRequest.of(0, 20));

@@ -132,7 +132,7 @@ class BusquedaCatalogoRealTest {
                 if (terms.isEmpty()) continue;
                 evaluados++;
 
-                Page<Producto> r = repo.buscarInteligente(terms, PAGE_100);
+                Page<Producto> r = repo.buscarInteligente(terms, String.join(" ", terms), PAGE_100);
                 if (r.getContent().stream().anyMatch(p -> p.getId().equals(id))) {
                     encontrados++;
                 }
@@ -165,7 +165,7 @@ class BusquedaCatalogoRealTest {
                 if (terms.size() < 2) continue;
                 evaluados++;
 
-                Page<Producto> r = repo.buscarInteligente(terms, PAGE_100);
+                Page<Producto> r = repo.buscarInteligente(terms, String.join(" ", terms), PAGE_100);
                 if (r.getContent().stream().anyMatch(p -> p.getId().equals(id))) {
                     encontrados++;
                 }
@@ -198,7 +198,7 @@ class BusquedaCatalogoRealTest {
                 if (terms.size() < 3) continue;
                 evaluados++;
 
-                Page<Producto> r = repo.buscarInteligente(terms, PAGE_100);
+                Page<Producto> r = repo.buscarInteligente(terms, String.join(" ", terms), PAGE_100);
                 if (r.getContent().stream().anyMatch(p -> p.getId().equals(id))) {
                     encontrados++;
                 }
@@ -234,7 +234,7 @@ class BusquedaCatalogoRealTest {
                 if (tokens.isEmpty()) continue;
                 evaluados++;
 
-                Page<Producto> r = repo.buscarInteligente(tokens, PAGE_100);
+                Page<Producto> r = repo.buscarInteligente(tokens, String.join(" ", tokens), PAGE_100);
                 if (r.getContent().stream().anyMatch(p -> p.getId().equals(id))) {
                     encontrados++;
                 }
@@ -268,7 +268,7 @@ class BusquedaCatalogoRealTest {
                 evaluados++;
 
                 String prefijo = terms.get(0).substring(0, 4);
-                Page<Producto> r = repo.buscarInteligente(List.of(prefijo), PAGE_100);
+                Page<Producto> r = repo.buscarInteligente(List.of(prefijo), prefijo, PAGE_100);
                 if (r.getContent().stream().anyMatch(p -> p.getId().equals(id))) {
                     encontrados++;
                 }
@@ -338,7 +338,7 @@ class BusquedaCatalogoRealTest {
 
             int queriesRelevantes = 0;
             for (List<String> q : queries) {
-                Page<Producto> r = repo.buscarInteligente(q, PAGE);
+                Page<Producto> r = repo.buscarInteligente(q, String.join(" ", q), PAGE);
                 if (r.getTotalElements() == 0) continue;
 
                 long relevantes = r.getContent().stream()
@@ -359,9 +359,9 @@ class BusquedaCatalogoRealTest {
 
         @Test
         void mas_terminos_reducen_resultados() {
-            long r1 = repo.buscarInteligente(List.of("junta"), PAGE).getTotalElements();
-            long r2 = repo.buscarInteligente(List.of("junta", "carter"), PAGE).getTotalElements();
-            long r3 = repo.buscarInteligente(List.of("junta", "carter", "fiat"), PAGE).getTotalElements();
+            long r1 = repo.buscarInteligente(List.of("junta"), "junta", PAGE).getTotalElements();
+            long r2 = repo.buscarInteligente(List.of("junta", "carter"), "junta carter", PAGE).getTotalElements();
+            long r3 = repo.buscarInteligente(List.of("junta", "carter", "fiat"), "junta carter fiat", PAGE).getTotalElements();
 
             assertThat(r1).isGreaterThan(r2);
             assertThat(r2).isGreaterThan(r3);
@@ -385,7 +385,7 @@ class BusquedaCatalogoRealTest {
 
             int conResultados = 0;
             for (String tipo : tipos) {
-                Page<Producto> r = repo.buscarInteligente(List.of(tipo), PAGE);
+                Page<Producto> r = repo.buscarInteligente(List.of(tipo), tipo, PAGE);
                 if (r.getTotalElements() > 0) conResultados++;
             }
 
@@ -411,7 +411,7 @@ class BusquedaCatalogoRealTest {
 
             int conResultados = 0;
             for (String v : vehiculos) {
-                Page<Producto> r = repo.buscarInteligente(List.of(v), PAGE);
+                Page<Producto> r = repo.buscarInteligente(List.of(v), v, PAGE);
                 if (r.getTotalElements() > 0) conResultados++;
             }
 
@@ -442,7 +442,7 @@ class BusquedaCatalogoRealTest {
 
             int conResultados = 0;
             for (var entry : combos.entrySet()) {
-                Page<Producto> r = repo.buscarInteligente(List.of(entry.getValue()), PAGE);
+                Page<Producto> r = repo.buscarInteligente(List.of(entry.getValue()), String.join(" ", entry.getValue()), PAGE);
                 if (r.getTotalElements() > 0) {
                     conResultados++;
                     assertThat(r.getContent().get(0).getDescripcion().toLowerCase())
@@ -477,7 +477,7 @@ class BusquedaCatalogoRealTest {
 
             int conResultados = 0;
             for (var entry : typos.entrySet()) {
-                Page<Producto> r = repo.buscarInteligente(List.of(entry.getKey()), PAGE);
+                Page<Producto> r = repo.buscarInteligente(List.of(entry.getKey()), entry.getKey(), PAGE);
                 if (r.getTotalElements() > 0) conResultados++;
             }
 
@@ -509,12 +509,12 @@ class BusquedaCatalogoRealTest {
                     List.of("correa", "distribucion"));
 
             // Warmup
-            repo.buscarInteligente(List.of("warmup"), PAGE);
+            repo.buscarInteligente(List.of("warmup"), "warmup", PAGE);
 
             long maxMs = 0;
             for (List<String> q : queries) {
                 long t0 = System.nanoTime();
-                repo.buscarInteligente(q, PAGE);
+                repo.buscarInteligente(q, String.join(" ", q), PAGE);
                 long ms = (System.nanoTime() - t0) / 1_000_000;
                 maxMs = Math.max(maxMs, ms);
             }
@@ -538,7 +538,7 @@ class BusquedaCatalogoRealTest {
             Set<String> proveedoresEncontrados = new HashSet<>();
 
             for (String t : terminos) {
-                Page<Producto> r = repo.buscarInteligente(List.of(t), PAGE);
+                Page<Producto> r = repo.buscarInteligente(List.of(t), t, PAGE);
                 r.getContent().forEach(p -> {
                     if (p.getProveedor() != null) proveedoresEncontrados.add(p.getProveedor());
                 });
@@ -556,7 +556,7 @@ class BusquedaCatalogoRealTest {
 
     private boolean buscarYEncontrar(Long id, List<String> tokens, Pageable page) {
         if (tokens.isEmpty()) return false;
-        Page<Producto> r = repo.buscarInteligente(tokens, page);
+        Page<Producto> r = repo.buscarInteligente(tokens, String.join(" ", tokens), page);
         return r.getContent().stream().anyMatch(p -> p.getId().equals(id));
     }
 

@@ -152,7 +152,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void busca_por_tipo_de_pieza() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), "pistones", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(4);
             assertThat(r.getContent()).allSatisfy(p ->
                     assertThat(p.getDescripcion().toLowerCase()).contains("piston"));
@@ -160,33 +160,33 @@ class BusquedaIntegracionTest {
 
         @Test
         void busca_por_marca_en_campo_busqueda() {
-            Page<Producto> r = repo.buscarInteligente(List.of("taranto"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("taranto"), "taranto", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(3);
         }
 
         @Test
         void busca_por_categoria_en_campo_busqueda() {
-            Page<Producto> r = repo.buscarInteligente(List.of("aditivos"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("aditivos"), "aditivos", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
         }
 
         @Test
         void busca_vehiculo_en_descripcion() {
-            Page<Producto> r = repo.buscarInteligente(List.of("volkswagen"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("volkswagen"), "volkswagen", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getDescripcion()).containsIgnoringCase("VOLKSWAGEN");
         }
 
         @Test
         void busca_modelo_motor() {
-            Page<Producto> r = repo.buscarInteligente(List.of("om352a"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("om352a"), "om352a", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getDescripcion()).containsIgnoringCase("OM352A");
         }
 
         @Test
         void busca_sku_alfanumerico_completo() {
-            Page<Producto> r = repo.buscarInteligente(List.of("zsd1950350"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("zsd1950350"), "zsd1950350", PAGE);
             assertThat(r.getTotalElements()).isEqualTo(1);
             assertThat(r.getContent().get(0).getSku()).isEqualTo("ZSD1950350");
         }
@@ -201,7 +201,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void pieza_mas_vehiculo() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "fiat"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "fiat"), "pistones fiat", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             assertThat(r.getContent()).allSatisfy(p -> {
                 String d = p.getDescripcion().toLowerCase();
@@ -212,7 +212,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void pieza_vehiculo_cilindrada() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "fiat", "600"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "fiat", "600"), "pistones fiat 600", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             assertThat(r.getContent()).allSatisfy(p ->
                     assertThat(p.getDescripcion().toLowerCase()).contains("fiat"));
@@ -220,7 +220,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void aros_mas_marca_vehiculo() {
-            Page<Producto> r = repo.buscarInteligente(List.of("aros", "renault"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("aros", "renault"), "aros renault", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             assertThat(r.getContent()).allSatisfy(p -> {
                 String d = p.getDescripcion().toLowerCase();
@@ -231,20 +231,20 @@ class BusquedaIntegracionTest {
 
         @Test
         void marca_jpa_mas_tipo_pieza() {
-            Page<Producto> r = repo.buscarInteligente(List.of("taranto", "junta"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("taranto", "junta"), "taranto junta", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
         }
 
         @Test
         void tres_tokens_relevantes() {
-            Page<Producto> r = repo.buscarInteligente(List.of("subconjunto", "mercedes", "aspirado"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("subconjunto", "mercedes", "aspirado"), "subconjunto mercedes aspirado", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getDescripcion()).containsIgnoringCase("ASPIRADO");
         }
 
         @Test
         void cojinete_bancada_ford() {
-            Page<Producto> r = repo.buscarInteligente(List.of("cojinete", "bancada", "ford"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("cojinete", "bancada", "ford"), "cojinete bancada ford", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getDescripcion()).containsIgnoringCase("BANCADA");
         }
@@ -260,21 +260,21 @@ class BusquedaIntegracionTest {
         @Test
         void generica_juego_no_es_anchor() {
             // "juego" es GENERICA → anchor debería ser "aros"
-            Page<Producto> r = repo.buscarInteligente(List.of("juego", "aros", "fiat"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("juego", "aros", "fiat"), "juego aros fiat", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(0);
             // No debe explotar; "aros" acota mejor que "juego"
         }
 
         @Test
         void generica_kit_no_es_anchor() {
-            Page<Producto> r = repo.buscarInteligente(List.of("kit", "pistones", "ford"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("kit", "pistones", "ford"), "kit pistones ford", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
         }
 
         @Test
         void solo_token_numerico_usa_indice_cero() {
             // Token "600" no es alfabético ≥3 → fallback a index 0
-            Page<Producto> r = repo.buscarInteligente(List.of("600"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("600"), "600", PAGE);
             assertThat(r).isNotNull();
         }
     }
@@ -289,31 +289,31 @@ class BusquedaIntegracionTest {
 
         @Test
         void typo_en_pieza_pistpnes() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistpnes"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistpnes"), "pistpnes", PAGE);
             assertThat(r.getTotalElements()).isGreaterThan(0);
         }
 
         @Test
         void typo_en_vehiculo_volskwagen() {
-            Page<Producto> r = repo.buscarInteligente(List.of("volskwagen"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("volskwagen"), "volskwagen", PAGE);
             assertThat(r.getTotalElements()).isGreaterThan(0);
         }
 
         @Test
         void typo_en_marca_tarrato() {
-            Page<Producto> r = repo.buscarInteligente(List.of("tarrato"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("tarrato"), "tarrato", PAGE);
             assertThat(r.getTotalElements()).isGreaterThan(0);
         }
 
         @Test
         void termino_inexistente_devuelve_vacio() {
-            Page<Producto> r = repo.buscarInteligente(List.of("xylophone"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("xylophone"), "xylophone", PAGE);
             assertThat(r.getTotalElements()).isEqualTo(0);
         }
 
         @Test
         void typo_doble_cojinettes_mercedez() {
-            Page<Producto> r = repo.buscarInteligente(List.of("cojinettes", "mercedez"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("cojinettes", "mercedez"), "cojinettes mercedez", PAGE);
             // Puede matchear parcial o nada, pero no debe explotar
             assertThat(r).isNotNull();
         }
@@ -328,7 +328,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void prefix_boost_descripcion_empieza_con_anchor() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), "pistones", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             // Primeros resultados: descripción empieza con "PISTONES"
             assertThat(r.getContent().get(0).getDescripcion()).startsWithIgnoringCase("PISTONES");
@@ -336,7 +336,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void descripcion_corta_antes_que_larga() {
-            Page<Producto> r = repo.buscarInteligente(List.of("junta"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("junta"), "junta", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             List<Producto> content = r.getContent();
             // Dentro de los que empiezan con "JUNTA", la más corta primero
@@ -358,7 +358,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void con_stock_solo_devuelve_productos_con_cantidad_positiva() {
-            Page<Producto> r = repo.buscarInteligenteConStock(List.of("pistones"), true, PAGE);
+            Page<Producto> r = repo.buscarInteligenteConStock(List.of("pistones"), "pistones", true, PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent()).allSatisfy(p ->
                     assertThat(p.getDescripcion().toLowerCase()).contains("piston"));
@@ -366,9 +366,9 @@ class BusquedaIntegracionTest {
 
         @Test
         void sin_stock_excluye_productos_con_cantidad_positiva() {
-            Page<Producto> conStock = repo.buscarInteligenteConStock(List.of("pistones"), true, PAGE);
-            Page<Producto> sinStock = repo.buscarInteligenteConStock(List.of("pistones"), false, PAGE);
-            Page<Producto> todos = repo.buscarInteligente(List.of("pistones"), PAGE);
+            Page<Producto> conStock = repo.buscarInteligenteConStock(List.of("pistones"), "pistones", true, PAGE);
+            Page<Producto> sinStock = repo.buscarInteligenteConStock(List.of("pistones"), "pistones", false, PAGE);
+            Page<Producto> todos = repo.buscarInteligente(List.of("pistones"), "pistones", PAGE);
 
             assertThat(conStock.getTotalElements() + sinStock.getTotalElements())
                     .isEqualTo(todos.getTotalElements());
@@ -376,9 +376,9 @@ class BusquedaIntegracionTest {
 
         @Test
         void disjuncion_stock_con_otro_termino() {
-            Page<Producto> conStock = repo.buscarInteligenteConStock(List.of("toyota"), true, PAGE);
-            Page<Producto> sinStock = repo.buscarInteligenteConStock(List.of("toyota"), false, PAGE);
-            Page<Producto> todos = repo.buscarInteligente(List.of("toyota"), PAGE);
+            Page<Producto> conStock = repo.buscarInteligenteConStock(List.of("toyota"), "toyota", true, PAGE);
+            Page<Producto> sinStock = repo.buscarInteligenteConStock(List.of("toyota"), "toyota", false, PAGE);
+            Page<Producto> todos = repo.buscarInteligente(List.of("toyota"), "toyota", PAGE);
 
             assertThat(conStock.getTotalElements() + sinStock.getTotalElements())
                     .isEqualTo(todos.getTotalElements());
@@ -386,7 +386,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void aros_con_stock_incluye_hilux() {
-            Page<Producto> r = repo.buscarInteligenteConStock(List.of("aros"), true, PAGE);
+            Page<Producto> r = repo.buscarInteligenteConStock(List.of("aros"), "aros", true, PAGE);
             assertThat(r.getContent()).anyMatch(p ->
                     p.getDescripcion().toUpperCase().contains("HILUX"));
         }
@@ -401,14 +401,14 @@ class BusquedaIntegracionTest {
 
         @Test
         void tokens_vacios_devuelve_pagina_vacia() {
-            Page<Producto> r = repo.buscarInteligente(List.of(), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of(), "", PAGE);
             assertThat(r.getTotalElements()).isEqualTo(0);
             assertThat(r.getContent()).isEmpty();
         }
 
         @Test
         void sku_con_guiones_matchea() {
-            Page<Producto> r = repo.buscarInteligente(List.of("0082-20-15"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("0082-20-15"), "0082-20-15", PAGE);
             // FTS 'simple' tokeniza en guiones → busca fragmentos
             assertThat(r).isNotNull();
         }
@@ -418,19 +418,19 @@ class BusquedaIntegracionTest {
             // ftsSanitize solo acepta [a-z0-9.] → tokens en MAYÚSCULA quedan vacíos.
             // El repo depende de que el servicio haga toLowerCase() antes.
             // Con mayúsculas, FTS falla → cae a trigram → puede o no encontrar.
-            Page<Producto> upper = repo.buscarInteligente(List.of("PISTONES", "FIAT"), PAGE);
+            Page<Producto> upper = repo.buscarInteligente(List.of("PISTONES", "FIAT"), "PISTONES FIAT", PAGE);
             assertThat(upper).isNotNull();
         }
 
         @Test
         void medida_numerica_como_busqueda() {
-            Page<Producto> r = repo.buscarInteligente(List.of("97.50mm"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("97.50mm"), "97.50mm", PAGE);
             assertThat(r).isNotNull();
         }
 
         @Test
         void caracteres_especiales_no_explotan() {
-            Page<Producto> r = repo.buscarInteligente(List.of("';--drop"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("';--drop"), "';--drop", PAGE);
             assertThat(r).isNotNull();
         }
 
@@ -438,20 +438,20 @@ class BusquedaIntegracionTest {
         void ocho_tokens_maximo_funciona() {
             Page<Producto> r = repo.buscarInteligente(
                     List.of("pistones", "fiat", "600", "750cc", "std", "62mm", "motor", "juego"),
-                    PAGE);
+                    "pistones fiat 600 750cc std 62mm motor juego", PAGE);
             assertThat(r).isNotNull();
         }
 
         @Test
         void un_solo_token_corto_numerico() {
-            Page<Producto> r = repo.buscarInteligente(List.of("16"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("16"), "16", PAGE);
             assertThat(r).isNotNull();
         }
 
         @Test
         void busqueda_proveedor_en_campo_busqueda_no_indexado() {
             // "proveedor" no está en la columna busqueda → no matchea por texto
-            Page<Producto> r = repo.buscarInteligente(List.of("egsa"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("egsa"), "egsa", PAGE);
             // Puede devolver 0 (proveedor no está en busqueda) o algo si "egsa" aparece en otro campo
             assertThat(r).isNotNull();
         }
@@ -466,7 +466,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void pagina_cero_devuelve_primera_pagina() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), PageRequest.of(0, 2));
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), "pistones", PageRequest.of(0, 2));
             assertThat(r.getNumber()).isEqualTo(0);
             assertThat(r.getContent().size()).isLessThanOrEqualTo(2);
             assertThat(r.getTotalElements()).isGreaterThan(2);
@@ -474,8 +474,8 @@ class BusquedaIntegracionTest {
 
         @Test
         void pagina_siguiente_devuelve_otros_resultados() {
-            Page<Producto> p0 = repo.buscarInteligente(List.of("pistones"), PageRequest.of(0, 2));
-            Page<Producto> p1 = repo.buscarInteligente(List.of("pistones"), PageRequest.of(1, 2));
+            Page<Producto> p0 = repo.buscarInteligente(List.of("pistones"), "pistones", PageRequest.of(0, 2));
+            Page<Producto> p1 = repo.buscarInteligente(List.of("pistones"), "pistones", PageRequest.of(1, 2));
 
             assertThat(p0.getContent()).isNotEmpty();
             assertThat(p1.getContent()).isNotEmpty();
@@ -487,7 +487,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void pagina_fuera_de_rango_devuelve_vacio() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), PageRequest.of(100, 20));
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones"), "pistones", PageRequest.of(100, 20));
             assertThat(r.getContent()).isEmpty();
             assertThat(r.getTotalElements()).isGreaterThan(0);
         }
@@ -555,7 +555,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void junta_devuelve_ambos_proveedores() {
-            Page<Producto> r = repo.buscarInteligente(List.of("junta"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("junta"), "junta", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(3);
             // ADS: "JUNTA DE TAPA DE CILINDROS FORD..."
             // EGSA: "JUNTA CAMARA LATERAL", "JUNTA TAPA BALANCINES..."
@@ -563,7 +563,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void cojinete_devuelve_ambos_proveedores() {
-            Page<Producto> r = repo.buscarInteligente(List.of("cojinete"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("cojinete"), "cojinete", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(3);
             // ADS: 2 cojinetes Ford
             // EGSA: 1 cojinete Peugeot
@@ -571,7 +571,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void busqueda_fiat_cruza_proveedores() {
-            Page<Producto> r = repo.buscarInteligente(List.of("fiat"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("fiat"), "fiat", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(3);
             // ADS: Pistones Fiat 600
             // EGSA: Junta tapa balancines Fiat Uno, Juego juntas Fiat 128
@@ -587,7 +587,7 @@ class BusquedaIntegracionTest {
 
         @Test
         void prefijo_parcial_pieza() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pist"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pist"), "pist", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(4);
             assertThat(r.getContent()).allSatisfy(p ->
                     assertThat(p.getDescripcion().toLowerCase()).contains("piston"));
@@ -595,20 +595,20 @@ class BusquedaIntegracionTest {
 
         @Test
         void prefijo_parcial_vehiculo() {
-            Page<Producto> r = repo.buscarInteligente(List.of("volksw"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("volksw"), "volksw", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getDescripcion()).containsIgnoringCase("VOLKSWAGEN");
         }
 
         @Test
         void prefijo_parcial_marca_jpa() {
-            Page<Producto> r = repo.buscarInteligente(List.of("taran"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("taran"), "taran", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(3);
         }
 
         @Test
         void prefijo_dos_tokens_parciales() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pist", "fi"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pist", "fi"), "pist fi", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(2);
             assertThat(r.getContent()).allSatisfy(p -> {
                 String d = p.getDescripcion().toLowerCase();
@@ -619,14 +619,14 @@ class BusquedaIntegracionTest {
 
         @Test
         void prefijo_sku_parcial() {
-            Page<Producto> r = repo.buscarInteligente(List.of("zsd195"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("zsd195"), "zsd195", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
             assertThat(r.getContent().get(0).getSku()).isEqualTo("ZSD1950350");
         }
 
         @Test
         void prefijo_motor_parcial() {
-            Page<Producto> r = repo.buscarInteligente(List.of("om35"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("om35"), "om35", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
         }
     }
@@ -642,19 +642,19 @@ class BusquedaIntegracionTest {
         void sku_con_guiones_split_en_partes() {
             // "0082-20-15" ahora se tokeniza como ["0082", "20", "15"]
             // FTS busca cada parte como prefijo en la columna busqueda
-            Page<Producto> r = repo.buscarInteligente(List.of("0082", "20", "15"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("0082", "20", "15"), "0082 20 15", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
         }
 
         @Test
         void sku_numerico_parcial_como_prefijo() {
-            Page<Producto> r = repo.buscarInteligente(List.of("0082"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("0082"), "0082", PAGE);
             assertThat(r.getTotalElements()).isGreaterThanOrEqualTo(1);
         }
 
         @Test
         void medida_como_token_independiente() {
-            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "62.60mm"), PAGE);
+            Page<Producto> r = repo.buscarInteligente(List.of("pistones", "62.60mm"), "pistones 62.60mm", PAGE);
             assertThat(r).isNotNull();
         }
     }
