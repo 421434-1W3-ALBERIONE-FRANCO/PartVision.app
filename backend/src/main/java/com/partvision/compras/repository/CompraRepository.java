@@ -13,7 +13,7 @@ public interface CompraRepository extends JpaRepository<Compra, Long> {
 
     Optional<Compra> findByNumeroFactura(String numeroFactura);
 
-    @EntityGraph(attributePaths = "lineas")
+    @EntityGraph(attributePaths = {"lineas", "lineas.producto", "lineas.producto.marca", "lineas.ubicacionIngreso"})
     Optional<Compra> findWithLineasById(Long id);
 
     Page<Compra> findByEstadoOrderByCreatedAtDesc(CompraEstado estado, Pageable pageable);

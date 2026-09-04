@@ -5,6 +5,11 @@ import { Observable } from 'rxjs';
 import { API_BASE_URL } from './api.config';
 import { Compra, Page } from './models';
 
+export interface LineaUbicacionAsignacion {
+  lineaId: number;
+  ubicacionId: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CompraService {
   private http = inject(HttpClient);
@@ -20,7 +25,7 @@ export class CompraService {
     return this.http.get<Compra>(`${this.base}/${id}`);
   }
 
-  marcarIngresada(id: number, ubicacionId: number): Observable<Compra> {
-    return this.http.patch<Compra>(`${this.base}/${id}/ingresar`, { ubicacionId });
+  marcarIngresada(id: number, asignaciones: LineaUbicacionAsignacion[]): Observable<Compra> {
+    return this.http.patch<Compra>(`${this.base}/${id}/ingresar`, { asignaciones });
   }
 }

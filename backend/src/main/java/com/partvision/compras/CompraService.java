@@ -8,7 +8,9 @@ import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
 import com.partvision.compras.dto.*;
 import com.partvision.compras.repository.CompraRepository;
+import com.partvision.inventory.domain.Stock;
 import com.partvision.inventory.dto.EntradaRequest;
+import com.partvision.inventory.repository.StockRepository;
 import com.partvision.inventory.service.StockService;
 import com.partvision.location.domain.Ubicacion;
 import com.partvision.location.service.UbicacionService;
@@ -36,6 +38,7 @@ public class CompraService {
     private final CompraRepository compraRepo;
     private final ProductoRepository productoRepo;
     private final StockService stockService;
+    private final StockRepository stockRepository;
     private final UbicacionService ubicacionService;
 
     @Transactional
@@ -98,17 +101,31 @@ public class CompraService {
             throw new BusinessException("La compra ya fue marcada como ingresada");
         }
 
-        Ubicacion ubicacion = ubicacionService.getEntity(request.ubicacionId());
+        Map<Long, Long> ubicacionPorLinea = request.asignaciones().stream()
+                .collect(Collectors.toMap(
+                        CambiarEstadoRequest.LineaUbicacion::lineaId,
+                        CambiarEstadoRequest.LineaUbicacion::ubicacionId
+                ));
+
+        Set<Long> ubicacionIds = new HashSet<>(ubicacionPorLinea.values());
+        Map<Long, Ubicacion> ubicacionesCache = ubicacionIds.stream()
+                .collect(Collectors.toMap(Function.identity(), ubicacionService::getEntity));
+
         compra.setEstado(CompraEstado.INGRESADA);
-        compra.setUbicacionIngreso(ubicacion);
 
         int cargados = 0;
         for (CompraLinea linea : compra.getLineas()) {
+            Long ubicacionId = ubicacionPorLinea.get(linea.getId());
+            if (ubicacionId == null) continue;
+
+            Ubicacion ubicacion = ubicacionesCache.get(ubicacionId);
+            linea.setUbicacionIngreso(ubicacion);
+
             if (linea.getProducto() == null) continue;
 
             stockService.registrarEntrada(new EntradaRequest(
                     linea.getProducto().getId(),
-                    ubicacion.getId(),
+                    ubicacionId,
                     linea.getCantidad(),
                     "Compra factura #" + compra.getNumeroFactura()
             ));
@@ -116,8 +133,8 @@ public class CompraService {
         }
 
         compraRepo.save(compra);
-        log.info("Compra {} marcada INGRESADA: {} líneas con stock cargado en ubicación {}",
-                compra.getNumeroFactura(), cargados, ubicacion.getCodigo());
+        log.info("Compra {} marcada INGRESADA: {} líneas con stock cargado (por ubicación individual)",
+                compra.getNumeroFactura(), cargados);
 
         return CompraResponse.from(compra, true);
     }
@@ -135,7 +152,35 @@ public class CompraService {
     public CompraResponse detalle(Long id) {
         Compra compra = compraRepo.findWithLineasById(id)
                 .orElseThrow(() -> new BusinessException("Compra no encontrada"));
-        return CompraResponse.from(compra, true);
+
+        Map<Long, CompraResponse.UbicacionSugerida> stockSugerido = calcularSugerencias(compra);
+        return CompraResponse.from(compra, true, stockSugerido);
+    }
+
+    private Map<Long, CompraResponse.UbicacionSugerida> calcularSugerencias(Compra compra) {
+        List<Long> productoIds = compra.getLineas().stream()
+                .filter(l -> l.getProducto() != null)
+                .map(l -> l.getProducto().getId())
+                .distinct()
+                .toList();
+
+        if (productoIds.isEmpty()) return Map.of();
+
+        Map<Long, List<Stock>> stockPorProducto = stockRepository.findByProductoIdIn(productoIds)
+                .stream()
+                .filter(s -> s.getCantidad() > 0)
+                .collect(Collectors.groupingBy(s -> s.getProducto().getId()));
+
+        Map<Long, CompraResponse.UbicacionSugerida> result = new HashMap<>();
+        for (var entry : stockPorProducto.entrySet()) {
+            entry.getValue().stream()
+                    .max(Comparator.comparingInt(Stock::getCantidad))
+                    .ifPresent(best -> result.put(entry.getKey(),
+                            new CompraResponse.UbicacionSugerida(
+                                    best.getUbicacion().getId(),
+                                    best.getUbicacion().getCodigo())));
+        }
+        return result;
     }
 
     private LocalDate parseFecha(String fecha) {

@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { Compra, CompraLinea, Ubicacion } from '../core/models';
-import { CompraService } from '../core/compra.service';
+import { CompraService, LineaUbicacionAsignacion } from '../core/compra.service';
 import { UbicacionService } from '../core/ubicacion.service';
 
 type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
@@ -146,7 +146,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
       <!-- Modal detalle -->
       @if (detalleCompra()) {
         <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" (click)="cerrarDetalle()">
-          <div class="glass-panel w-full max-w-3xl max-h-[90vh] rounded-2xl border border-dark-border shadow-neon flex flex-col" (click)="$event.stopPropagation()">
+          <div class="glass-panel w-full max-w-4xl max-h-[90vh] rounded-2xl border border-dark-border shadow-neon flex flex-col" (click)="$event.stopPropagation()">
             <!-- Header modal -->
             <div class="flex items-center justify-between p-5 border-b border-dark-border shrink-0">
               <div>
@@ -177,45 +177,90 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
 
             <!-- Tabla de líneas -->
             <div class="flex-1 overflow-y-auto p-5">
-              @if (detalleCompra()!.ubicacionIngresoCodigo) {
+              @if (detalleCompra()!.estado === 'INGRESADA') {
                 <div class="mb-4 flex items-center gap-2 text-xs text-neon-green bg-neon-green/5 border border-neon-green/20 rounded-xl px-4 py-2.5">
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>Stock cargado en ubicación <strong>{{ detalleCompra()!.ubicacionIngresoCodigo }}</strong></span>
+                  <span>Stock cargado — ubicación asignada por línea</span>
                 </div>
               }
 
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="border-b border-dark-border">
-                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Código</th>
-                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Descripción</th>
-                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cant.</th>
-                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Match</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (l of detalleCompra()!.lineas; track l.id) {
-                    <tr class="border-b border-dark-border/30">
-                      <td class="px-3 py-2 font-mono text-white text-xs">{{ l.codigo }}</td>
-                      <td class="px-3 py-2 text-gray-300 text-xs whitespace-normal break-words max-w-xs">{{ l.descripcion }}</td>
-                      <td class="px-3 py-2 text-center text-white font-semibold">{{ l.cantidad }}</td>
-                      <td class="px-3 py-2 text-center">
-                        @if (l.productoId) {
-                          <span class="text-neon-green text-xs" [title]="l.productoDescripcion || ''">
-                            <svg class="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                          </span>
-                        } @else {
-                          <span class="text-gray-600 text-xs" title="Sin match en catálogo">—</span>
-                        }
-                      </td>
+              @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+                <!-- Bulk assign -->
+                <div class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-dark-surface/40 border border-dark-border rounded-xl px-4 py-3">
+                  <span class="text-xs text-gray-400 shrink-0">Asignar a todas:</span>
+                  <select (change)="asignarTodas($event)"
+                    class="flex-1 px-2 py-1.5 bg-dark-surface border border-dark-border rounded-lg text-white text-xs focus:outline-none focus:border-neon-cyan">
+                    <option value="">— seleccionar —</option>
+                    @for (u of ubicaciones(); track u.id) {
+                      <option [value]="u.id">{{ u.path || u.codigo }}</option>
+                    }
+                  </select>
+                </div>
+              }
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-dark-border">
+                      <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Código</th>
+                      <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Descripción</th>
+                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cant.</th>
+                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Match</th>
+                      <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Ubicación</th>
                     </tr>
-                  }
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    @for (l of detalleCompra()!.lineas; track l.id; let i = $index) {
+                      <tr class="border-b border-dark-border/30">
+                        <td class="px-3 py-2 font-mono text-white text-xs">{{ l.codigo }}</td>
+                        <td class="px-3 py-2 text-gray-300 text-xs whitespace-normal break-words max-w-xs">{{ l.descripcion }}</td>
+                        <td class="px-3 py-2 text-center text-white font-semibold">{{ l.cantidad }}</td>
+                        <td class="px-3 py-2 text-center">
+                          @if (l.productoId) {
+                            <span class="text-neon-green text-xs" [title]="(l.productoMarca ? l.productoMarca + ' — ' : '') + (l.productoDescripcion || '')">
+                              <svg class="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                            </span>
+                          } @else {
+                            <span class="text-gray-600 text-xs" title="Sin match en catálogo">—</span>
+                          }
+                        </td>
+                        <td class="px-3 py-2">
+                          @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+                            <select [value]="ubicacionPorLinea[l.id] || ''"
+                              (change)="setUbicacionLinea(l.id, $event)"
+                              class="w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border rounded-lg text-xs focus:outline-none focus:border-neon-cyan"
+                              [class]="ubicacionPorLinea[l.id]
+                                ? 'w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border border-dark-border rounded-lg text-white text-xs focus:outline-none focus:border-neon-cyan'
+                                : 'w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border border-amber-500/40 rounded-lg text-gray-400 text-xs focus:outline-none focus:border-neon-cyan'">
+                              <option value="">— sin asignar —</option>
+                              @for (u of ubicaciones(); track u.id) {
+                                <option [value]="u.id">{{ u.path || u.codigo }}</option>
+                              }
+                            </select>
+                            @if (l.ubicacionSugeridaCodigo && !ubicacionPorLinea[l.id]) {
+                              <span class="text-[10px] text-neon-cyan/60 mt-0.5 block">
+                                Sugerida: {{ l.ubicacionSugeridaCodigo }}
+                              </span>
+                            }
+                          } @else {
+                            @if (l.ubicacionIngresoCodigo) {
+                              <span class="text-xs text-neon-green font-mono">{{ l.ubicacionIngresoCodigo }}</span>
+                            } @else if (detalleCompra()!.ubicacionIngresoCodigo) {
+                              <span class="text-xs text-gray-400 font-mono">{{ detalleCompra()!.ubicacionIngresoCodigo }}</span>
+                            } @else {
+                              <span class="text-xs text-gray-600">—</span>
+                            }
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <!-- Footer modal: acción de ingreso -->
@@ -226,18 +271,11 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                     {{ errorIngreso() }}
                   </div>
                 }
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
-                  <div class="flex-1">
-                    <label class="block text-xs font-semibold text-gray-400 mb-1.5">Ubicación de ingreso</label>
-                    <select [(ngModel)]="ubicacionIngresoId"
-                      class="w-full px-3 py-2.5 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan">
-                      <option [ngValue]="null" disabled>Seleccionar ubicación...</option>
-                      @for (u of ubicaciones(); track u.id) {
-                        <option [ngValue]="u.id">{{ u.path || u.codigo }}</option>
-                      }
-                    </select>
+                <div class="flex items-center justify-between gap-3">
+                  <div class="text-xs text-gray-400">
+                    {{ lineasAsignadas() }}/{{ detalleCompra()!.lineas.length }} líneas con ubicación
                   </div>
-                  <button (click)="confirmarIngreso()" [disabled]="!ubicacionIngresoId || ingresando()"
+                  <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando()"
                     class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-neon-green/20 text-neon-green border border-neon-green/40 hover:bg-neon-green/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
                     @if (ingresando()) {
                       <span class="inline-flex items-center gap-2">
@@ -274,7 +312,7 @@ export class Compras implements OnInit {
   detalleCompra = signal<Compra | null>(null);
   cargandoDetalle = signal(false);
   ubicaciones = signal<Ubicacion[]>([]);
-  ubicacionIngresoId: number | null = null;
+  ubicacionPorLinea: Record<number, number> = {};
   ingresando = signal(false);
   errorIngreso = signal('');
 
@@ -311,11 +349,12 @@ export class Compras implements OnInit {
   verDetalle(id: number): void {
     this.cargandoDetalle.set(true);
     this.errorIngreso.set('');
-    this.ubicacionIngresoId = null;
+    this.ubicacionPorLinea = {};
     this.compraService.detalle(id).subscribe({
       next: (c) => {
         this.detalleCompra.set(c);
         this.cargandoDetalle.set(false);
+        this.inicializarUbicaciones(c);
       },
       error: () => this.cargandoDetalle.set(false),
     });
@@ -325,13 +364,43 @@ export class Compras implements OnInit {
     this.detalleCompra.set(null);
   }
 
+  lineasAsignadas(): number {
+    return Object.keys(this.ubicacionPorLinea).length;
+  }
+
+  setUbicacionLinea(lineaId: number, event: Event): void {
+    const val = (event.target as HTMLSelectElement).value;
+    if (val) {
+      this.ubicacionPorLinea[lineaId] = +val;
+    } else {
+      delete this.ubicacionPorLinea[lineaId];
+    }
+  }
+
+  asignarTodas(event: Event): void {
+    const val = (event.target as HTMLSelectElement).value;
+    if (!val) return;
+    const ubicId = +val;
+    const compra = this.detalleCompra();
+    if (!compra) return;
+    this.ubicacionPorLinea = {};
+    for (const l of compra.lineas) {
+      this.ubicacionPorLinea[l.id] = ubicId;
+    }
+  }
+
   confirmarIngreso(): void {
     const compra = this.detalleCompra();
-    if (!compra || !this.ubicacionIngresoId) return;
+    if (!compra) return;
+
+    const asignaciones: LineaUbicacionAsignacion[] = Object.entries(this.ubicacionPorLinea)
+      .map(([lineaId, ubicacionId]) => ({ lineaId: +lineaId, ubicacionId }));
+
+    if (asignaciones.length === 0) return;
 
     this.ingresando.set(true);
     this.errorIngreso.set('');
-    this.compraService.marcarIngresada(compra.id, this.ubicacionIngresoId).subscribe({
+    this.compraService.marcarIngresada(compra.id, asignaciones).subscribe({
       next: (updated) => {
         this.detalleCompra.set(updated);
         this.ingresando.set(false);
@@ -342,5 +411,15 @@ export class Compras implements OnInit {
         this.ingresando.set(false);
       },
     });
+  }
+
+  private inicializarUbicaciones(compra: Compra): void {
+    if (compra.estado !== 'EN_TRANSITO') return;
+    this.ubicacionPorLinea = {};
+    for (const l of compra.lineas) {
+      if (l.ubicacionSugeridaId) {
+        this.ubicacionPorLinea[l.id] = l.ubicacionSugeridaId;
+      }
+    }
   }
 }

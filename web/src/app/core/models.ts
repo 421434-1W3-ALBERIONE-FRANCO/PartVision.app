@@ -261,6 +261,10 @@ export interface CompraLinea {
   productoId: number | null;
   productoDescripcion: string | null;
   productoMarca: string | null;
+  ubicacionSugeridaId: number | null;
+  ubicacionSugeridaCodigo: string | null;
+  ubicacionIngresoId: number | null;
+  ubicacionIngresoCodigo: string | null;
 }
 
 export interface Compra {

@@ -5,6 +5,7 @@ import com.partvision.compras.domain.Compra;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public record CompraResponse(
         Long id,
@@ -21,8 +22,19 @@ public record CompraResponse(
         List<CompraLineaResponse> lineas
 ) {
     public static CompraResponse from(Compra c, boolean incluirLineas) {
+        return from(c, incluirLineas, Map.of());
+    }
+
+    public static CompraResponse from(Compra c, boolean incluirLineas,
+                                       Map<Long, UbicacionSugerida> stockSugerido) {
         List<CompraLineaResponse> lineasDto = incluirLineas
-                ? c.getLineas().stream().map(CompraLineaResponse::from).toList()
+                ? c.getLineas().stream().map(l -> {
+                    UbicacionSugerida sug = l.getProducto() != null
+                            ? stockSugerido.get(l.getProducto().getId()) : null;
+                    return sug != null
+                            ? CompraLineaResponse.from(l, sug.id(), sug.codigo())
+                            : CompraLineaResponse.from(l);
+                }).toList()
                 : List.of();
 
         int matcheadas = (int) c.getLineas().stream().filter(l -> l.getProducto() != null).count();
@@ -43,4 +55,6 @@ public record CompraResponse(
                 lineasDto
         );
     }
+
+    public record UbicacionSugerida(Long id, String codigo) {}
 }

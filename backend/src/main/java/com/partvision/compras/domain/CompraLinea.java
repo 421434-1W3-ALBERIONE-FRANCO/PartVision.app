@@ -2,6 +2,7 @@ package com.partvision.compras.domain;
 
 import com.partvision.catalog.domain.Producto;
 import com.partvision.common.audit.Auditable;
+import com.partvision.location.domain.Ubicacion;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -32,4 +33,8 @@ public class CompraLinea extends Auditable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "producto_id")
     private Producto producto;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ubicacion_ingreso_id")
+    private Ubicacion ubicacionIngreso;
 }
