@@ -85,13 +85,9 @@ public class PrecioImportService {
                     for (Cell cell : headerRow) {
                         columnas.add(cellToString(cell));
                     }
-                    int count = 0;
-                    for (Row row : sheet) {
-                        if (row.getRowNum() > 0) count++;
-                    }
-                    totalFilas = count;
-                    log.info("Excel detectado: {} filas de datos, {} columnas (lastRowNum={}, physicalRows={})",
-                            totalFilas, columnas.size(), sheet.getLastRowNum(), sheet.getPhysicalNumberOfRows());
+                    totalFilas = sheet.getLastRowNum();
+                    log.info("Excel detectado: ~{} filas de datos, {} columnas",
+                            totalFilas, columnas.size());
                 }
             } else {
                 try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);

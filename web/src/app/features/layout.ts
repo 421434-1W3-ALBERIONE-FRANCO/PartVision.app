@@ -71,45 +71,6 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               <span>Ubicaciones</span>
             </a>
 
-            <a
-              routerLink="/carga-ia"
-              routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
-              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
-            >
-              <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-pink transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Carga por IA</span>
-              <span class="ml-auto text-[10px] font-mono uppercase bg-neon-pink/20 text-neon-pink border border-neon-pink/30 px-1.5 py-0.5 rounded-md">
-                AI
-              </span>
-            </a>
-
-            <a
-              routerLink="/extracciones"
-              routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
-              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
-            >
-              <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-pink transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              <span>Extracciones IA</span>
-              <span class="ml-auto text-[10px] font-mono uppercase bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-1.5 py-0.5 rounded-md">
-                AI
-              </span>
-            </a>
-
-            <a
-              routerLink="/seguridad"
-              routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
-              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
-            >
-              <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-cyan transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <span>Seguridad</span>
-            </a>
-
             @if (esAdmin) {
             <a
               routerLink="/compras"
@@ -132,7 +93,20 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               </svg>
               <span>Precios</span>
             </a>
+            }
 
+            <a
+              routerLink="/seguridad"
+              routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
+              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
+            >
+              <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-cyan transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Seguridad</span>
+            </a>
+
+            @if (esAdmin) {
             <a
               routerLink="/importacion"
               routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
@@ -155,6 +129,37 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
               <span>Usuarios</span>
             </a>
             }
+
+            <!-- IA agrupado -->
+            <div class="mt-3 pt-3 border-t border-dark-border/40">
+              <p class="px-3.5 mb-1.5 text-[10px] font-mono uppercase tracking-widest text-gray-500">Inteligencia Artificial</p>
+              <a
+                routerLink="/carga-ia"
+                routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
+                class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
+              >
+                <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-pink transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Carga por IA</span>
+                <span class="ml-auto text-[10px] font-mono uppercase bg-neon-pink/20 text-neon-pink border border-neon-pink/30 px-1.5 py-0.5 rounded-md">
+                  AI
+                </span>
+              </a>
+              <a
+                routerLink="/extracciones"
+                routerLinkActive="bg-gradient-to-r from-neon-purple/20 to-indigo-900/10 text-white border-l-4 border-neon-purple shadow-neon font-semibold"
+                class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-dark-surface/60 transition-all text-sm group"
+              >
+                <svg class="w-5 h-5 text-gray-400 group-hover:text-neon-pink transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span>Extracciones IA</span>
+                <span class="ml-auto text-[10px] font-mono uppercase bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-1.5 py-0.5 rounded-md">
+                  AI
+                </span>
+              </a>
+            </div>
           </nav>
         </div>
 

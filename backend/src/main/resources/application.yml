@@ -42,6 +42,14 @@ spring:
     test-connection: false
 
 partvision:
+  search:
+    ai:
+      enabled: ${PARTVISION_SEARCH_AI_ENABLED:false}
+      provider: ${PARTVISION_SEARCH_AI_PROVIDER:gemini}
+      model: ${AI_SEARCH_MODEL:gemini-flash-latest}
+      timeout-ms: ${PARTVISION_SEARCH_AI_TIMEOUT_MS:1000}
+      min-confidence: ${PARTVISION_SEARCH_AI_MIN_CONFIDENCE:0.70}
+      cache-ttl-minutes: ${PARTVISION_SEARCH_AI_CACHE_TTL_MINUTES:720}
   compras:
     api-key: ${COMPRAS_API_KEY:}
   mail:

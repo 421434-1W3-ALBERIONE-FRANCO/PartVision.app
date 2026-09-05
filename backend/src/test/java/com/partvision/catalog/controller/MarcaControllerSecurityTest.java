@@ -4,6 +4,7 @@ import com.partvision.auth.security.JwtAuthenticationFilter;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.RestAuthenticationEntryPoint;
 import com.partvision.auth.security.SecurityConfig;
+import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.catalog.service.MarcaService;
 import com.partvision.common.security.AuthenticatedUser;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class MarcaControllerSecurityTest {
     private MockMvc mvc;
     @MockBean
     private MarcaService marcaService;
+    @MockBean
+    private TokenRevocationService tokenRevocationService;
 
     private UsernamePasswordAuthenticationToken auth(String rol) {
         return new UsernamePasswordAuthenticationToken(

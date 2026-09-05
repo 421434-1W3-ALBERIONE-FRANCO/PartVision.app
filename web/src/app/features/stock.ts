@@ -30,7 +30,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
           <span>Gestioná entradas, salidas, transferencias y ajustes de inventario.</span>
           <span class="inline-flex items-center gap-1.5 text-xs text-gray-500">
             <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-            Se actualiza cada 30s
+            Se actualiza cada 1m 10s
             <button (click)="cargarLista()" class="text-neon-cyan hover:underline cursor-pointer ml-1">Actualizar ahora</button>
           </span>
         </p>
@@ -715,7 +715,7 @@ export class Stock implements OnInit {
     });
     this.cargarLista();
 
-    interval(30000)
+    interval(70000)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         if (this.vista() === 'productos' && !this.productoSel()) {

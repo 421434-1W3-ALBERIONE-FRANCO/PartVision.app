@@ -1,5 +1,11 @@
 package com.partvision.catalog.service;
 
+import com.partvision.ai.search.AiSearchProperties;
+import com.partvision.ai.search.SearchInterpreter;
+import com.partvision.ai.search.SearchInterpretationCache;
+import com.partvision.ai.search.SearchOrchestrator;
+import com.partvision.ai.search.SearchQueryClassifier;
+import org.springframework.beans.factory.ObjectProvider;
 import com.partvision.catalog.domain.Categoria;
 import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
@@ -43,9 +49,14 @@ class ProductoServiceTest {
     @Mock
     private StockRepository stockRepository;
 
+    @SuppressWarnings("unchecked")
     private ProductoService service() {
+        var disabledProps = new AiSearchProperties(false, "gemini", "gemini-flash-latest", 1000, 0.70, 720);
+        ObjectProvider<SearchInterpreter> ip = org.mockito.Mockito.mock(ObjectProvider.class);
+        ObjectProvider<SearchInterpretationCache> cp = org.mockito.Mockito.mock(ObjectProvider.class);
+        var orchestrator = new SearchOrchestrator(disabledProps, new SearchQueryClassifier(), ip, cp);
         return new ProductoService(productoRepository, productoCodigoRepository, marcaService, categoriaService,
-                new ProductoMatcher(), stockRepository);
+                new ProductoMatcher(), stockRepository, orchestrator);
     }
 
     @Test

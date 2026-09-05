@@ -1,6 +1,6 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpEventType, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, filter, map, timeout } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
 import { ConfiguracionPrecio, Page, PrecioBatch, PrecioImportColumnas, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, Producto, ProductoCodigo, ProductoListItem } from './models';
@@ -78,10 +78,24 @@ export class ProductoService {
     return this.http.post<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion`, { proveedor, margen, activo: true });
   }
 
-  importDetectarColumnas(archivo: File): Observable<PrecioImportColumnas> {
+  importDetectarColumnas(archivo: File): Observable<{ progress: number } | PrecioImportColumnas> {
     const fd = new FormData();
     fd.append('archivo', archivo);
-    return this.http.post<PrecioImportColumnas>(`${API_BASE_URL}/precios/import/columnas`, fd);
+    return this.http.post<PrecioImportColumnas>(`${API_BASE_URL}/precios/import/columnas`, fd, {
+      reportProgress: true,
+      observe: 'events',
+    }).pipe(
+      timeout(120_000),
+      filter(event => event.type === HttpEventType.UploadProgress || event.type === HttpEventType.Response),
+      map(event => {
+        if (event.type === HttpEventType.UploadProgress) {
+          return { progress: event.total ? Math.round(100 * event.loaded / event.total) : 0 };
+        }
+        const body = (event as HttpResponse<PrecioImportColumnas>).body;
+        if (!body) throw new Error('Respuesta vacía del servidor');
+        return body;
+      }),
+    );
   }
 
   importPreview(uploadId: string, colSku: string, colPrecio: string, proveedor: string): Observable<PrecioImportPreview> {

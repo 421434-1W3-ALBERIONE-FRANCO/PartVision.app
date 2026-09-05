@@ -126,8 +126,16 @@ import { ProductoService } from '../core/producto.service';
                 class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
             </div>
             <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
-              class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50">
-              {{ impSubiendo() ? 'Analizando...' : 'Detectar Columnas' }}
+              class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 min-w-[160px]">
+              @if (impSubiendo()) {
+                @if (impUploadProgress() < 100) {
+                  Subiendo... {{ impUploadProgress() }}%
+                } @else {
+                  Analizando...
+                }
+              } @else {
+                Detectar Columnas
+              }
             </button>
           </div>
         }
@@ -400,6 +408,7 @@ export class Precios implements OnInit, OnDestroy {
   impArchivo = signal<File | null>(null);
   impNombreArchivo = signal('');
   impSubiendo = signal(false);
+  impUploadProgress = signal(0);
   impUploadId = signal('');
   impColumnas = signal<string[]>([]);
   impColumnasId = signal<string[]>([]);
@@ -490,9 +499,14 @@ export class Precios implements OnInit, OnDestroy {
   subirArchivo(): void {
     const file = this.impArchivo();
     if (!file) return;
-    this.impSubiendo.set(true); this.impError.set(null);
+    this.impSubiendo.set(true); this.impUploadProgress.set(0); this.impError.set(null);
     this.service.importDetectarColumnas(file).subscribe({
-      next: (res) => {
+      next: (event) => {
+        if ('progress' in event) {
+          this.impUploadProgress.set(event.progress);
+          return;
+        }
+        const res = event;
         this.impUploadId.set(res.uploadId);
         this.impColumnas.set(res.columnas);
         this.impTotalFilas.set(res.totalFilas);

@@ -1,5 +1,7 @@
 package com.partvision.catalog.service;
 
+import com.partvision.ai.search.ProcessedQuery;
+import com.partvision.ai.search.SearchOrchestrator;
 import com.partvision.catalog.domain.Categoria;
 import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
@@ -40,6 +42,7 @@ public class ProductoService {
     private final CategoriaService categoriaService;
     private final ProductoMatcher matcher;
     private final StockRepository stockRepository;
+    private final SearchOrchestrator searchOrchestrator;
 
     /** Cuantos candidatos parecidos traer/mostrar como maximo. */
     private static final int MAX_CANDIDATOS = 8;
@@ -131,7 +134,8 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> findAll(String q, Boolean tieneStock, Pageable pageable) {
-        List<String> tokens = tokenizar(q);
+        ProcessedQuery pq = searchOrchestrator.processQuery(q);
+        List<String> tokens = tokenizar(pq.query());
         if (tokens.isEmpty() && tieneStock == null) {
             return findAll(pageable);
         }
@@ -141,9 +145,11 @@ public class ProductoService {
                     : productoRepository.findSinStock(pageable));
         }
         if (tieneStock == null) {
-            return conStock(productoRepository.buscarInteligente(tokens, q, pageable));
+            Page<Producto> result = productoRepository.buscarInteligente(tokens, pq.query(), pageable);
+            return conStock(reintentarConSinonimos(result, pq, null, pageable));
         }
-        return conStock(productoRepository.buscarInteligenteConStock(tokens, q, tieneStock, pageable));
+        Page<Producto> result = productoRepository.buscarInteligenteConStock(tokens, pq.query(), tieneStock, pageable);
+        return conStock(reintentarConSinonimos(result, pq, tieneStock, pageable));
     }
 
     /**
@@ -156,11 +162,30 @@ public class ProductoService {
      */
     @Transactional(readOnly = true)
     public Page<ProductoListItemResponse> buscarPorTexto(String q, Pageable pageable) {
-        List<String> tokens = tokenizar(q);
+        ProcessedQuery pq = searchOrchestrator.processQuery(q);
+        List<String> tokens = tokenizar(pq.query());
         if (tokens.isEmpty()) {
             return conStock(productoRepository.findAllBy(pageable));
         }
-        return conStock(productoRepository.buscarInteligente(tokens, q, pageable));
+        Page<Producto> result = productoRepository.buscarInteligente(tokens, pq.query(), pageable);
+        return conStock(reintentarConSinonimos(result, pq, null, pageable));
+    }
+
+    private static final int SYNONYM_RETRY_THRESHOLD = 3;
+
+    private Page<Producto> reintentarConSinonimos(Page<Producto> result, ProcessedQuery pq,
+                                                   Boolean tieneStock, Pageable pageable) {
+        if (!pq.aiInterpreted() || pq.synonyms().isEmpty()) return result;
+        if (result.getTotalElements() > SYNONYM_RETRY_THRESHOLD) return result;
+
+        String expanded = pq.query() + " " + String.join(" ", pq.synonyms());
+        List<String> expandedTokens = tokenizar(expanded);
+        if (expandedTokens.equals(tokenizar(pq.query()))) return result;
+
+        Page<Producto> retried = tieneStock != null
+                ? productoRepository.buscarInteligenteConStock(expandedTokens, expanded, tieneStock, pageable)
+                : productoRepository.buscarInteligente(expandedTokens, expanded, pageable);
+        return retried.getTotalElements() > result.getTotalElements() ? retried : result;
     }
 
     /** Conectores que no aportan a la busqueda (se descartan para no exigirlos como palabra). */

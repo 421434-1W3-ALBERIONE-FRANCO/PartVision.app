@@ -59,7 +59,7 @@ public class CompraService {
         compra.setEstado(estado);
 
         Set<String> codigos = request.lineas().stream()
-                .map(l -> l.codigo().toUpperCase())
+                .map(l -> codigoODefault(l.codigo()).toUpperCase())
                 .collect(Collectors.toSet());
 
         Map<String, Producto> productosPorSku = productoRepo.findBySkuIn(codigos).stream()
@@ -70,12 +70,13 @@ public class CompraService {
                 ));
 
         for (RecepcionLineaRequest lineaReq : request.lineas()) {
+            String codigo = codigoODefault(lineaReq.codigo());
             CompraLinea linea = new CompraLinea();
-            linea.setCodigo(lineaReq.codigo());
+            linea.setCodigo(codigo);
             linea.setDescripcion(lineaReq.descripcion());
             linea.setCantidad(lineaReq.cantidad());
 
-            Producto producto = productosPorSku.get(lineaReq.codigo().toUpperCase());
+            Producto producto = productosPorSku.get(codigo.toUpperCase());
             if (producto != null) {
                 linea.setProducto(producto);
             }
@@ -181,6 +182,10 @@ public class CompraService {
                                     best.getUbicacion().getCodigo())));
         }
         return result;
+    }
+
+    private static String codigoODefault(String codigo) {
+        return (codigo == null || codigo.isBlank()) ? "IMPORTADOS" : codigo.trim();
     }
 
     private LocalDate parseFecha(String fecha) {
