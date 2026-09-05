@@ -251,6 +251,7 @@ export class Login {
         if (e?.status === 401 && e?.error?.twoFactorRequired) {
           this.requiere2fa.set(true);
           this.error.set(null);
+          setTimeout(() => this.otpInputs?.first?.nativeElement.focus());
           return;
         }
         if (e?.status === 401) {
