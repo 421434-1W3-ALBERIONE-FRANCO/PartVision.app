@@ -111,7 +111,6 @@ class TwoFactorServiceTest {
         assertThat(codes).hasSize(10);
         assertThat(usuario.isTotpEnabled()).isTrue();
         verify(recoveryRepository).deleteByUsuarioId(1L);
-        // Se guardan 10 recovery codes hasheados
         verify(recoveryRepository, times(10)).save(any(TotpRecoveryCode.class));
     }
 
@@ -254,7 +253,6 @@ class TwoFactorServiceTest {
 
         service.desactivar(1L, "cualquier-codigo");
 
-        // No guarda ni borra nada: early return
         verify(usuarioRepository, never()).save(any());
         verify(recoveryRepository, never()).deleteByUsuarioId(any());
     }
