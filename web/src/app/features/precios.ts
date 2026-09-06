@@ -496,7 +496,7 @@ export class Precios implements OnInit, OnDestroy {
     this.impNombreArchivo.set(file?.name ?? '');
   }
 
-  subirArchivo(): void {
+  subirArchivo(retry = false): void {
     const file = this.impArchivo();
     if (!file) return;
     this.impSubiendo.set(true); this.impUploadProgress.set(0); this.impError.set(null);
@@ -533,13 +533,16 @@ export class Precios implements OnInit, OnDestroy {
       },
       error: (e) => {
         clearTimeout(progressTimer);
+        const serverDown = e?.name === 'TimeoutError' || e?.status === 0
+          || e?.status === undefined || (e?.status >= 502 && e?.status <= 504);
+        if (serverDown && !retry) {
+          this.impError.set('Servidor iniciando... reintentando automáticamente.');
+          setTimeout(() => this.subirArchivo(true), 5000);
+          return;
+        }
         let msg: string;
-        if (e?.name === 'TimeoutError') {
-          msg = 'El servidor tardó demasiado en responder. Esperá unos segundos e intentá de nuevo.';
-        } else if (e?.status === 0 || e?.status === undefined) {
-          msg = 'No se pudo conectar con el servidor. Verificá tu conexión e intentá de nuevo.';
-        } else if (e?.status >= 502 && e?.status <= 504) {
-          msg = 'El servidor no está disponible en este momento. Esperá unos segundos e intentá de nuevo.';
+        if (serverDown) {
+          msg = 'El servidor no está disponible. Esperá unos segundos e intentá de nuevo.';
         } else {
           msg = e?.error?.message ?? 'No se pudo leer el archivo.';
         }
