@@ -373,6 +373,11 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                   <h3 class="text-lg font-bold text-white">Stock por ubicación</h3>
                   <span class="text-xl font-extrabold text-neon-green font-mono">{{ r.total }} u.</span>
                 </div>
+                @if (r.ubicaciones.length > 0) {
+                  <input [(ngModel)]="filtroStockModal" type="text"
+                    placeholder="Filtrar por ubicación..."
+                    class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+                }
                 @if (r.ubicaciones.length === 0) {
                   <p class="text-xs text-gray-500 py-4 text-center">Sin existencias.</p>
                 } @else {
@@ -389,7 +394,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-dark-border/50">
-                        @for (l of r.ubicaciones; track l.ubicacionId) {
+                        @for (l of filtrarUbicaciones(r.ubicaciones); track l.ubicacionId) {
                           <tr class="hover:bg-dark-surface/40 transition-colors">
                             <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
                             @if (editandoUbicacionId() === l.ubicacionId) {
@@ -413,6 +418,12 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                                   class="ml-3 text-xs font-semibold text-red-400 hover:underline cursor-pointer disabled:opacity-50">Eliminar</button>
                               </td>
                             }
+                          </tr>
+                        } @empty {
+                          <tr>
+                            <td colspan="3" class="py-4 text-center text-gray-500 text-xs">
+                              Sin coincidencias para "{{ filtroStockModal }}".
+                            </td>
                           </tr>
                         }
                       </tbody>
@@ -643,6 +654,7 @@ export class Stock implements OnInit {
 
   // Filtro de texto
   filtroTexto = '';
+  filtroStockModal = '';
   private filtroChanged = new Subject<string>();
 
   // Lista paginada unificada
@@ -844,6 +856,7 @@ export class Stock implements OnInit {
   seleccionar(p: ProductoListItem): void {
     this.productoSel.set(p);
     this.resultados.set([]);
+    this.filtroStockModal = '';
     this.opOk.set(null);
     this.opError.set(null);
     this.opUbicacionId = null;
@@ -858,6 +871,7 @@ export class Stock implements OnInit {
   deseleccionar(): void {
     this.productoSel.set(null);
     this.resumen.set(null);
+    this.filtroStockModal = '';
     this.movimientos.set([]);
     this.opOk.set(null);
     this.opError.set(null);
@@ -996,6 +1010,12 @@ export class Stock implements OnInit {
   cancelarEliminarLinea(): void {
     this.aEliminarLinea.set(null);
     this.stockError.set(null);
+  }
+
+  filtrarUbicaciones(ubicaciones: StockLinea[]): StockLinea[] {
+    const f = this.filtroStockModal.toLowerCase().trim();
+    if (!f) return ubicaciones;
+    return ubicaciones.filter(u => u.ubicacionPath.toLowerCase().includes(f));
   }
 
   confirmarEliminarLinea(l: StockLinea): void {

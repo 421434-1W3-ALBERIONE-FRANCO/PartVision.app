@@ -4,7 +4,7 @@ import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 
-import { Marca, ProductoListItem, StockResumen, Ubicacion } from '../core/models';
+import { Marca, ProductoListItem, StockLinea, StockResumen, Ubicacion } from '../core/models';
 import { AuthService } from '../core/auth.service';
 import { MarcaService } from '../core/marca.service';
 import { ProductoService } from '../core/producto.service';
@@ -637,6 +637,9 @@ import { UbicacionService } from '../core/ubicacion.service';
             @if (r.ubicaciones.length > 0) {
               <div class="border-t border-dark-border pt-4 space-y-3">
                 <h4 class="text-sm font-bold text-white">Stock por ubicación</h4>
+                <input [(ngModel)]="filtroStockUbicModal" type="text"
+                  placeholder="Filtrar por ubicación..."
+                  class="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
                 <div class="overflow-x-auto">
                   <table class="w-full text-left text-sm border-collapse">
                     <thead>
@@ -646,10 +649,16 @@ import { UbicacionService } from '../core/ubicacion.service';
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-dark-border/50">
-                      @for (l of r.ubicaciones; track l.ubicacionId) {
+                      @for (l of filtrarStockUbicaciones(r.ubicaciones); track l.ubicacionId) {
                         <tr class="hover:bg-dark-surface/40 transition-colors">
                           <td class="py-2 px-3 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
                           <td class="py-2 px-3 font-mono font-bold text-neon-green text-right">{{ l.cantidad }} u.</td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                          <td colspan="2" class="py-4 text-center text-gray-500 text-xs">
+                            Sin coincidencias para "{{ filtroStockUbicModal }}".
+                          </td>
                         </tr>
                       }
                     </tbody>
@@ -732,6 +741,7 @@ export class Productos implements OnInit {
   stockOpGuardando = signal(false);
   stockOpError = signal<string | null>(null);
   stockOpOk = signal<string | null>(null);
+  filtroStockUbicModal = '';
 
   // Asociar código a producto existente
   agregandoCodigoId = signal<number | null>(null);
@@ -1066,6 +1076,7 @@ export class Productos implements OnInit {
   gestionarStock(p: ProductoListItem): void {
     this.cerrarMenu();
     this.stockProducto.set(p);
+    this.filtroStockUbicModal = '';
     this.stockOpError.set(null);
     this.stockOpOk.set(null);
     this.stockOpUbicacionId = null;
@@ -1087,6 +1098,13 @@ export class Productos implements OnInit {
   cerrarStock(): void {
     this.stockProducto.set(null);
     this.stockResumen.set(null);
+    this.filtroStockUbicModal = '';
+  }
+
+  filtrarStockUbicaciones(ubicaciones: StockLinea[]): StockLinea[] {
+    const f = this.filtroStockUbicModal.toLowerCase().trim();
+    if (!f) return ubicaciones;
+    return ubicaciones.filter(u => u.ubicacionPath.toLowerCase().includes(f));
   }
 
   ejecutarStockOp(): void {

@@ -200,6 +200,10 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                 </div>
               }
 
+              <input [(ngModel)]="filtroLineas" type="text"
+                placeholder="Filtrar por código o descripción..."
+                class="w-full mb-3 px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan text-sm" />
+
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
@@ -212,7 +216,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                     </tr>
                   </thead>
                   <tbody>
-                    @for (l of detalleCompra()!.lineas; track l.id; let i = $index) {
+                    @for (l of filtrarLineas(detalleCompra()!.lineas); track l.id; let i = $index) {
                       <tr class="border-b border-dark-border/30">
                         <td class="px-3 py-2 font-mono text-white text-xs">{{ l.codigo }}</td>
                         <td class="px-3 py-2 text-gray-300 text-xs whitespace-normal break-words max-w-xs">{{ l.descripcion }}</td>
@@ -255,6 +259,12 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                               <span class="text-xs text-gray-600">—</span>
                             }
                           }
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr>
+                        <td colspan="5" class="py-4 text-center text-gray-500 text-xs">
+                          Sin coincidencias para "{{ filtroLineas }}".
                         </td>
                       </tr>
                     }
@@ -311,6 +321,7 @@ export class Compras implements OnInit {
 
   detalleCompra = signal<Compra | null>(null);
   cargandoDetalle = signal(false);
+  filtroLineas = '';
   ubicaciones = signal<Ubicacion[]>([]);
   ubicacionPorLinea: Record<number, number> = {};
   ingresando = signal(false);
@@ -349,6 +360,7 @@ export class Compras implements OnInit {
   verDetalle(id: number): void {
     this.cargandoDetalle.set(true);
     this.errorIngreso.set('');
+    this.filtroLineas = '';
     this.ubicacionPorLinea = {};
     this.compraService.detalle(id).subscribe({
       next: (c) => {
@@ -362,6 +374,16 @@ export class Compras implements OnInit {
 
   cerrarDetalle(): void {
     this.detalleCompra.set(null);
+    this.filtroLineas = '';
+  }
+
+  filtrarLineas(lineas: CompraLinea[]): CompraLinea[] {
+    const f = this.filtroLineas.toLowerCase().trim();
+    if (!f) return lineas;
+    return lineas.filter(l =>
+      l.codigo.toLowerCase().includes(f) ||
+      l.descripcion.toLowerCase().includes(f)
+    );
   }
 
   lineasAsignadas(): number {
