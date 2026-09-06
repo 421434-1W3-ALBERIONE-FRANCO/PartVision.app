@@ -500,12 +500,18 @@ export class Precios implements OnInit, OnDestroy {
     const file = this.impArchivo();
     if (!file) return;
     this.impSubiendo.set(true); this.impUploadProgress.set(0); this.impError.set(null);
+
+    const progressTimer = setTimeout(() => {
+      if (this.impSubiendo() && this.impUploadProgress() < 100) this.impUploadProgress.set(100);
+    }, 3000);
+
     this.service.importDetectarColumnas(file).subscribe({
       next: (event) => {
         if ('progress' in event) {
           this.impUploadProgress.set(event.progress);
           return;
         }
+        clearTimeout(progressTimer);
         const res = event;
         this.impUploadId.set(res.uploadId);
         this.impColumnas.set(res.columnas);
@@ -525,7 +531,21 @@ export class Precios implements OnInit, OnDestroy {
         this.impPaso.set(2);
         this.impSubiendo.set(false);
       },
-      error: (e) => { this.impError.set(e?.error?.message ?? 'No se pudo leer el archivo.'); this.impSubiendo.set(false); },
+      error: (e) => {
+        clearTimeout(progressTimer);
+        let msg: string;
+        if (e?.name === 'TimeoutError') {
+          msg = 'El servidor tardó demasiado en responder. Esperá unos segundos e intentá de nuevo.';
+        } else if (e?.status === 0 || e?.status === undefined) {
+          msg = 'No se pudo conectar con el servidor. Verificá tu conexión e intentá de nuevo.';
+        } else if (e?.status >= 502 && e?.status <= 504) {
+          msg = 'El servidor no está disponible en este momento. Esperá unos segundos e intentá de nuevo.';
+        } else {
+          msg = e?.error?.message ?? 'No se pudo leer el archivo.';
+        }
+        this.impError.set(msg);
+        this.impSubiendo.set(false);
+      },
     });
   }
 
