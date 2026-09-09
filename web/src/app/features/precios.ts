@@ -544,7 +544,8 @@ export class Precios implements OnInit, OnDestroy {
         if (serverDown) {
           msg = 'El servidor no está disponible. Esperá unos segundos e intentá de nuevo.';
         } else {
-          msg = e?.error?.message ?? 'No se pudo leer el archivo.';
+          msg = e?.error?.message ?? e?.message ?? 'No se pudo leer el archivo.';
+          if (e?.status) msg += ` (HTTP ${e.status})`;
         }
         this.impError.set(msg);
         this.impSubiendo.set(false);

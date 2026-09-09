@@ -120,10 +120,29 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Error al procesar el archivo: " + ex.getMessage(), request, null);
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ApiError> handleMultipart(org.springframework.web.multipart.MultipartException ex,
+                                                     HttpServletRequest request) {
+        log.warn("Error multipart en {}: {}", request.getRequestURI(), ex.getMessage());
+        String msg = ex.getMessage() != null && ex.getMessage().contains("size")
+                ? "El archivo es demasiado grande (máximo 15MB)"
+                : "Error al procesar el archivo subido: " + ex.getMessage();
+        return build(HttpStatus.BAD_REQUEST, msg, request, null);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    public ResponseEntity<ApiError> handleMissingPart(
+            org.springframework.web.multipart.support.MissingServletRequestPartException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Falta el archivo: " + ex.getRequestPartName(), request, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
-        log.error("Error no controlado en {}", request.getRequestURI(), ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servidor", request, null);
+        log.error("Error no controlado en {} [{}]: {}", request.getRequestURI(),
+                ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Error interno del servidor (" + ex.getClass().getSimpleName() + ")", request, null);
     }
 
     private ApiError.FieldValidationError toFieldError(FieldError fieldError) {
