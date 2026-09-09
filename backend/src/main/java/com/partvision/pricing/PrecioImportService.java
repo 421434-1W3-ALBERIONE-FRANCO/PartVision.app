@@ -83,8 +83,10 @@ public class PrecioImportService {
                     if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
                     columnas = new ArrayList<>();
                     for (Cell cell : headerRow) {
-                        columnas.add(cellToString(cell));
+                        String val = cellToString(cell);
+                        if (val != null && !val.isBlank()) columnas.add(val);
                     }
+                    if (columnas.isEmpty()) throw new IllegalArgumentException("No se encontraron columnas con datos en la primera fila");
                     totalFilas = sheet.getLastRowNum();
                     log.info("Excel detectado: ~{} filas de datos, {} columnas",
                             totalFilas, columnas.size());
