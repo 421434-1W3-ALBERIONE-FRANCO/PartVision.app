@@ -15,7 +15,7 @@ COPY --from=build /app/target/partvision-backend.jar app.jar
 
 # Puerto HTTP (la plataforma puede sobreescribir con $PORT).
 EXPOSE 8080
-ENV JAVA_OPTS=""
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseSerialGC"
 
 # Variables que el deploy DEBE definir (no hay defaults seguros en prod):
 #   SPRING_PROFILES_ACTIVE=prod

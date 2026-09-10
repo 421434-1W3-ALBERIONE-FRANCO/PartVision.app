@@ -24,7 +24,6 @@ spring:
     multipart:
       max-file-size: 15MB
       max-request-size: 15MB
-      file-size-threshold: 15MB
       location: /tmp/partvision-uploads
   flyway:
     enabled: true
