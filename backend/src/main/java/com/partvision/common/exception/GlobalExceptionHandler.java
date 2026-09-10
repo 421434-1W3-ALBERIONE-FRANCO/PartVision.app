@@ -72,8 +72,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex,
                                                         HttpServletRequest request) {
-        log.warn("Violacion de integridad en {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
-        return build(HttpStatus.CONFLICT, "Viola una restriccion de integridad de datos", request, null);
+        String detail = ex.getMostSpecificCause().getMessage();
+        log.warn("Violacion de integridad en {}: {}", request.getRequestURI(), detail);
+        String msg = "Viola una restriccion de integridad de datos";
+        if (detail != null && detail.contains("duplicate key")) {
+            msg += ": registro duplicado";
+        }
+        if (detail != null) {
+            msg += " (" + detail.substring(0, Math.min(detail.length(), 200)) + ")";
+        }
+        return build(HttpStatus.CONFLICT, msg, request, null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
