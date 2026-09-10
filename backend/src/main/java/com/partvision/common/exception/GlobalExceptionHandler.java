@@ -137,12 +137,25 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Falta el archivo: " + ex.getRequestPartName(), request, null);
     }
 
+    @ExceptionHandler(jakarta.servlet.ServletException.class)
+    public ResponseEntity<ApiError> handleServletException(jakarta.servlet.ServletException ex,
+                                                            HttpServletRequest request) {
+        Throwable root = ex;
+        while (root.getCause() != null) root = root.getCause();
+        log.error("ServletException en {} — root: [{}] {}", request.getRequestURI(),
+                root.getClass().getName(), root.getMessage(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Error de servlet: " + root.getClass().getSimpleName() + " — " + root.getMessage(), request, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
-        log.error("Error no controlado en {} [{}]: {}", request.getRequestURI(),
-                ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        Throwable root = ex;
+        while (root.getCause() != null) root = root.getCause();
+        log.error("Error no controlado en {} [{}]: {} — root: [{}] {}", request.getRequestURI(),
+                ex.getClass().getName(), ex.getMessage(), root.getClass().getName(), root.getMessage(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Error interno del servidor (" + ex.getClass().getSimpleName() + ")", request, null);
+                "Error: " + root.getClass().getSimpleName() + " — " + root.getMessage(), request, null);
     }
 
     private ApiError.FieldValidationError toFieldError(FieldError fieldError) {

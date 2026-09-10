@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,9 +26,9 @@ public class PrecioImportController {
 
     private final PrecioImportService importService;
 
-    @PostMapping("/columnas")
+    @PostMapping(value = "/columnas", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PrecioImportColumnasResponse> detectarColumnas(
-            @RequestParam("archivo") MultipartFile archivo) throws IOException {
+            @RequestPart("archivo") MultipartFile archivo) throws IOException {
         return ResponseEntity.ok(importService.detectarColumnas(archivo.getBytes(),
                 archivo.getOriginalFilename()));
     }
