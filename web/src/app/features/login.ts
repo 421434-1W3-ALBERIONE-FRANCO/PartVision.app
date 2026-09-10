@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, signal, ViewChildren, QueryList } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, inject, signal, ViewChild, ViewChildren, QueryList } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
@@ -47,8 +47,9 @@ import { ThreeBgComponent } from '../core/three-bg.component';
             </label>
             <div class="relative">
               <input
+                #usernameInput
                 [(ngModel)]="username"
-                (keyup.enter)="submit()"
+                (keyup.enter)="focusPassword()"
                 type="text"
                 placeholder="Ingrese usuario"
                 class="w-full px-4 py-3 bg-dark-surface/80 border border-dark-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all text-sm font-medium"
@@ -67,6 +68,7 @@ import { ThreeBgComponent } from '../core/three-bg.component';
             </label>
             <div class="relative">
               <input
+                #passwordInput
                 [(ngModel)]="password"
                 (keyup.enter)="submit()"
                 [type]="mostrarPassword() ? 'text' : 'password'"
@@ -174,11 +176,22 @@ import { ThreeBgComponent } from '../core/three-bg.component';
     </div>
   `,
 })
-export class Login {
+export class Login implements AfterViewInit {
   private auth = inject(AuthService);
   private router = inject(Router);
 
+  @ViewChild('usernameInput') usernameInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('passwordInput') passwordInput!: ElementRef<HTMLInputElement>;
   @ViewChildren('otpInput') otpInputs!: QueryList<ElementRef<HTMLInputElement>>;
+
+  ngAfterViewInit(): void {
+    // Foco automático en Usuario al cargar la pantalla.
+    setTimeout(() => this.usernameInput?.nativeElement.focus());
+  }
+
+  focusPassword(): void {
+    this.passwordInput?.nativeElement.focus();
+  }
 
   username = '';
   password = '';
@@ -255,7 +268,18 @@ export class Login {
           return;
         }
         if (e?.status === 401) {
-          this.error.set(this.requiere2fa() ? 'Código o credenciales incorrectos' : 'Usuario o contraseña incorrectos');
+          if (this.requiere2fa()) {
+            this.error.set('Código o credenciales incorrectos');
+            // limpiar el código y volver el foco al primer dígito
+            this.otpDigits.set(['', '', '', '', '', '']);
+            this.code = '';
+            setTimeout(() => this.otpInputs?.first?.nativeElement.focus());
+          } else {
+            this.error.set('Usuario o contraseña incorrectos');
+            // limpiar la contraseña y volver el foco a ese campo
+            this.password = '';
+            setTimeout(() => this.passwordInput?.nativeElement.focus());
+          }
         } else {
           this.error.set('No se pudo conectar con el servidor');
         }
