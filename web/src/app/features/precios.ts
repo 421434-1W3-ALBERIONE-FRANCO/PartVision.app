@@ -542,9 +542,14 @@ export class Precios implements OnInit, OnDestroy {
         }
         let msg: string;
         if (serverDown) {
-          msg = 'El servidor no está disponible. Esperá unos segundos e intentá de nuevo.';
+          msg = `El servidor no está disponible (${e?.status ?? e?.name ?? '?'}). Esperá unos segundos e intentá de nuevo.`;
         } else {
-          msg = e?.error?.message ?? e?.message ?? 'No se pudo leer el archivo.';
+          const body = e?.error;
+          if (body?.rootCause) {
+            msg = `${body.message}\nRoot: ${body.rootCause}`;
+          } else {
+            msg = body?.message ?? e?.message ?? 'No se pudo leer el archivo.';
+          }
           if (e?.status) msg += ` (HTTP ${e.status})`;
         }
         this.impError.set(msg);
