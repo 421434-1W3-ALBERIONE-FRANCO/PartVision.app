@@ -54,9 +54,9 @@ public class PrecioImportController {
         return ResponseEntity.ok(info);
     }
 
-    @PostMapping(value = "/columnas", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/columnas")
     public ResponseEntity<?> detectarColumnas(
-            @RequestPart("archivo") MultipartFile archivo) {
+            @RequestParam("archivo") MultipartFile archivo) {
         try {
             log.info("=== UPLOAD DEBUG === archivo={}, size={}, contentType={}",
                     archivo.getOriginalFilename(), archivo.getSize(), archivo.getContentType());
