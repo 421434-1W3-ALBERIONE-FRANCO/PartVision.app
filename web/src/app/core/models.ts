@@ -190,6 +190,12 @@ export interface PrecioPreviewFila {
   cantidadMatches: number;
 }
 
+export interface PrecioFilaNoEncontrada {
+  sku: string;
+  descripcion: string | null;
+  precio: number | null;
+}
+
 export interface PrecioImportPreview {
   filas: PrecioPreviewFila[];
   total: number;
@@ -197,6 +203,7 @@ export interface PrecioImportPreview {
   conflictos: number;
   noEncontrados: number;
   margenAplicado: number;
+  detalleNoEncontrados: PrecioFilaNoEncontrada[];
 }
 
 export interface PrecioImportResult {

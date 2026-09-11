@@ -214,6 +214,19 @@ import { ProductoService } from '../core/producto.service';
               </div>
             </div>
 
+            @if (impPreview()!.detalleNoEncontrados.length > 0) {
+              <div class="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <p class="text-xs text-gray-400">
+                  Hay {{ impPreview()!.noEncontrados }} SKU(s) del proveedor que no existen en tu catálogo.
+                  No se tocan al aplicar.
+                </p>
+                <button (click)="descargarNoEncontrados()"
+                  class="px-4 py-2 rounded-lg text-xs font-semibold text-amber-400 border border-amber-500/40 hover:bg-amber-500/10 cursor-pointer whitespace-nowrap">
+                  Descargar CSV
+                </button>
+              </div>
+            }
+
             @if (impPreview()!.filas.length < impPreview()!.total) {
               <p class="text-[11px] text-gray-500 font-mono">
                 Mostrando las primeras {{ impPreview()!.filas.length }} de {{ impPreview()!.total }} filas.
@@ -459,6 +472,7 @@ export class Precios implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.cargar();
     this.cargarBatches();
+    this.restaurarEstadoImport();
   }
 
   ngOnDestroy(): void {
@@ -513,6 +527,54 @@ export class Precios implements OnInit, OnDestroy {
 
   // --- Import CSV ---
 
+  /**
+   * El archivo queda del lado del servidor referenciado por uploadId, asi que al salir de
+   * la pantalla alcanza con recordar esa referencia y las columnas elegidas para no tener
+   * que volver a subirlo. El preview no se guarda: se regenera con un click y ocupa de mas.
+   */
+  private static readonly IMPORT_STATE_KEY = 'pv-precios-import';
+
+  private guardarEstadoImport(): void {
+    if (!this.impUploadId()) return;
+    try {
+      sessionStorage.setItem(Precios.IMPORT_STATE_KEY, JSON.stringify({
+        uploadId: this.impUploadId(),
+        nombreArchivo: this.impNombreArchivo(),
+        columnas: this.impColumnas(),
+        columnasId: this.impColumnasId(),
+        columnasPrecio: this.impColumnasPrecio(),
+        totalFilas: this.impTotalFilas(),
+        colSku: this.impColSku,
+        colPrecio: this.impColPrecio,
+        proveedor: this.impProveedor,
+      }));
+    } catch { /* sessionStorage lleno o deshabilitado: no es critico */ }
+  }
+
+  private restaurarEstadoImport(): void {
+    let crudo: string | null = null;
+    try { crudo = sessionStorage.getItem(Precios.IMPORT_STATE_KEY); } catch { return; }
+    if (!crudo) return;
+    try {
+      const s = JSON.parse(crudo);
+      if (!s?.uploadId) return;
+      this.impUploadId.set(s.uploadId);
+      this.impNombreArchivo.set(s.nombreArchivo ?? '');
+      this.impColumnas.set(s.columnas ?? []);
+      this.impColumnasId.set(s.columnasId ?? []);
+      this.impColumnasPrecio.set(s.columnasPrecio ?? []);
+      this.impTotalFilas.set(s.totalFilas ?? 0);
+      this.impColSku = s.colSku ?? '';
+      this.impColPrecio = s.colPrecio ?? '';
+      this.impProveedor = s.proveedor ?? '';
+      this.impPaso.set(2);
+    } catch { this.olvidarEstadoImport(); }
+  }
+
+  private olvidarEstadoImport(): void {
+    try { sessionStorage.removeItem(Precios.IMPORT_STATE_KEY); } catch { /* ignorado */ }
+  }
+
   onArchivoSeleccionado(ev: Event): void {
     const file = (ev.target as HTMLInputElement).files?.[0] ?? null;
     this.impArchivo.set(file);
@@ -553,6 +615,7 @@ export class Precios implements OnInit, OnDestroy {
 
         this.impPaso.set(2);
         this.impSubiendo.set(false);
+        this.guardarEstadoImport();
       },
       error: (e) => {
         clearTimeout(progressTimer);
@@ -578,10 +641,29 @@ export class Precios implements OnInit, OnDestroy {
 
   generarPreview(): void {
     this.impPreviewing.set(true); this.impError.set(null);
+    this.guardarEstadoImport();
     this.service.importPreview(this.impUploadId(), this.impColSku, this.impColPrecio, this.impProveedor).subscribe({
       next: (res) => { this.impPreview.set(res); this.impPaso.set(3); this.impPreviewing.set(false); },
       error: (e) => { this.impError.set(e?.error?.message ?? 'Error al generar preview.'); this.impPreviewing.set(false); },
     });
+  }
+
+  descargarNoEncontrados(): void {
+    const filas = this.impPreview()?.detalleNoEncontrados ?? [];
+    if (!filas.length) return;
+    const escapar = (v: string | number | null) =>
+      `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = ['SKU,Descripcion,Precio']
+      .concat(filas.map(f => [f.sku, f.descripcion, f.precio].map(escapar).join(',')))
+      .join('\r\n');
+    // BOM para que Excel abra los acentos bien.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `no-encontrados-${this.impProveedor || 'proveedor'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   aplicarImport(): void {
@@ -606,6 +688,7 @@ export class Precios implements OnInit, OnDestroy {
           if (!p.importando) {
             this.stopImportPoll();
             this.impAplicando.set(false);
+            this.olvidarEstadoImport();
             if (p.ultimoResultado) {
               this.impResultado.set(p.ultimoResultado);
               this.impPaso.set(0);
@@ -624,6 +707,7 @@ export class Precios implements OnInit, OnDestroy {
 
   resetImport(): void {
     this.stopImportPoll();
+    this.olvidarEstadoImport();
     this.impPaso.set(1); this.impArchivo.set(null); this.impNombreArchivo.set('');
     this.impUploadId.set(''); this.impColumnas.set([]); this.impTotalFilas.set(0);
     this.impColumnasId.set([]); this.impColumnasPrecio.set([]);

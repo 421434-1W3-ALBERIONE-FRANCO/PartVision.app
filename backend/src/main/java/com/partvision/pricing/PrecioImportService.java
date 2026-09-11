@@ -145,6 +145,7 @@ public class PrecioImportService {
         // Solo se devuelve una muestra de filas: el navegador no puede renderizar
         // decenas de miles de <tr> sin congelarse. Los contadores si son del total.
         List<PreviewFila> muestra = new ArrayList<>();
+        List<PrecioImportPreviewResponse.FilaNoEncontrada> detalleNoEncontrados = new ArrayList<>();
         int total = 0, ok = 0, conflictos = 0, noEncontrados = 0;
 
         for (int i = 0; i < filas.size(); i++) {
@@ -166,6 +167,10 @@ public class PrecioImportService {
                 pf = new PreviewFila(i + 2, sku, costo, "NO_ENCONTRADO",
                         null, null, null, null, precioNuevo, 0);
                 noEncontrados++;
+                if (detalleNoEncontrados.size() < MAX_NO_ENCONTRADOS) {
+                    detalleNoEncontrados.add(new PrecioImportPreviewResponse.FilaNoEncontrada(
+                            sku, fila.length > 2 ? fila[2] : null, costo));
+                }
             } else if (matches.size() > 1) {
                 String descs = matches.stream()
                         .map(p -> p.getDescripcion() + (p.getMarca() != null ? " [" + p.getMarca().getNombre() + "]" : ""))
@@ -183,7 +188,8 @@ public class PrecioImportService {
             if (muestra.size() < PREVIEW_MAX_FILAS) muestra.add(pf);
         }
 
-        return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados, tarifa.margen());
+        return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados,
+                tarifa.margen(), detalleNoEncontrados);
     }
 
     public void validarAplicar(String uploadId, String proveedor) {
@@ -365,6 +371,7 @@ public class PrecioImportService {
 
     private static final int SKU_BATCH_SIZE = 10_000;
     private static final int PREVIEW_MAX_FILAS = 500;
+    private static final int MAX_NO_ENCONTRADOS = 5_000;
 
     /**
      * Un mismo SKU puede existir una vez por proveedor (indice unico proveedor+sku), asi
@@ -422,6 +429,11 @@ public class PrecioImportService {
                         "No hay configuración de margen para el proveedor: " + proveedor));
     }
 
+    /**
+     * Cada fila es {sku, precio, descripcion}. La descripcion se toma de la columna que el
+     * proveedor traiga con ese nombre (si la trae) y solo se usa para poder mostrar que
+     * producto es cada SKU que no matcheo; el matcheo en si nunca la mira.
+     */
     private List<String[]> parsearFilas(UploadInfo info, String colSku, String colPrecio) {
         if (info.esExcel()) {
             return parsearFilasExcel(info.contenido(), colSku, colPrecio);
@@ -429,15 +441,25 @@ public class PrecioImportService {
         return parsearFilasCsv(info.contenido(), colSku, colPrecio);
     }
 
+    private boolean esColumnaDescripcion(String nombre) {
+        if (nombre == null) return false;
+        String n = nombre.trim().toLowerCase();
+        return n.startsWith("descripc") || n.startsWith("descript") || n.equals("detalle");
+    }
+
     private List<String[]> parsearFilasCsv(byte[] contenido, String colSku, String colPrecio) {
         try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
              CSVParser parser = CSVParser.parse(reader, csvFormat())) {
+
+            String colDesc = parser.getHeaderNames().stream()
+                    .filter(this::esColumnaDescripcion).findFirst().orElse(null);
 
             List<String[]> filas = new ArrayList<>();
             for (CSVRecord record : parser) {
                 String sku = valor(record, colSku);
                 String precio = valor(record, colPrecio);
-                filas.add(new String[]{sku, precio});
+                String desc = colDesc != null ? valor(record, colDesc) : null;
+                filas.add(new String[]{sku, precio, desc});
             }
             return filas;
         } catch (Exception e) {
@@ -452,11 +474,13 @@ public class PrecioImportService {
             Row headerRow = sheet.getRow(headerIdx);
             if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
 
-            int colSkuIdx = -1, colPrecioIdx = -1;
+            int colSkuIdx = -1, colPrecioIdx = -1, colDescIdx = -1;
             for (Cell cell : headerRow) {
                 String nombre = cellToString(cell);
-                if (nombre != null && nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
-                if (nombre != null && nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
+                if (nombre == null) continue;
+                if (nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
+                if (nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
+                if (colDescIdx < 0 && esColumnaDescripcion(nombre)) colDescIdx = cell.getColumnIndex();
             }
             if (colSkuIdx < 0) throw new IllegalArgumentException("Columna SKU '" + colSku + "' no encontrada");
             if (colPrecioIdx < 0) throw new IllegalArgumentException("Columna precio '" + colPrecio + "' no encontrada");
@@ -466,8 +490,10 @@ public class PrecioImportService {
                 if (row.getRowNum() <= headerIdx) continue;
                 String sku = cellToString(row.getCell(colSkuIdx));
                 String precio = cellToString(row.getCell(colPrecioIdx));
+                String desc = colDescIdx >= 0 ? cellToString(row.getCell(colDescIdx)) : null;
                 if (sku != null && !sku.isBlank()) {
-                    filas.add(new String[]{sku.trim(), precio != null ? precio.trim() : null});
+                    filas.add(new String[]{sku.trim(), precio != null ? precio.trim() : null,
+                            desc != null ? desc.trim() : null});
                 }
             }
             log.info("Excel parseado: {} filas con datos (columnas: sku={} idx={}, precio={} idx={})",

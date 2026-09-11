@@ -9,8 +9,12 @@ public record PrecioImportPreviewResponse(
         int ok,
         int conflictos,
         int noEncontrados,
-        BigDecimal margenAplicado
+        BigDecimal margenAplicado,
+        /** SKUs del archivo que no existen en el catalogo, para poder exportarlos y revisarlos. */
+        List<FilaNoEncontrada> detalleNoEncontrados
 ) {
+    public record FilaNoEncontrada(String sku, String descripcion, BigDecimal precio) {}
+
     public record PreviewFila(
             int fila,
             String skuCsv,
