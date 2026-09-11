@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
@@ -31,9 +32,12 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,8 +53,18 @@ public class PrecioImportService {
     private final ImportPrecioBatchRepository batchRepo;
     private final HistorialPrecioRepository historialRepo;
 
-    private record UploadInfo(byte[] contenido, boolean esExcel) {}
+    private record UploadInfo(byte[] contenido, boolean esExcel, Instant subidoEn) {}
+
+    /**
+     * Archivos subidos esperando preview/aplicar. Guardan el contenido completo en memoria
+     * (una lista de precios ronda los megabytes), y el flujo permite abandonar la
+     * importacion a mitad de camino, asi que se vencen solos: sin esto el heap crece hasta
+     * tirar el proceso.
+     */
     private final Map<String, UploadInfo> uploads = new ConcurrentHashMap<>();
+
+    private static final Duration UPLOAD_TTL = Duration.ofMinutes(30);
+    private static final int MAX_UPLOADS = 4;
 
     private final AtomicBoolean importando = new AtomicBoolean(false);
     private final AtomicInteger progresoActual = new AtomicInteger(0);
@@ -70,7 +84,8 @@ public class PrecioImportService {
     public PrecioImportColumnasResponse detectarColumnas(byte[] contenido, String nombreArchivo) {
         String uploadId = UUID.randomUUID().toString();
         boolean esExcel = esArchivoExcel(nombreArchivo);
-        uploads.put(uploadId, new UploadInfo(contenido, esExcel));
+        purgarUploads();
+        uploads.put(uploadId, new UploadInfo(contenido, esExcel, Instant.now()));
 
         try {
             List<String> columnas;
@@ -328,6 +343,22 @@ public class PrecioImportService {
         return batchRepo.findAllByOrderByCreatedAtDesc().stream()
                 .map(PrecioBatchResponse::from)
                 .toList();
+    }
+
+    /** Descarta los archivos vencidos y, si aun quedan de mas, los mas viejos. */
+    @Scheduled(fixedDelay = 10, timeUnit = TimeUnit.MINUTES)
+    void purgarUploads() {
+        Instant limite = Instant.now().minus(UPLOAD_TTL);
+        uploads.entrySet().removeIf(e -> e.getValue().subidoEn().isBefore(limite));
+
+        if (uploads.size() > MAX_UPLOADS) {
+            uploads.entrySet().stream()
+                    .sorted(Comparator.comparing(e -> e.getValue().subidoEn()))
+                    .limit(uploads.size() - MAX_UPLOADS)
+                    .map(Map.Entry::getKey)
+                    .toList()
+                    .forEach(uploads::remove);
+        }
     }
 
     // --- Helpers ---
