@@ -165,6 +165,8 @@ export interface ConfiguracionPrecio {
   id: number;
   proveedor: string;
   margen: number;
+  /** Recargo del proveedor sobre el precio de lista del archivo, para llegar al costo real. */
+  ajusteLista: number;
   activo: boolean;
   updatedAt: string;
 }

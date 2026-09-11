@@ -8,5 +8,6 @@ import java.math.BigDecimal;
 public record ConfiguracionPrecioRequest(
         String proveedor,
         @NotNull @DecimalMin("0") BigDecimal margen,
+        @DecimalMin("0") BigDecimal ajusteLista,
         Boolean activo
 ) {}

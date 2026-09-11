@@ -39,6 +39,7 @@ public class ConfiguracionPrecioController {
         ConfiguracionPrecio config = new ConfiguracionPrecio();
         config.setProveedor(req.proveedor());
         config.setMargen(req.margen());
+        if (req.ajusteLista() != null) config.setAjusteLista(req.ajusteLista());
         config.setActivo(req.activo() != null ? req.activo() : true);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ConfiguracionPrecioResponse.from(repo.save(config)));
@@ -52,6 +53,9 @@ public class ConfiguracionPrecioController {
         return repo.findById(id)
                 .map(config -> {
                     config.setMargen(req.margen());
+                    if (req.ajusteLista() != null) {
+                        config.setAjusteLista(req.ajusteLista());
+                    }
                     if (req.activo() != null) {
                         config.setActivo(req.activo());
                     }

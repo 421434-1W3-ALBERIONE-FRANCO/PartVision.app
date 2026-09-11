@@ -20,8 +20,16 @@ public class ConfiguracionPrecio {
     @Column(nullable = false, unique = true, length = 100)
     private String proveedor;
 
+    /** Margen de reventa: se aplica sobre el costo para obtener el precio de venta. */
     @Column(nullable = false, precision = 8, scale = 4)
     private BigDecimal margen;
+
+    /**
+     * Recargo del proveedor sobre el precio de lista del archivo importado, para
+     * llegar al costo real de compra. Cero cuando el archivo ya trae ese precio.
+     */
+    @Column(name = "ajuste_lista", nullable = false, precision = 8, scale = 4)
+    private BigDecimal ajusteLista = BigDecimal.ZERO;
 
     @Column(nullable = false)
     private boolean activo = true;

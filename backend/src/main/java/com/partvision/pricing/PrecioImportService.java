@@ -116,8 +116,7 @@ public class PrecioImportService {
             throw new IllegalArgumentException("Archivo no encontrado. Volvé a subirlo.");
         }
 
-        BigDecimal margen = obtenerMargen(proveedor);
-        BigDecimal multiplicador = BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100)));
+        Tarifa tarifa = obtenerTarifa(proveedor);
 
         List<String[]> filas = parsearFilas(info, colSku, colPrecio);
 
@@ -136,45 +135,46 @@ public class PrecioImportService {
         for (int i = 0; i < filas.size(); i++) {
             String[] fila = filas.get(i);
             String sku = fila[0];
-            BigDecimal precioCsv = parsearPrecio(fila[1]);
+            BigDecimal precioArchivo = parsearPrecio(fila[1]);
 
             if (sku == null || sku.isBlank()) continue;
-            if (precioCsv == null) continue;
+            if (precioArchivo == null) continue;
 
             List<Producto> matches = productosPorSku.getOrDefault(sku, List.of());
-            BigDecimal precioNuevo = precioCsv.multiply(multiplicador).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal costo = tarifa.costoDesde(precioArchivo);
+            BigDecimal precioNuevo = tarifa.ventaDesde(costo);
             total++;
 
             PreviewFila pf;
             if (matches.isEmpty()) {
-                pf = new PreviewFila(i + 2, sku, precioCsv, "NO_ENCONTRADO",
+                pf = new PreviewFila(i + 2, sku, costo, "NO_ENCONTRADO",
                         null, null, null, null, precioNuevo, 0);
                 noEncontrados++;
             } else if (matches.size() > 1) {
                 String descs = matches.stream()
                         .map(p -> p.getDescripcion() + (p.getMarca() != null ? " [" + p.getMarca().getNombre() + "]" : ""))
                         .collect(Collectors.joining(" | "));
-                pf = new PreviewFila(i + 2, sku, precioCsv, "CONFLICTO",
+                pf = new PreviewFila(i + 2, sku, costo, "CONFLICTO",
                         null, descs, null, null, precioNuevo, matches.size());
                 conflictos++;
             } else {
                 Producto p = matches.getFirst();
                 String marca = p.getMarca() != null ? p.getMarca().getNombre() : null;
-                pf = new PreviewFila(i + 2, sku, precioCsv, "OK",
+                pf = new PreviewFila(i + 2, sku, costo, "OK",
                         p.getId(), p.getDescripcion(), marca, p.getPrecioCosto(), precioNuevo, 1);
                 ok++;
             }
             if (muestra.size() < PREVIEW_MAX_FILAS) muestra.add(pf);
         }
 
-        return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados, margen);
+        return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados, tarifa.margen());
     }
 
     public void validarAplicar(String uploadId, String proveedor) {
         if (!uploads.containsKey(uploadId)) {
             throw new IllegalArgumentException("Archivo expirado. Volvé a subirlo.");
         }
-        obtenerMargen(proveedor);
+        obtenerTarifa(proveedor);
     }
 
     @Async("importExecutor")
@@ -203,8 +203,7 @@ public class PrecioImportService {
             throw new IllegalArgumentException("Archivo expirado. Volvé a subirlo.");
         }
 
-        BigDecimal margen = obtenerMargen(proveedor);
-        BigDecimal multiplicador = BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100)));
+        Tarifa tarifa = obtenerTarifa(proveedor);
 
         List<String[]> filas = parsearFilas(info, colSku, colPrecio);
         progresoTotal.set(filas.size());
@@ -229,10 +228,10 @@ public class PrecioImportService {
 
         for (String[] fila : filas) {
             String sku = fila[0];
-            BigDecimal precioCsv = parsearPrecio(fila[1]);
+            BigDecimal precioArchivo = parsearPrecio(fila[1]);
             progresoActual.incrementAndGet();
 
-            if (sku == null || sku.isBlank() || precioCsv == null) continue;
+            if (sku == null || sku.isBlank() || precioArchivo == null) continue;
 
             if (skusExcluidos != null && skusExcluidos.contains(sku)) {
                 omitidos++;
@@ -247,19 +246,20 @@ public class PrecioImportService {
             }
 
             Producto p = matches.getFirst();
-            BigDecimal precioVenta = precioCsv.multiply(multiplicador).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal costo = tarifa.costoDesde(precioArchivo);
+            BigDecimal precioVenta = tarifa.ventaDesde(costo);
 
             HistorialPrecio h = new HistorialPrecio();
             h.setProducto(p);
             h.setBatch(batch);
             h.setPrecioCostoAnterior(p.getPrecioCosto());
             h.setPrecioVentaAnterior(p.getPrecioVenta());
-            h.setPrecioCostoNuevo(precioCsv);
+            h.setPrecioCostoNuevo(costo);
             h.setPrecioVentaNuevo(precioVenta);
-            h.setMargenAplicado(margen);
+            h.setMargenAplicado(tarifa.margen());
             historiales.add(h);
 
-            p.setPrecioCosto(precioCsv);
+            p.setPrecioCosto(costo);
             p.setPrecioVenta(precioVenta);
             p.setPrecioActualizadoEn(ahora);
             modificados.add(p);
@@ -275,8 +275,9 @@ public class PrecioImportService {
         batch.setConflictos(conflictos);
         batchRepo.save(batch);
 
-        String mensaje = String.format("Importación completada: %d aplicados, %d omitidos, %d conflictos (margen %.2f%%)",
-                aplicados, omitidos, conflictos, margen);
+        String mensaje = String.format(
+                "Importación completada: %d aplicados, %d omitidos, %d conflictos (ajuste %.2f%%, margen %.2f%%)",
+                aplicados, omitidos, conflictos, tarifa.ajusteLista(), tarifa.margen());
         log.info(mensaje);
 
         return new PrecioImportResultResponse(batch.getId(), batch.getTotal(), aplicados, omitidos, conflictos, mensaje);
@@ -347,9 +348,28 @@ public class PrecioImportService {
         return resultado;
     }
 
-    private BigDecimal obtenerMargen(String proveedor) {
+    /**
+     * El archivo del proveedor no siempre trae el precio que se paga: algunos exportan
+     * su precio de lista y aplican un recargo aparte. 'ajusteLista' salva esa diferencia.
+     */
+    private record Tarifa(BigDecimal margen, BigDecimal ajusteLista) {
+        BigDecimal costoDesde(BigDecimal precioArchivo) {
+            return precioArchivo
+                    .multiply(BigDecimal.ONE.add(ajusteLista.divide(BigDecimal.valueOf(100))))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal ventaDesde(BigDecimal costo) {
+            return costo
+                    .multiply(BigDecimal.ONE.add(margen.divide(BigDecimal.valueOf(100))))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    private Tarifa obtenerTarifa(String proveedor) {
         return configuracionRepo.findByProveedorIgnoreCase(proveedor)
-                .map(ConfiguracionPrecio::getMargen)
+                .map(c -> new Tarifa(c.getMargen(),
+                        c.getAjusteLista() != null ? c.getAjusteLista() : BigDecimal.ZERO))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No hay configuración de margen para el proveedor: " + proveedor));
     }

@@ -70,12 +70,12 @@ export class ProductoService {
     return this.http.get<ConfiguracionPrecio[]>(`${API_BASE_URL}/precios/configuracion`);
   }
 
-  actualizarConfigPrecio(id: number, margen: number, activo: boolean): Observable<ConfiguracionPrecio> {
-    return this.http.put<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion/${id}`, { margen, activo });
+  actualizarConfigPrecio(id: number, margen: number, ajusteLista: number, activo: boolean): Observable<ConfiguracionPrecio> {
+    return this.http.put<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion/${id}`, { margen, ajusteLista, activo });
   }
 
-  crearConfigPrecio(proveedor: string, margen: number): Observable<ConfiguracionPrecio> {
-    return this.http.post<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion`, { proveedor, margen, activo: true });
+  crearConfigPrecio(proveedor: string, margen: number, ajusteLista: number): Observable<ConfiguracionPrecio> {
+    return this.http.post<ConfiguracionPrecio>(`${API_BASE_URL}/precios/configuracion`, { proveedor, margen, ajusteLista, activo: true });
   }
 
   importDetectarColumnas(archivo: File): Observable<{ progress: number } | PrecioImportColumnas> {

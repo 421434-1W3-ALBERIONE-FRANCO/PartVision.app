@@ -46,12 +46,20 @@ import { ProductoService } from '../core/producto.service';
                 <div class="flex-1 min-w-0">
                   <p class="font-semibold text-white text-sm">{{ c.proveedor }}</p>
                   <p class="text-[11px] text-gray-500 font-mono mt-0.5">
-                    Multiplicador: x{{ (1 + c.margen / 100) | number:'1.5-5' }}
+                    Costo: x{{ (1 + c.ajusteLista / 100) | number:'1.5-5' }} ·
+                    Venta: x{{ (1 + c.margen / 100) | number:'1.5-5' }}
                   </p>
                 </div>
                 <div class="flex items-center gap-3">
                   <div class="flex items-center gap-1.5">
-                    <label class="text-xs text-gray-400 font-semibold whitespace-nowrap">Margen %</label>
+                    <label class="text-xs text-gray-400 font-semibold whitespace-nowrap"
+                      title="Recargo que el proveedor aplica sobre el precio de lista del archivo para llegar a lo que realmente pagás. 0 si el archivo ya trae ese precio.">Ajuste lista %</label>
+                    <input type="number" step="0.001" min="0" [ngModel]="c.ajusteLista" (ngModelChange)="onAjusteChange(c, $event)"
+                      class="w-28 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm focus:outline-none focus:border-neon-cyan text-right" />
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-xs text-gray-400 font-semibold whitespace-nowrap"
+                      title="Tu margen de reventa: se aplica sobre el costo para obtener el precio de venta.">Margen %</label>
                     <input type="number" step="0.001" min="0" [ngModel]="c.margen" (ngModelChange)="onMargenChange(c, $event)"
                       class="w-28 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm focus:outline-none focus:border-amber-400 text-right" />
                   </div>
@@ -76,6 +84,11 @@ import { ProductoService } from '../core/producto.service';
                 <label class="block text-[11px] text-gray-500 mb-1">Nombre</label>
                 <input type="text" [(ngModel)]="nuevoProvNombre" placeholder="Ej: EGSA"
                   class="w-44 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Ajuste lista %</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="nuevoProvAjuste"
+                  class="w-28 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm focus:outline-none focus:border-neon-cyan text-right" />
               </div>
               <div>
                 <label class="block text-[11px] text-gray-500 mb-1">Margen %</label>
@@ -214,7 +227,7 @@ import { ProductoService } from '../core/producto.service';
                   <tr class="border-b border-dark-border text-xs uppercase font-mono text-gray-400 bg-dark-surface">
                     <th class="py-2 px-3">Fila</th>
                     <th class="py-2 px-3">SKU</th>
-                    <th class="py-2 px-3 text-right">P. Costo CSV</th>
+                    <th class="py-2 px-3 text-right">P. Costo</th>
                     <th class="py-2 px-3">Estado</th>
                     <th class="py-2 px-3">Producto en BD</th>
                     <th class="py-2 px-3 text-right">P. Actual</th>
@@ -435,6 +448,7 @@ export class Precios implements OnInit, OnDestroy {
   // Nuevo proveedor
   nuevoProvNombre = '';
   nuevoProvMargen = 0;
+  nuevoProvAjuste = 0;
   creandoProv = signal(false);
 
   // Batches / rollback
@@ -460,16 +474,17 @@ export class Precios implements OnInit, OnDestroy {
   }
 
   onMargenChange(c: ConfiguracionPrecio, val: number): void { c.margen = val; }
+  onAjusteChange(c: ConfiguracionPrecio, val: number): void { c.ajusteLista = val; }
   onActivoChange(c: ConfiguracionPrecio, ev: Event): void { c.activo = (ev.target as HTMLInputElement).checked; }
 
   guardar(c: ConfiguracionPrecio): void {
     this.error.set(null); this.exito.set(null);
     this.guardandoId.set(c.id);
-    this.service.actualizarConfigPrecio(c.id, c.margen, c.activo).subscribe({
+    this.service.actualizarConfigPrecio(c.id, c.margen, c.ajusteLista, c.activo).subscribe({
       next: (updated) => {
         this.configs.set(this.configs().map(x => x.id === updated.id ? updated : x));
         this.guardandoId.set(null);
-        this.exito.set(`Margen de "${updated.proveedor}" actualizado a ${updated.margen}%.`);
+        this.exito.set(`"${updated.proveedor}": ajuste ${updated.ajusteLista}%, margen ${updated.margen}%.`);
       },
       error: (e) => { this.guardandoId.set(null); this.error.set(e?.error?.message ?? 'No se pudo guardar.'); },
     });
@@ -479,11 +494,12 @@ export class Precios implements OnInit, OnDestroy {
     const nombre = this.nuevoProvNombre.trim();
     if (!nombre) return;
     this.creandoProv.set(true); this.error.set(null);
-    this.service.crearConfigPrecio(nombre, this.nuevoProvMargen).subscribe({
+    this.service.crearConfigPrecio(nombre, this.nuevoProvMargen, this.nuevoProvAjuste).subscribe({
       next: (created) => {
         this.configs.set([...this.configs(), created]);
         this.nuevoProvNombre = '';
         this.nuevoProvMargen = 0;
+        this.nuevoProvAjuste = 0;
         this.creandoProv.set(false);
         this.exito.set(`Proveedor "${created.proveedor}" creado con margen ${created.margen}%.`);
       },
