@@ -67,7 +67,13 @@ deploy_backend(){
   log "Recreando contenedor backend"
   docker stop partvision-backend >/dev/null 2>&1 || true
   docker rm   partvision-backend >/dev/null 2>&1 || true
-  docker run -d --name partvision-backend --restart=always --network host \
+  # Limite de memoria DURO: sin esto, con --network host y sin cgroup limit,
+  # -XX:MaxRAMPercentage=75.0 de la imagen calcula el heap contra la RAM TOTAL
+  # del host (3.8G) en vez de un cupo propio: una carga pesada puede tirar
+  # abajo NexVia/Postgres, que comparten este mismo VPS. Con el limite puesto,
+  # UseContainerSupport lo detecta solo y calcula el heap contra ESTO.
+  docker run -d --name partvision-backend --restart=always \
+    --memory="${BACKEND_MEMORY:-1g}" --memory-swap="${BACKEND_MEMORY:-1g}" --network host \
     --env-file "$envf" partvision-backend >/dev/null
   log "Esperando health del backend (localhost:8088)"
   if health_wait http://localhost:8088/actuator/health; then

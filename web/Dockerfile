@@ -4,7 +4,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# La app no se sirve en la raiz del dominio: nginx la publica bajo /partvision/
+# porque el host comparte dominio con otro proyecto. Sin el base-href, Angular
+# apunta los assets y el router a / y la web queda rota.
+ARG BASE_HREF=/partvision/
+RUN npx ng build --base-href ${BASE_HREF}
 
 # --- Etapa 2: runtime (nginx sirve los estaticos) ---
 FROM nginx:alpine
