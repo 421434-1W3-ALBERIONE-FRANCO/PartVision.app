@@ -64,6 +64,14 @@ deploy_backend(){
   # POST /api/v1/compras/recepcion (endpoint publico, sin JWT). Si se pierde en un
   # redeploy, el controller la da por vacia y deja de validar, dejando el endpoint abierto.
   reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|COMPRAS_|MAIL_|APP_|PORT|MANAGEMENT_)' "$envf"
+  # Overlay opcional para AGREGAR o ROTAR secretos sin recrear el contenedor a mano:
+  # un VAR=valor por linea en ~/.partvision-backend.env (chmod 600). Va despues del
+  # env reusado, asi pisa lo que ya estaba. Si no existe, no pasa nada.
+  local overlay="$HOME/.partvision-backend.env"
+  if [ -f "$overlay" ]; then
+    log "Aplicando overlay $overlay"
+    grep -E '^[A-Z_][A-Z0-9_]*=' "$overlay" >> "$envf" || true
+  fi
   log "Recreando contenedor backend"
   docker stop partvision-backend >/dev/null 2>&1 || true
   docker rm   partvision-backend >/dev/null 2>&1 || true
