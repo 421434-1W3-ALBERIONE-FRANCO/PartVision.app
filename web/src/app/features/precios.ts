@@ -431,6 +431,27 @@ import { ProductoService } from '../core/producto.service';
       </div>
     }
 
+    <!-- Aviso flotante: el resultado de una acción del modal no puede quedar
+         en un cartel al tope de la página, fuera de la vista del usuario. -->
+    @if (toast(); as t) {
+      <div class="fixed inset-x-0 top-6 z-[60] flex justify-center px-4 pointer-events-none">
+        <div class="pointer-events-auto flex items-center gap-3 px-5 py-3 rounded-xl shadow-neon border animate-fade-in"
+             [class]="t.tipo === 'ok'
+               ? 'bg-green-500/15 border-green-500/40 text-green-300'
+               : 'bg-red-500/15 border-red-500/40 text-red-300'">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            @if (t.tipo === 'ok') {
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            } @else {
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            }
+          </svg>
+          <span class="text-sm font-semibold">{{ t.mensaje }}</span>
+          <button (click)="toast.set(null)" class="ml-2 text-lg leading-none opacity-60 hover:opacity-100 cursor-pointer">&times;</button>
+        </div>
+      </div>
+    }
+
     <!-- Alta de productos no encontrados -->
     @if (altaAbierta()) {
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarAltaFaltantes()">
@@ -544,6 +565,15 @@ export class Precios implements OnInit, OnDestroy {
   nuevoProvAjuste = 0;
   creandoProv = signal(false);
 
+  toast = signal<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  mostrarToast(mensaje: string, tipo: 'ok' | 'error' = 'ok'): void {
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toast.set({ tipo, mensaje });
+    this.toastTimer = setTimeout(() => this.toast.set(null), 6000);
+  }
+
   // Alta de no encontrados
   altaAbierta = signal(false);
   altaFiltro = signal('');
@@ -574,6 +604,7 @@ export class Precios implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopImportPoll();
+    if (this.toastTimer) clearTimeout(this.toastTimer);
   }
 
   cargar(): void {
@@ -799,7 +830,7 @@ export class Precios implements OnInit, OnDestroy {
       next: (res) => {
         this.altaCreando.set(false);
         this.altaAbierta.set(false);
-        this.exito.set(res.mensaje);
+        this.mostrarToast(res.mensaje);
         // El preview quedó viejo: esos SKU ahora existen y pasan a contar como OK.
         this.generarPreview();
       },
