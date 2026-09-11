@@ -107,8 +107,8 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                 </thead>
                 <tbody class="divide-y divide-dark-border/50">
                   @for (p of listaProductos(); track p.id) {
-                    <tr class="hover:bg-dark-surface/40 transition-colors"
-                        [class.bg-neon-cyan/5]="productoSel()?.id === p.id">
+                    <tr class="row-zebra hover:bg-dark-surface/40 transition-colors"
+                        [class.row-marcada]="productoSel()?.id === p.id">
                       <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
                       <td class="py-3 px-4 text-white text-sm max-w-[380px] whitespace-normal break-words align-top">{{ p.descripcion }}</td>
                       <td class="py-3 px-4">
@@ -395,7 +395,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                       </thead>
                       <tbody class="divide-y divide-dark-border/50">
                         @for (l of filtrarUbicaciones(r.ubicaciones); track l.ubicacionId) {
-                          <tr class="hover:bg-dark-surface/40 transition-colors">
+                          <tr class="row-zebra hover:bg-dark-surface/40 transition-colors">
                             <td class="py-3 px-4 font-mono font-semibold text-neon-purple">{{ l.ubicacionPath }}</td>
                             @if (editandoUbicacionId() === l.ubicacionId) {
                               <td class="py-3 px-4 text-right">
@@ -537,7 +537,7 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                   </thead>
                   <tbody class="divide-y divide-dark-border/50">
                     @for (m of movimientosFiltrados(); track m.id) {
-                      <tr class="hover:bg-dark-surface/40 transition-colors">
+                      <tr class="row-zebra hover:bg-dark-surface/40 transition-colors">
                         <td class="py-3.5 px-4 font-mono text-gray-300 text-xs whitespace-nowrap">
                           {{ m.fecha ? (m.fecha | date:'dd/MM/yyyy HH:mm:ss') : '-' }}
                         </td>

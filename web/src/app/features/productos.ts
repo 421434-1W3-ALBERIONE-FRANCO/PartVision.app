@@ -342,7 +342,8 @@ import { UbicacionService } from '../core/ubicacion.service';
               </thead>
               <tbody class="divide-y divide-dark-border/50">
                 @for (p of productos(); track p.id) {
-                  <tr class="hover:bg-dark-surface/40 transition-colors">
+                  <tr class="row-zebra hover:bg-dark-surface/40 transition-colors cursor-default"
+                      [class.row-marcada]="filaMarcada() === p.id" (click)="marcarFila(p.id)">
                     <td class="py-3.5 px-4 font-mono font-bold text-neon-purple">
                       {{ p.sku ?? '-' }}
                     </td>
@@ -702,6 +703,13 @@ export class Productos implements OnInit {
 
   sortColumn = signal<string | null>(null);
   sortDir = signal<'asc' | 'desc'>('asc');
+
+  /** Fila señalada al hacer click, para no perder el renglón al recorrer la tabla. */
+  filaMarcada = signal<number | null>(null);
+
+  marcarFila(id: number): void {
+    this.filaMarcada.set(this.filaMarcada() === id ? null : id);
+  }
 
   get sortParam(): string | undefined {
     const col = this.sortColumn();

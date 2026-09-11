@@ -639,7 +639,7 @@ function parseUbicacionCodigo(codigo: string): ParsedCodigo | null {
                 </thead>
                 <tbody class="divide-y divide-dark-border/50">
                   @for (u of ubicacionesFiltradas(); track u.id) {
-                    <tr class="hover:bg-dark-surface/40 transition-colors">
+                    <tr class="row-zebra hover:bg-dark-surface/40 transition-colors">
                       <td class="py-3 px-4 font-mono font-bold text-neon-cyan">{{ u.codigo }}</td>
                       @if (parseCodigo(u.codigo); as parsed) {
                         <td class="py-3 px-4 font-mono text-gray-300">{{ parsed.pasillo }}</td>
