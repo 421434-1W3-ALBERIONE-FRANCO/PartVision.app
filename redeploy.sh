@@ -60,7 +60,10 @@ deploy_backend(){
   [ "$BUILD" = 1 ] && { log "Build imagen backend"; docker build -t partvision-backend "$REPO_DIR/backend"; }
   log "Reusando env del backend actual (secretos preservados)"
   local envf; envf="$(mktemp)"; trap 'rm -f "$envf"' RETURN
-  reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|PORT|MANAGEMENT_)' "$envf"
+  # COMPRAS_API_KEY va incluida a proposito: es lo unico que protege
+  # POST /api/v1/compras/recepcion (endpoint publico, sin JWT). Si se pierde en un
+  # redeploy, el controller la da por vacia y deja de validar, dejando el endpoint abierto.
+  reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|COMPRAS_|MAIL_|APP_|PORT|MANAGEMENT_)' "$envf"
   log "Recreando contenedor backend"
   docker stop partvision-backend >/dev/null 2>&1 || true
   docker rm   partvision-backend >/dev/null 2>&1 || true
