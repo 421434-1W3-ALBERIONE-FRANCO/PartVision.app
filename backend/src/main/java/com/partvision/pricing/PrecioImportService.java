@@ -79,7 +79,8 @@ public class PrecioImportService {
             if (esExcel) {
                 try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
                     Sheet sheet = wb.getSheetAt(0);
-                    Row headerRow = sheet.getRow(0);
+                    int headerIdx = detectarFilaHeader(sheet);
+                    Row headerRow = sheet.getRow(headerIdx);
                     if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
                     columnas = new ArrayList<>();
                     for (Cell cell : headerRow) {
@@ -87,9 +88,9 @@ public class PrecioImportService {
                         if (val != null && !val.isBlank()) columnas.add(val);
                     }
                     if (columnas.isEmpty()) throw new IllegalArgumentException("No se encontraron columnas con datos en la primera fila");
-                    totalFilas = sheet.getLastRowNum();
-                    log.info("Excel detectado: ~{} filas de datos, {} columnas",
-                            totalFilas, columnas.size());
+                    totalFilas = sheet.getLastRowNum() - headerIdx;
+                    log.info("Excel detectado: ~{} filas de datos, {} columnas (header en fila {})",
+                            totalFilas, columnas.size(), headerIdx + 1);
                 }
             } else {
                 try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
@@ -379,7 +380,8 @@ public class PrecioImportService {
     private List<String[]> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
         try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
             Sheet sheet = wb.getSheetAt(0);
-            Row headerRow = sheet.getRow(0);
+            int headerIdx = detectarFilaHeader(sheet);
+            Row headerRow = sheet.getRow(headerIdx);
             if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
 
             int colSkuIdx = -1, colPrecioIdx = -1;
@@ -393,7 +395,7 @@ public class PrecioImportService {
 
             List<String[]> filas = new ArrayList<>();
             for (Row row : sheet) {
-                if (row.getRowNum() == 0) continue;
+                if (row.getRowNum() <= headerIdx) continue;
                 String sku = cellToString(row.getCell(colSkuIdx));
                 String precio = cellToString(row.getCell(colPrecioIdx));
                 if (sku != null && !sku.isBlank()) {
@@ -408,6 +410,26 @@ public class PrecioImportService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Error al leer el archivo Excel: " + e.getMessage());
         }
+    }
+
+    /**
+     * Algunos proveedores ponen el nombre de la empresa como titulo en la primera fila
+     * y los encabezados reales debajo. Se toma como header la primera fila con 2 o mas
+     * celdas con texto.
+     */
+    private int detectarFilaHeader(Sheet sheet) {
+        int limite = Math.min(sheet.getLastRowNum(), 10);
+        for (int i = 0; i <= limite; i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) continue;
+            int conTexto = 0;
+            for (Cell cell : row) {
+                String val = cellToString(cell);
+                if (val != null && !val.isBlank()) conTexto++;
+            }
+            if (conTexto >= 2) return i;
+        }
+        return 0;
     }
 
     private String cellToString(Cell cell) {
