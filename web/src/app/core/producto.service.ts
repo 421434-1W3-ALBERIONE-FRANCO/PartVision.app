@@ -114,6 +114,16 @@ export class ProductoService {
     return this.http.post<{ message: string }>(`${API_BASE_URL}/precios/import/aplicar`, null, { params });
   }
 
+  /** Da de alta los SKU que no existen en el catálogo. Lista vacía = todos los no encontrados. */
+  importCrearFaltantes(uploadId: string, colSku: string, colPrecio: string, proveedor: string,
+                       skus: string[]): Observable<{ creados: number; omitidos: number; mensaje: string }> {
+    const params = new HttpParams()
+      .set('uploadId', uploadId).set('colSku', colSku)
+      .set('colPrecio', colPrecio).set('proveedor', proveedor);
+    return this.http.post<{ creados: number; omitidos: number; mensaje: string }>(
+      `${API_BASE_URL}/precios/import/crear-faltantes`, skus, { params });
+  }
+
   progresoImport(): Observable<PrecioImportProgreso> {
     return this.http.get<PrecioImportProgreso>(`${API_BASE_URL}/precios/import/progreso`);
   }

@@ -1,5 +1,6 @@
 package com.partvision.pricing;
 
+import com.partvision.pricing.dto.PrecioAltaFaltantesResponse;
 import com.partvision.pricing.dto.PrecioBatchResponse;
 import com.partvision.pricing.dto.PrecioImportColumnasResponse;
 import com.partvision.pricing.dto.PrecioImportPreviewResponse;
@@ -57,6 +58,17 @@ public class PrecioImportController {
         importService.ejecutarImportAsync(uploadId, colSku, colPrecio, proveedor, excluidos, archivo);
         return ResponseEntity.accepted()
                 .body(Map.of("message", "Importación iniciada en segundo plano"));
+    }
+
+    /** Da de alta los SKU del archivo que no existen en el catalogo. Sin 'skus', los da de alta todos. */
+    @PostMapping("/crear-faltantes")
+    public ResponseEntity<PrecioAltaFaltantesResponse> crearFaltantes(
+            @RequestParam String uploadId,
+            @RequestParam String colSku,
+            @RequestParam String colPrecio,
+            @RequestParam String proveedor,
+            @RequestBody(required = false) Set<String> skus) {
+        return ResponseEntity.ok(importService.crearFaltantes(uploadId, colSku, colPrecio, proveedor, skus));
     }
 
     @GetMapping("/progreso")

@@ -5,6 +5,10 @@ import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.pricing.domain.ConfiguracionPrecio;
 import com.partvision.pricing.domain.HistorialPrecio;
 import com.partvision.pricing.domain.ImportPrecioBatch;
+import com.partvision.imports.service.ImportJob;
+import com.partvision.imports.service.ProductoBulkImporter;
+import com.partvision.imports.service.ProductoImporter;
+import com.partvision.pricing.dto.PrecioAltaFaltantesResponse;
 import com.partvision.pricing.dto.PrecioBatchResponse;
 import com.partvision.pricing.dto.PrecioImportColumnasResponse;
 import com.partvision.pricing.dto.PrecioImportPreviewResponse;
@@ -52,6 +56,7 @@ public class PrecioImportService {
     private final ConfiguracionPrecioRepository configuracionRepo;
     private final ImportPrecioBatchRepository batchRepo;
     private final HistorialPrecioRepository historialRepo;
+    private final ProductoBulkImporter bulkImporter;
 
     private record UploadInfo(byte[] contenido, boolean esExcel, Instant subidoEn) {}
 
@@ -133,10 +138,10 @@ public class PrecioImportService {
 
         Tarifa tarifa = obtenerTarifa(proveedor);
 
-        List<String[]> filas = parsearFilas(info, colSku, colPrecio);
+        List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
 
         Set<String> skusUnicos = filas.stream()
-                .map(f -> f[0])
+                .map(FilaArchivo::sku)
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
 
@@ -149,9 +154,9 @@ public class PrecioImportService {
         int total = 0, ok = 0, conflictos = 0, noEncontrados = 0;
 
         for (int i = 0; i < filas.size(); i++) {
-            String[] fila = filas.get(i);
-            String sku = fila[0];
-            BigDecimal precioArchivo = parsearPrecio(fila[1]);
+            FilaArchivo fila = filas.get(i);
+            String sku = fila.sku();
+            BigDecimal precioArchivo = parsearPrecio(fila.precio());
 
             if (sku == null || sku.isBlank()) continue;
             if (precioArchivo == null) continue;
@@ -169,7 +174,7 @@ public class PrecioImportService {
                 noEncontrados++;
                 if (detalleNoEncontrados.size() < MAX_NO_ENCONTRADOS) {
                     detalleNoEncontrados.add(new PrecioImportPreviewResponse.FilaNoEncontrada(
-                            sku, fila.length > 2 ? fila[2] : null, costo));
+                            sku, fila.descripcion(), costo));
                 }
             } else if (matches.size() > 1) {
                 String descs = matches.stream()
@@ -190,6 +195,59 @@ public class PrecioImportService {
 
         return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados,
                 tarifa.margen(), detalleNoEncontrados);
+    }
+
+    /**
+     * Da de alta en el catalogo los SKU del archivo que no existen todavia. Se delega en el
+     * importador masivo para no duplicar la resolucion de marcas ni los chequeos de duplicados.
+     * Los productos quedan sin precio: se los pone la importacion de precios, que ahora si
+     * los va a encontrar.
+     *
+     * @param skus cuales dar de alta; vacio o null significa todos los no encontrados.
+     */
+    public PrecioAltaFaltantesResponse crearFaltantes(String uploadId, String colSku, String colPrecio,
+                                                       String proveedor, Set<String> skus) {
+        UploadInfo info = uploads.get(uploadId);
+        if (info == null) {
+            throw new IllegalArgumentException("Archivo no encontrado. Volvé a subirlo.");
+        }
+
+        List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
+        Set<String> skusArchivo = filas.stream()
+                .map(FilaArchivo::sku)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.toSet());
+        Map<String, List<Producto>> existentes = buscarProductosPorSkuEnLotes(skusArchivo);
+
+        boolean todos = skus == null || skus.isEmpty();
+        Set<String> yaVistos = new HashSet<>();
+        List<ProductoImporter.FilaProducto> aCrear = new ArrayList<>();
+
+        for (FilaArchivo fila : filas) {
+            String sku = fila.sku();
+            if (sku == null || sku.isBlank()) continue;
+            if (!todos && !skus.contains(sku)) continue;
+            if (!existentes.getOrDefault(sku, List.of()).isEmpty()) continue;
+            if (!yaVistos.add(sku)) continue;
+
+            String descripcion = fila.descripcion() != null && !fila.descripcion().isBlank()
+                    ? fila.descripcion()
+                    : sku;
+            aCrear.add(new ProductoImporter.FilaProducto(
+                    sku, fila.marca(), null, descripcion, null, null, proveedor));
+        }
+
+        if (aCrear.isEmpty()) {
+            return new PrecioAltaFaltantesResponse(0, 0, "No había productos nuevos para dar de alta.");
+        }
+
+        ImportJob job = new ImportJob(UUID.randomUUID().toString(), aCrear.size());
+        bulkImporter.importar(aCrear, job);
+
+        String mensaje = String.format("%d producto(s) dado(s) de alta, %d omitido(s).",
+                job.getImportados(), job.getOmitidos());
+        log.info("Alta de faltantes ({}): {}", proveedor, mensaje);
+        return new PrecioAltaFaltantesResponse(job.getImportados(), job.getOmitidos(), mensaje);
     }
 
     public void validarAplicar(String uploadId, String proveedor) {
@@ -227,11 +285,11 @@ public class PrecioImportService {
 
         Tarifa tarifa = obtenerTarifa(proveedor);
 
-        List<String[]> filas = parsearFilas(info, colSku, colPrecio);
+        List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
         progresoTotal.set(filas.size());
 
         Set<String> skusUnicos = filas.stream()
-                .map(f -> f[0])
+                .map(FilaArchivo::sku)
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
 
@@ -248,9 +306,9 @@ public class PrecioImportService {
         List<HistorialPrecio> historiales = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();
 
-        for (String[] fila : filas) {
-            String sku = fila[0];
-            BigDecimal precioArchivo = parsearPrecio(fila[1]);
+        for (FilaArchivo fila : filas) {
+            String sku = fila.sku();
+            BigDecimal precioArchivo = parsearPrecio(fila.precio());
             progresoActual.incrementAndGet();
 
             if (sku == null || sku.isBlank() || precioArchivo == null) continue;
@@ -430,11 +488,13 @@ public class PrecioImportService {
     }
 
     /**
-     * Cada fila es {sku, precio, descripcion}. La descripcion se toma de la columna que el
-     * proveedor traiga con ese nombre (si la trae) y solo se usa para poder mostrar que
-     * producto es cada SKU que no matcheo; el matcheo en si nunca la mira.
+     * Descripcion y marca se toman de las columnas que el proveedor traiga con esos nombres;
+     * no todos los archivos las incluyen. El matcheo de precios nunca las mira: sirven para
+     * poder mostrar y dar de alta los SKU que no existen en el catalogo.
      */
-    private List<String[]> parsearFilas(UploadInfo info, String colSku, String colPrecio) {
+    private record FilaArchivo(String sku, String precio, String descripcion, String marca) {}
+
+    private List<FilaArchivo> parsearFilas(UploadInfo info, String colSku, String colPrecio) {
         if (info.esExcel()) {
             return parsearFilasExcel(info.contenido(), colSku, colPrecio);
         }
@@ -447,19 +507,25 @@ public class PrecioImportService {
         return n.startsWith("descripc") || n.startsWith("descript") || n.equals("detalle");
     }
 
-    private List<String[]> parsearFilasCsv(byte[] contenido, String colSku, String colPrecio) {
+    private boolean esColumnaMarca(String nombre) {
+        return nombre != null && nombre.trim().equalsIgnoreCase("marca");
+    }
+
+    private List<FilaArchivo> parsearFilasCsv(byte[] contenido, String colSku, String colPrecio) {
         try (Reader reader = new InputStreamReader(new ByteArrayInputStream(contenido), StandardCharsets.UTF_8);
              CSVParser parser = CSVParser.parse(reader, csvFormat())) {
 
-            String colDesc = parser.getHeaderNames().stream()
-                    .filter(this::esColumnaDescripcion).findFirst().orElse(null);
+            List<String> headers = parser.getHeaderNames();
+            String colDesc = headers.stream().filter(this::esColumnaDescripcion).findFirst().orElse(null);
+            String colMarca = headers.stream().filter(this::esColumnaMarca).findFirst().orElse(null);
 
-            List<String[]> filas = new ArrayList<>();
+            List<FilaArchivo> filas = new ArrayList<>();
             for (CSVRecord record : parser) {
-                String sku = valor(record, colSku);
-                String precio = valor(record, colPrecio);
-                String desc = colDesc != null ? valor(record, colDesc) : null;
-                filas.add(new String[]{sku, precio, desc});
+                filas.add(new FilaArchivo(
+                        valor(record, colSku),
+                        valor(record, colPrecio),
+                        colDesc != null ? valor(record, colDesc) : null,
+                        colMarca != null ? valor(record, colMarca) : null));
             }
             return filas;
         } catch (Exception e) {
@@ -467,34 +533,35 @@ public class PrecioImportService {
         }
     }
 
-    private List<String[]> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
+    private List<FilaArchivo> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
         try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
             Sheet sheet = wb.getSheetAt(0);
             int headerIdx = detectarFilaHeader(sheet);
             Row headerRow = sheet.getRow(headerIdx);
             if (headerRow == null) throw new IllegalArgumentException("El archivo está vacío");
 
-            int colSkuIdx = -1, colPrecioIdx = -1, colDescIdx = -1;
+            int colSkuIdx = -1, colPrecioIdx = -1, colDescIdx = -1, colMarcaIdx = -1;
             for (Cell cell : headerRow) {
                 String nombre = cellToString(cell);
                 if (nombre == null) continue;
                 if (nombre.equalsIgnoreCase(colSku)) colSkuIdx = cell.getColumnIndex();
                 if (nombre.equalsIgnoreCase(colPrecio)) colPrecioIdx = cell.getColumnIndex();
                 if (colDescIdx < 0 && esColumnaDescripcion(nombre)) colDescIdx = cell.getColumnIndex();
+                if (colMarcaIdx < 0 && esColumnaMarca(nombre)) colMarcaIdx = cell.getColumnIndex();
             }
             if (colSkuIdx < 0) throw new IllegalArgumentException("Columna SKU '" + colSku + "' no encontrada");
             if (colPrecioIdx < 0) throw new IllegalArgumentException("Columna precio '" + colPrecio + "' no encontrada");
 
-            List<String[]> filas = new ArrayList<>();
+            List<FilaArchivo> filas = new ArrayList<>();
             for (Row row : sheet) {
                 if (row.getRowNum() <= headerIdx) continue;
                 String sku = cellToString(row.getCell(colSkuIdx));
-                String precio = cellToString(row.getCell(colPrecioIdx));
-                String desc = colDescIdx >= 0 ? cellToString(row.getCell(colDescIdx)) : null;
-                if (sku != null && !sku.isBlank()) {
-                    filas.add(new String[]{sku.trim(), precio != null ? precio.trim() : null,
-                            desc != null ? desc.trim() : null});
-                }
+                if (sku == null || sku.isBlank()) continue;
+                filas.add(new FilaArchivo(
+                        sku.trim(),
+                        textoCelda(row, colPrecioIdx),
+                        textoCelda(row, colDescIdx),
+                        textoCelda(row, colMarcaIdx)));
             }
             log.info("Excel parseado: {} filas con datos (columnas: sku={} idx={}, precio={} idx={})",
                     filas.size(), colSku, colSkuIdx, colPrecio, colPrecioIdx);
@@ -524,6 +591,12 @@ public class PrecioImportService {
             if (conTexto >= 2) return i;
         }
         return 0;
+    }
+
+    private String textoCelda(Row row, int idx) {
+        if (idx < 0) return null;
+        String v = cellToString(row.getCell(idx));
+        return v != null ? v.trim() : null;
     }
 
     private String cellToString(Cell cell) {

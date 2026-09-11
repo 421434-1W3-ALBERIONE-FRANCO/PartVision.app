@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -215,15 +215,21 @@ import { ProductoService } from '../core/producto.service';
             </div>
 
             @if (impPreview()!.detalleNoEncontrados.length > 0) {
-              <div class="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <p class="text-xs text-gray-400">
                   Hay {{ impPreview()!.noEncontrados }} SKU(s) del proveedor que no existen en tu catálogo.
-                  No se tocan al aplicar.
+                  Si no los das de alta, se saltean al aplicar.
                 </p>
-                <button (click)="descargarNoEncontrados()"
-                  class="px-4 py-2 rounded-lg text-xs font-semibold text-amber-400 border border-amber-500/40 hover:bg-amber-500/10 cursor-pointer whitespace-nowrap">
-                  Descargar CSV
-                </button>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button (click)="descargarNoEncontrados()"
+                    class="px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 border border-dark-border hover:text-white cursor-pointer whitespace-nowrap">
+                    Descargar CSV
+                  </button>
+                  <button (click)="abrirAltaFaltantes()"
+                    class="px-4 py-2 rounded-lg text-xs font-semibold text-amber-400 border border-amber-500/40 hover:bg-amber-500/10 cursor-pointer whitespace-nowrap">
+                    Revisar y dar de alta
+                  </button>
+                </div>
               </div>
             }
 
@@ -424,6 +430,80 @@ import { ProductoService } from '../core/producto.service';
         </div>
       </div>
     }
+
+    <!-- Alta de productos no encontrados -->
+    @if (altaAbierta()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cerrarAltaFaltantes()">
+        <div class="glass-panel w-full max-w-3xl rounded-2xl border border-amber-500/40 shadow-neon flex flex-col max-h-[85vh]"
+             (click)="$event.stopPropagation()">
+          <div class="p-6 pb-4 border-b border-dark-border">
+            <h3 class="text-lg font-bold text-white">Dar de alta productos nuevos</h3>
+            <p class="text-xs text-gray-400 mt-1">
+              Estos {{ altaFilas().length }} códigos de
+              <span class="text-white font-semibold">{{ impProveedor }}</span>
+              no están en tu catálogo. Se crean con código y descripción; el precio se los asigna
+              la importación cuando la apliques.
+            </p>
+            <div class="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center">
+              <input type="text" [ngModel]="altaFiltro()" (ngModelChange)="altaFiltro.set($event)"
+                placeholder="Buscar por código o descripción..."
+                class="flex-1 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-amber-400" />
+              <div class="flex items-center gap-2 text-xs shrink-0">
+                <button (click)="altaSeleccionarVisibles()" class="px-3 py-2 rounded-lg font-semibold text-gray-300 border border-dark-border hover:text-white cursor-pointer">
+                  Seleccionar {{ altaFiltro() ? 'filtrados' : 'todos' }}
+                </button>
+                <button (click)="altaLimpiarSeleccion()" class="px-3 py-2 rounded-lg font-semibold text-gray-400 hover:text-white cursor-pointer">
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-6 py-2">
+            <table class="w-full text-left text-sm border-collapse">
+              <tbody class="divide-y divide-dark-border/50">
+                @for (f of altaVisibles(); track f.sku) {
+                  <tr class="hover:bg-dark-surface/40 cursor-pointer" (click)="altaToggle(f.sku)">
+                    <td class="py-2 pr-3 w-8">
+                      <input type="checkbox" [checked]="altaSeleccion().has(f.sku)" (click)="$event.stopPropagation()"
+                        (change)="altaToggle(f.sku)" class="w-4 h-4 rounded accent-amber-400 cursor-pointer" />
+                    </td>
+                    <td class="py-2 pr-3 font-mono font-bold text-neon-purple whitespace-nowrap">{{ f.sku }}</td>
+                    <td class="py-2 pr-3 text-xs text-gray-300">{{ f.descripcion ?? '—' }}</td>
+                    <td class="py-2 text-right font-mono text-xs text-gray-500 whitespace-nowrap">
+                      {{ f.precio ? '$' + (f.precio | number:'1.2-2') : '—' }}
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td class="py-6 text-center text-gray-500 text-xs">Ningún código coincide con la búsqueda.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (altaError()) {
+            <div class="mx-6 mb-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">{{ altaError() }}</div>
+          }
+
+          <div class="p-6 pt-4 border-t border-dark-border flex flex-wrap items-center justify-between gap-3">
+            <span class="text-xs text-gray-400 font-mono">{{ altaSeleccion().size }} seleccionado(s)</span>
+            <div class="flex flex-wrap gap-3">
+              <button (click)="cerrarAltaFaltantes()" class="px-5 py-2.5 rounded-xl font-semibold text-sm text-gray-300 bg-dark-surface border border-dark-border hover:border-gray-500 cursor-pointer">
+                Cancelar
+              </button>
+              <button [disabled]="altaCreando() || altaFilas().length === 0" (click)="confirmarAlta(true)"
+                class="px-5 py-2.5 rounded-xl font-semibold text-sm text-amber-400 border border-amber-500/40 hover:bg-amber-500/10 cursor-pointer disabled:opacity-50">
+                Dar de alta los {{ altaFilas().length }}
+              </button>
+              <button [disabled]="altaCreando() || altaSeleccion().size === 0" (click)="confirmarAlta(false)"
+                class="px-6 py-2.5 rounded-xl font-semibold text-sm neon-button-primary cursor-pointer disabled:opacity-50">
+                {{ altaCreando() ? 'Creando...' : 'Dar de alta seleccionados' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class Precios implements OnInit, OnDestroy {
@@ -463,6 +543,23 @@ export class Precios implements OnInit, OnDestroy {
   nuevoProvMargen = 0;
   nuevoProvAjuste = 0;
   creandoProv = signal(false);
+
+  // Alta de no encontrados
+  altaAbierta = signal(false);
+  altaFiltro = signal('');
+  altaSeleccion = signal<Set<string>>(new Set());
+  altaCreando = signal(false);
+  altaError = signal<string | null>(null);
+
+  altaFilas = computed(() => this.impPreview()?.detalleNoEncontrados ?? []);
+
+  altaVisibles = computed(() => {
+    const q = this.altaFiltro().trim().toLowerCase();
+    const filas = this.altaFilas();
+    if (!q) return filas;
+    return filas.filter(f =>
+      f.sku.toLowerCase().includes(q) || (f.descripcion ?? '').toLowerCase().includes(q));
+  });
 
   // Batches / rollback
   batches = signal<PrecioBatch[]>([]);
@@ -664,6 +761,53 @@ export class Precios implements OnInit, OnDestroy {
     a.download = `no-encontrados-${this.impProveedor || 'proveedor'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  abrirAltaFaltantes(): void {
+    this.altaFiltro.set('');
+    this.altaSeleccion.set(new Set());
+    this.altaError.set(null);
+    this.altaAbierta.set(true);
+  }
+
+  cerrarAltaFaltantes(): void {
+    if (this.altaCreando()) return;
+    this.altaAbierta.set(false);
+  }
+
+  altaToggle(sku: string): void {
+    const sel = new Set(this.altaSeleccion());
+    if (!sel.delete(sku)) sel.add(sku);
+    this.altaSeleccion.set(sel);
+  }
+
+  altaLimpiarSeleccion(): void {
+    this.altaSeleccion.set(new Set());
+  }
+
+  altaSeleccionarVisibles(): void {
+    this.altaSeleccion.set(new Set(this.altaVisibles().map(f => f.sku)));
+  }
+
+  /** @param todos ignora la selección y da de alta todos los no encontrados. */
+  confirmarAlta(todos: boolean): void {
+    const skus = todos ? [] : [...this.altaSeleccion()];
+    if (!todos && skus.length === 0) return;
+    this.altaCreando.set(true); this.altaError.set(null);
+    this.service.importCrearFaltantes(this.impUploadId(), this.impColSku, this.impColPrecio,
+        this.impProveedor, skus).subscribe({
+      next: (res) => {
+        this.altaCreando.set(false);
+        this.altaAbierta.set(false);
+        this.exito.set(res.mensaje);
+        // El preview quedó viejo: esos SKU ahora existen y pasan a contar como OK.
+        this.generarPreview();
+      },
+      error: (e) => {
+        this.altaCreando.set(false);
+        this.altaError.set(e?.error?.message ?? 'No se pudieron dar de alta los productos.');
+      },
+    });
   }
 
   aplicarImport(): void {
