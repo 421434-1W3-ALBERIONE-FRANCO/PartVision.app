@@ -4,6 +4,7 @@ import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.domain.ProductoEstado;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.imports.service.ProductoBulkImporter;
 import com.partvision.pricing.domain.ConfiguracionPrecio;
 import com.partvision.pricing.domain.HistorialPrecio;
 import com.partvision.pricing.domain.ImportPrecioBatch;
@@ -39,12 +40,14 @@ class PrecioImportServiceTest {
     @Mock private ConfiguracionPrecioRepository configuracionRepo;
     @Mock private ImportPrecioBatchRepository batchRepo;
     @Mock private HistorialPrecioRepository historialRepo;
+    @Mock private ProductoBulkImporter bulkImporter;
 
     private PrecioImportService service;
 
     @BeforeEach
     void setUp() {
-        service = new PrecioImportService(productoRepository, configuracionRepo, batchRepo, historialRepo);
+        service = new PrecioImportService(productoRepository, configuracionRepo, batchRepo,
+                historialRepo, bulkImporter);
     }
 
     // --- detectarColumnas ---
