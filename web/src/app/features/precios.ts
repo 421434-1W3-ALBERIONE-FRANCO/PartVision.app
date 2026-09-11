@@ -201,6 +201,13 @@ import { ProductoService } from '../core/producto.service';
               </div>
             </div>
 
+            @if (impPreview()!.filas.length < impPreview()!.total) {
+              <p class="text-[11px] text-gray-500 font-mono">
+                Mostrando las primeras {{ impPreview()!.filas.length }} de {{ impPreview()!.total }} filas.
+                Al aplicar se procesan todas.
+              </p>
+            }
+
             <div class="overflow-x-auto max-h-96 overflow-y-auto">
               <table class="w-full text-left text-sm border-collapse">
                 <thead class="sticky top-0">
@@ -566,9 +573,8 @@ export class Precios implements OnInit, OnDestroy {
     if (!preview) return;
     this.impAplicando.set(true); this.impError.set(null);
     this.impProgreso.set(0); this.impProgresoTotal.set(0);
-    const excluidos = preview.filas.filter(f => f.estado !== 'OK').map(f => f.skuCsv);
     this.service.importAplicar(this.impUploadId(), this.impColSku, this.impColPrecio,
-        this.impProveedor, excluidos, this.impNombreArchivo()).subscribe({
+        this.impProveedor, this.impNombreArchivo()).subscribe({
       next: () => { this.startImportPoll(); },
       error: (e) => { this.impError.set(e?.error?.message ?? 'Error al aplicar.'); this.impAplicando.set(false); },
     });

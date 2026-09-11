@@ -127,8 +127,10 @@ public class PrecioImportService {
 
         Map<String, List<Producto>> productosPorSku = buscarProductosPorSkuEnLotes(skusUnicos);
 
-        List<PreviewFila> preview = new ArrayList<>();
-        int ok = 0, conflictos = 0, noEncontrados = 0;
+        // Solo se devuelve una muestra de filas: el navegador no puede renderizar
+        // decenas de miles de <tr> sin congelarse. Los contadores si son del total.
+        List<PreviewFila> muestra = new ArrayList<>();
+        int total = 0, ok = 0, conflictos = 0, noEncontrados = 0;
 
         for (int i = 0; i < filas.size(); i++) {
             String[] fila = filas.get(i);
@@ -140,28 +142,31 @@ public class PrecioImportService {
 
             List<Producto> matches = productosPorSku.getOrDefault(sku, List.of());
             BigDecimal precioNuevo = precioCsv.multiply(multiplicador).setScale(2, RoundingMode.HALF_UP);
+            total++;
 
+            PreviewFila pf;
             if (matches.isEmpty()) {
-                preview.add(new PreviewFila(i + 2, sku, precioCsv, "NO_ENCONTRADO",
-                        null, null, null, null, precioNuevo, 0));
+                pf = new PreviewFila(i + 2, sku, precioCsv, "NO_ENCONTRADO",
+                        null, null, null, null, precioNuevo, 0);
                 noEncontrados++;
             } else if (matches.size() > 1) {
                 String descs = matches.stream()
                         .map(p -> p.getDescripcion() + (p.getMarca() != null ? " [" + p.getMarca().getNombre() + "]" : ""))
                         .collect(Collectors.joining(" | "));
-                preview.add(new PreviewFila(i + 2, sku, precioCsv, "CONFLICTO",
-                        null, descs, null, null, precioNuevo, matches.size()));
+                pf = new PreviewFila(i + 2, sku, precioCsv, "CONFLICTO",
+                        null, descs, null, null, precioNuevo, matches.size());
                 conflictos++;
             } else {
                 Producto p = matches.getFirst();
                 String marca = p.getMarca() != null ? p.getMarca().getNombre() : null;
-                preview.add(new PreviewFila(i + 2, sku, precioCsv, "OK",
-                        p.getId(), p.getDescripcion(), marca, p.getPrecioCosto(), precioNuevo, 1));
+                pf = new PreviewFila(i + 2, sku, precioCsv, "OK",
+                        p.getId(), p.getDescripcion(), marca, p.getPrecioCosto(), precioNuevo, 1);
                 ok++;
             }
+            if (muestra.size() < PREVIEW_MAX_FILAS) muestra.add(pf);
         }
 
-        return new PrecioImportPreviewResponse(preview, preview.size(), ok, conflictos, noEncontrados, margen);
+        return new PrecioImportPreviewResponse(muestra, total, ok, conflictos, noEncontrados, margen);
     }
 
     public void validarAplicar(String uploadId, String proveedor) {
@@ -324,6 +329,7 @@ public class PrecioImportService {
     // --- Helpers ---
 
     private static final int SKU_BATCH_SIZE = 10_000;
+    private static final int PREVIEW_MAX_FILAS = 500;
 
     private Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {
         if (skus.size() <= SKU_BATCH_SIZE) {

@@ -106,14 +106,11 @@ export class ProductoService {
   }
 
   importAplicar(uploadId: string, colSku: string, colPrecio: string, proveedor: string,
-                excluidos: string[], archivo: string): Observable<{ message: string }> {
-    let params = new HttpParams()
+                archivo: string): Observable<{ message: string }> {
+    const params = new HttpParams()
       .set('uploadId', uploadId).set('colSku', colSku)
       .set('colPrecio', colPrecio).set('proveedor', proveedor)
       .set('archivo', archivo);
-    for (const sku of excluidos) {
-      params = params.append('excluidos', sku);
-    }
     return this.http.post<{ message: string }>(`${API_BASE_URL}/precios/import/aplicar`, null, { params });
   }
 
