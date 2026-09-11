@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -343,7 +343,7 @@ import { UbicacionService } from '../core/ubicacion.service';
               <tbody class="divide-y divide-dark-border/50">
                 @for (p of productos(); track p.id) {
                   <tr class="row-zebra hover:bg-dark-surface/40 transition-colors cursor-default"
-                      [class.row-marcada]="filaMarcada() === p.id" (click)="marcarFila(p.id)">
+                      [class.row-marcada]="filaMarcada() === p.id" (click)="marcarFila(p.id, $event)">
                     <td class="py-3.5 px-4 font-mono font-bold text-neon-purple">
                       {{ p.sku ?? '-' }}
                     </td>
@@ -704,11 +704,43 @@ export class Productos implements OnInit {
   sortColumn = signal<string | null>(null);
   sortDir = signal<'asc' | 'desc'>('asc');
 
-  /** Fila señalada al hacer click, para no perder el renglón al recorrer la tabla. */
+  /**
+   * Fila señalada al hacer click, para no perder el renglón al recorrer la tabla.
+   * Se guarda el id y no la posición: la lista se re-renderiza al paginar o buscar.
+   */
   filaMarcada = signal<number | null>(null);
 
-  marcarFila(id: number): void {
+  marcarFila(id: number, ev: Event): void {
+    // Frena la burbuja para que el listener de documento no borre la marca recién puesta.
+    ev.stopPropagation();
     this.filaMarcada.set(this.filaMarcada() === id ? null : id);
+  }
+
+  /** Un click en cualquier otro lado quita la marca. */
+  @HostListener('document:click')
+  limpiarMarca(): void {
+    this.filaMarcada.set(null);
+  }
+
+  /** Con una fila marcada, las flechas mueven la marca a la de arriba o abajo. */
+  @HostListener('document:keydown', ['$event'])
+  navegarFilas(ev: KeyboardEvent): void {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    const marcada = this.filaMarcada();
+    if (marcada === null) return;
+
+    // No robarle las flechas a quien esté escribiendo o usando un combo.
+    const destino = ev.target as HTMLElement | null;
+    if (destino && (/^(INPUT|TEXTAREA|SELECT)$/.test(destino.tagName) || destino.isContentEditable)) return;
+
+    const lista = this.productos();
+    const actual = lista.findIndex(p => p.id === marcada);
+    if (actual < 0) return;
+    const siguiente = actual + (ev.key === 'ArrowDown' ? 1 : -1);
+    if (siguiente < 0 || siguiente >= lista.length) return;
+
+    ev.preventDefault();
+    this.filaMarcada.set(lista[siguiente].id);
   }
 
   get sortParam(): string | undefined {

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject, signal, computed } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -108,7 +108,8 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                 <tbody class="divide-y divide-dark-border/50">
                   @for (p of listaProductos(); track p.id) {
                     <tr class="row-zebra hover:bg-dark-surface/40 transition-colors"
-                        [class.row-marcada]="productoSel()?.id === p.id">
+                        [class.row-marcada]="filaMarcada() === p.id || productoSel()?.id === p.id"
+                        (click)="marcarFila(p.id, $event)">
                       <td class="py-3 px-4 font-mono font-bold text-neon-cyan text-sm whitespace-nowrap">{{ p.sku || '—' }}</td>
                       <td class="py-3 px-4 text-white text-sm max-w-[380px] whitespace-normal break-words align-top">{{ p.descripcion }}</td>
                       <td class="py-3 px-4">
@@ -676,6 +677,46 @@ export class Stock implements OnInit {
 
   // Selección
   productoSel = signal<ProductoListItem | null>(null);
+
+  /**
+   * Fila señalada al hacer click, para no perder el renglón al recorrer la tabla.
+   * Se guarda el id y no la posición: la lista se re-renderiza al paginar, buscar
+   * y en el refresco automático.
+   */
+  filaMarcada = signal<number | null>(null);
+
+  marcarFila(id: number, ev: Event): void {
+    // Frena la burbuja para que el listener de documento no borre la marca recién puesta.
+    ev.stopPropagation();
+    this.filaMarcada.set(this.filaMarcada() === id ? null : id);
+  }
+
+  /** Un click en cualquier otro lado quita la marca. */
+  @HostListener('document:click')
+  limpiarMarca(): void {
+    this.filaMarcada.set(null);
+  }
+
+  /** Con una fila marcada, las flechas mueven la marca a la de arriba o abajo. */
+  @HostListener('document:keydown', ['$event'])
+  navegarFilas(ev: KeyboardEvent): void {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    const marcada = this.filaMarcada();
+    if (marcada === null) return;
+
+    // No robarle las flechas a quien esté escribiendo o usando un combo.
+    const destino = ev.target as HTMLElement | null;
+    if (destino && (/^(INPUT|TEXTAREA|SELECT)$/.test(destino.tagName) || destino.isContentEditable)) return;
+
+    const lista = this.listaProductos();
+    const actual = lista.findIndex(p => p.id === marcada);
+    if (actual < 0) return;
+    const siguiente = actual + (ev.key === 'ArrowDown' ? 1 : -1);
+    if (siguiente < 0 || siguiente >= lista.length) return;
+
+    ev.preventDefault();
+    this.filaMarcada.set(lista[siguiente].id);
+  }
   resumen = signal<StockResumen | null>(null);
   movimientos = signal<Movimiento[]>([]);
 
