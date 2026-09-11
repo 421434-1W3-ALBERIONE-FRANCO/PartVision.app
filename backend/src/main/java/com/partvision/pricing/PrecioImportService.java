@@ -140,7 +140,8 @@ public class PrecioImportService {
             if (sku == null || sku.isBlank()) continue;
             if (precioArchivo == null) continue;
 
-            List<Producto> matches = productosPorSku.getOrDefault(sku, List.of());
+            List<Producto> matches = desambiguarPorProveedor(
+                    productosPorSku.getOrDefault(sku, List.of()), proveedor);
             BigDecimal costo = tarifa.costoDesde(precioArchivo);
             BigDecimal precioNuevo = tarifa.ventaDesde(costo);
             total++;
@@ -238,7 +239,8 @@ public class PrecioImportService {
                 continue;
             }
 
-            List<Producto> matches = productosPorSku.getOrDefault(sku, List.of());
+            List<Producto> matches = desambiguarPorProveedor(
+                    productosPorSku.getOrDefault(sku, List.of()), proveedor);
             if (matches.size() != 1) {
                 if (matches.size() > 1) conflictos++;
                 else omitidos++;
@@ -332,6 +334,21 @@ public class PrecioImportService {
 
     private static final int SKU_BATCH_SIZE = 10_000;
     private static final int PREVIEW_MAX_FILAS = 500;
+
+    /**
+     * Un mismo SKU puede existir una vez por proveedor (indice unico proveedor+sku), asi
+     * que al importar la lista de un proveedor esos empates se resuelven quedandose con
+     * su producto. Si el proveedor no desempata, se devuelven los candidatos como estaban
+     * y la fila queda marcada como conflicto.
+     */
+    private List<Producto> desambiguarPorProveedor(List<Producto> matches, String proveedor) {
+        if (matches.size() <= 1 || proveedor == null) return matches;
+        List<Producto> delProveedor = matches.stream()
+                .filter(p -> p.getProveedor() != null
+                        && p.getProveedor().trim().equalsIgnoreCase(proveedor.trim()))
+                .toList();
+        return delProveedor.size() == 1 ? delProveedor : matches;
+    }
 
     private Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {
         if (skus.size() <= SKU_BATCH_SIZE) {
