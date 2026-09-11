@@ -156,6 +156,19 @@ public class GlobalExceptionHandler {
                 "Error de servlet: " + root.getClass().getSimpleName() + " — " + root.getMessage(), request, null);
     }
 
+    /**
+     * Excepciones que ya traen su propio status (p. ej. el 401 de una API key invalida
+     * o el 503 de un endpoint sin configurar). Sin esto caian en el handler generico
+     * y salian como 500.
+     */
+    @ExceptionHandler(org.springframework.web.ErrorResponseException.class)
+    public ResponseEntity<ApiError> handleErrorResponse(org.springframework.web.ErrorResponseException ex,
+                                                         HttpServletRequest request) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        String msg = ex.getBody().getDetail() != null ? ex.getBody().getDetail() : status.getReasonPhrase();
+        return build(status, msg, request, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
         Throwable root = ex;

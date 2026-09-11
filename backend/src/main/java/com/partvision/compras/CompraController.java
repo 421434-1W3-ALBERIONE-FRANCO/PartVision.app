@@ -61,8 +61,16 @@ public class CompraController {
         return compraService.marcarIngresada(id, request);
     }
 
+    /**
+     * Esta ruta es publica (Power Automate no puede loguearse), asi que la API key es
+     * lo unico que la protege. Falla CERRADA a proposito: si la variable no esta
+     * configurada el endpoint se apaga en vez de aceptar cualquier request.
+     */
     private void validarApiKey(String key) {
-        if (apiKey.isBlank()) return;
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Recepcion de compras no configurada");
+        }
         if (key == null || !key.equals(apiKey)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "API key inválida");
         }
