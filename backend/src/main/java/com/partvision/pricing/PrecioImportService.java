@@ -125,9 +125,7 @@ public class PrecioImportService {
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
 
-        Map<String, List<Producto>> productosPorSku = productoRepository.findBySkuIn(skusUnicos)
-                .stream()
-                .collect(Collectors.groupingBy(Producto::getSku));
+        Map<String, List<Producto>> productosPorSku = buscarProductosPorSkuEnLotes(skusUnicos);
 
         List<PreviewFila> preview = new ArrayList<>();
         int ok = 0, conflictos = 0, noEncontrados = 0;
@@ -210,9 +208,7 @@ public class PrecioImportService {
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.toSet());
 
-        Map<String, List<Producto>> productosPorSku = productoRepository.findBySkuIn(skusUnicos)
-                .stream()
-                .collect(Collectors.groupingBy(Producto::getSku));
+        Map<String, List<Producto>> productosPorSku = buscarProductosPorSkuEnLotes(skusUnicos);
 
         ImportPrecioBatch batch = new ImportPrecioBatch();
         batch.setProveedor(proveedor);
@@ -326,6 +322,23 @@ public class PrecioImportService {
     }
 
     // --- Helpers ---
+
+    private static final int SKU_BATCH_SIZE = 10_000;
+
+    private Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {
+        if (skus.size() <= SKU_BATCH_SIZE) {
+            return productoRepository.findBySkuIn(skus)
+                    .stream().collect(Collectors.groupingBy(Producto::getSku));
+        }
+        Map<String, List<Producto>> resultado = new HashMap<>();
+        List<String> lista = new ArrayList<>(skus);
+        for (int i = 0; i < lista.size(); i += SKU_BATCH_SIZE) {
+            List<String> lote = lista.subList(i, Math.min(i + SKU_BATCH_SIZE, lista.size()));
+            productoRepository.findBySkuIn(lote)
+                    .forEach(p -> resultado.computeIfAbsent(p.getSku(), k -> new ArrayList<>()).add(p));
+        }
+        return resultado;
+    }
 
     private BigDecimal obtenerMargen(String proveedor) {
         return configuracionRepo.findByProveedorIgnoreCase(proveedor)
