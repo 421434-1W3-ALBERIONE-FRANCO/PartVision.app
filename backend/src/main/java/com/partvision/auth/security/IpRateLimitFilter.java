@@ -20,35 +20,44 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Rate limiting para frenar fuerza bruta en el login: cada IP tiene un "balde" de N intentos
- * que se recarga por completo cada X tiempo (token bucket de bucket4j). Al agotarse, responde
- * 429 sin siquiera tocar la base ni verificar credenciales.
+ * Rate limiting por IP para frenar fuerza bruta: cada IP tiene un "balde" de N intentos que se
+ * recarga por completo cada X tiempo (token bucket de bucket4j). Al agotarse responde 429 sin
+ * tocar la base ni el cuerpo del request.
  *
- * <p>Se registra scopeado SOLO a {@code POST /api/v1/auth/login} (ver {@code RateLimitConfig}),
- * asi no afecta el resto de la API. La IP se toma de {@code X-Forwarded-For} (estamos detras del
- * proxy nginx/Render); es defensa en profundidad —un atacante podria rotar ese header—, se
- * complementa con BCrypt y (a futuro) 2FA.
+ * <p>Se registra scopeado a rutas puntuales (ver {@code RateLimitConfig}): login, recuperacion
+ * de cuenta y la recepcion publica de compras. La IP se toma de {@code X-Forwarded-For} (estamos
+ * detras del proxy nginx); es defensa en profundidad —un atacante podria rotar ese header— y
+ * se complementa con BCrypt, 2FA y la API key segun la ruta.
  */
-public class LoginRateLimitFilter extends OncePerRequestFilter {
+public class IpRateLimitFilter extends OncePerRequestFilter {
+
+    private static final String MENSAJE_LOGIN =
+            "Demasiados intentos de inicio de sesion. Espera un momento e intenta de nuevo.";
 
     private final int capacity;
     private final Duration refill;
     private final ObjectMapper objectMapper;
+    private final String mensaje;
 
-    // Un balde por IP. Para el volumen de un login esta bien en memoria; si algun dia se
-    // necesita acotar el crecimiento o compartir entre instancias, migrar a Caffeine/Redis.
+    // Un balde por IP. Para este volumen esta bien en memoria; si algun dia se necesita
+    // acotar el crecimiento o compartir entre instancias, migrar a Caffeine/Redis.
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
 
-    public LoginRateLimitFilter(int capacity, Duration refill, ObjectMapper objectMapper) {
+    public IpRateLimitFilter(int capacity, Duration refill, ObjectMapper objectMapper) {
+        this(capacity, refill, objectMapper, MENSAJE_LOGIN);
+    }
+
+    public IpRateLimitFilter(int capacity, Duration refill, ObjectMapper objectMapper, String mensaje) {
         this.capacity = capacity;
         this.refill = refill;
         this.objectMapper = objectMapper;
+        this.mensaje = mensaje;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        // El endpoint de login es POST; cualquier otra cosa no se limita.
+        // Las rutas limitadas son POST; cualquier otra cosa no se limita.
         if (!"POST".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
@@ -86,7 +95,7 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
         body.put("timestamp", Instant.now().toString());
         body.put("status", HttpStatus.TOO_MANY_REQUESTS.value());
         body.put("error", HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase());
-        body.put("message", "Demasiados intentos de inicio de sesion. Espera un momento e intenta de nuevo.");
+        body.put("message", mensaje);
         body.put("path", request.getRequestURI());
         objectMapper.writeValue(response.getWriter(), body);
     }

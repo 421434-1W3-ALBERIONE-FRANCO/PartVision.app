@@ -10,10 +10,10 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class LoginRateLimitFilterTest {
+class IpRateLimitFilterTest {
 
-    private final LoginRateLimitFilter filter =
-            new LoginRateLimitFilter(5, Duration.ofMinutes(1), new ObjectMapper());
+    private final IpRateLimitFilter filter =
+            new IpRateLimitFilter(5, Duration.ofMinutes(1), new ObjectMapper());
 
     private MockHttpServletResponse postLogin(String ip) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
@@ -55,5 +55,33 @@ class LoginRateLimitFilterTest {
             filter.doFilter(request, response, new MockFilterChain());
             assertThat(response.getStatus()).isEqualTo(200);
         }
+    }
+    @Test
+    void mensajePersonalizado_seUsaEnEl429() throws Exception {
+        IpRateLimitFilter propio = new IpRateLimitFilter(
+                1, Duration.ofMinutes(1), new ObjectMapper(), "Frena un poco");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/compras/recepcion");
+        request.addHeader("X-Forwarded-For", "7.7.7.7");
+        propio.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        MockHttpServletResponse bloqueado = new MockHttpServletResponse();
+        propio.doFilter(request, bloqueado, new MockFilterChain());
+
+        assertThat(bloqueado.getStatus()).isEqualTo(429);
+        assertThat(bloqueado.getContentAsString()).contains("Frena un poco");
+    }
+
+    @Test
+    void sinForwardedFor_usaLaIpRemota() throws Exception {
+        IpRateLimitFilter propio = new IpRateLimitFilter(1, Duration.ofMinutes(1), new ObjectMapper());
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        request.setRemoteAddr("203.0.113.9");
+        propio.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        MockHttpServletResponse bloqueado = new MockHttpServletResponse();
+        propio.doFilter(request, bloqueado, new MockFilterChain());
+        assertThat(bloqueado.getStatus()).isEqualTo(429);
     }
 }

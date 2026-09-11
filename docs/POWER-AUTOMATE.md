@@ -51,7 +51,26 @@ No es un error: quedan para resolver a mano desde la pantalla de compras.
 | 201 | creada |
 | 400 | falta un campo obligatorio o `cantidad < 1` |
 | 401 | `X-API-Key` ausente o incorrecta |
+| 409 | ese número de factura ya existe **con otro contenido** (ver abajo) |
+| 413 | el cuerpo supera 2 MB |
+| 429 | demasiadas solicitudes desde la misma IP (30 por minuto) |
 | 503 | el server no tiene `COMPRAS_API_KEY` configurada — el endpoint está apagado |
+
+### Reenvíos y facturas repetidas
+
+Reenviar **la misma factura con el mismo contenido** devuelve `201` con la compra que ya
+estaba: el reintento de Power Automate ante un timeout no duplica nada.
+
+Reenviar el mismo número **con contenido distinto** devuelve `409`. Antes devolvía `201` y
+descartaba los datos nuevos en silencio: si el cliente corregía una factura y el flujo la
+reenviaba, la corrección no entraba nunca y nadie se enteraba. Si el reenvío es a propósito,
+hay que corregir la compra desde el panel.
+
+### Límites
+
+- **2 MB** de cuerpo y **5.000 líneas** por factura. Una factura real no se acerca; el tope
+  está porque la ruta es pública y el servidor parsea el JSON entero antes de mirar la clave.
+- **30 requests por minuto por IP**. Un flujo normal manda una factura cada varios segundos.
 
 ## Armar el flujo
 

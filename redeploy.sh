@@ -80,8 +80,13 @@ deploy_backend(){
   # del host (3.8G) en vez de un cupo propio: una carga pesada puede tirar
   # abajo NexVia/Postgres, que comparten este mismo VPS. Con el limite puesto,
   # UseContainerSupport lo detecta solo y calcula el heap contra ESTO.
+  # Ademas del techo de memoria: tope de CPU y de procesos. El VPS tiene 2 nucleos y los
+  # comparte con NexVia; una importacion de 67k filas puede tomarlos enteros y dejar al otro
+  # proyecto sin atender. --cpus es un freno proporcional, no mata nada: la importacion tarda
+  # un poco mas y el host sigue respondiendo. --pids-limit acota un fork-bomb accidental.
   docker run -d --name partvision-backend --restart=always \
-    --memory="${BACKEND_MEMORY:-1g}" --memory-swap="${BACKEND_MEMORY:-1g}" --network host \
+    --memory="${BACKEND_MEMORY:-1g}" --memory-swap="${BACKEND_MEMORY:-1g}" \
+    --cpus="${BACKEND_CPUS:-1.5}" --pids-limit="${BACKEND_PIDS:-1024}" --network host \
     --env-file "$envf" partvision-backend >/dev/null
   log "Esperando health del backend (localhost:8088)"
   if health_wait http://localhost:8088/actuator/health; then
@@ -98,13 +103,21 @@ deploy_web(){
   # La web no tiene secretos: reusa su env si el contenedor existe, si no aplica defaults.
   if docker inspect partvision-web >/dev/null 2>&1; then
     docker inspect partvision-web --format '{{range .Config.Env}}{{println .}}{{end}}' \
-      | grep -E '^(BACKEND_URL|API_BASE_URL|PORT)=' > "$envf" || true
+      | grep -E '^(BACKEND_URL|API_BASE_URL|PORT|BIND_ADDR)=' > "$envf" || true
   fi
   [ -s "$envf" ] || printf 'BACKEND_URL=http://localhost:8088\nAPI_BASE_URL=/pv-api/v1\nPORT=8084\n' > "$envf"
+  # La web corre con --network host: sin BIND_ADDR su nginx escucha en 0.0.0.0:8084 y el
+  # panel queda publicado aparte, por HTTP plano, esquivando el nginx del host (TLS y
+  # cabeceras). Se fuerza aunque el contenedor viejo no lo tuviera.
+  grep -q '^BIND_ADDR=' "$envf" || printf 'BIND_ADDR=%s\n' "${WEB_BIND_ADDR:-127.0.0.1}" >> "$envf"
   chmod 600 "$envf"
   docker stop partvision-web >/dev/null 2>&1 || true
   docker rm   partvision-web >/dev/null 2>&1 || true
+  # nginx sirviendo estaticos no necesita mas que esto; los topes existen para que un
+  # problema aca no le saque recursos a NexVia, que comparte el VPS.
   docker run -d --name partvision-web --restart=always --network host \
+    --memory="${WEB_MEMORY:-128m}" --memory-swap="${WEB_MEMORY:-128m}" \
+    --cpus="${WEB_CPUS:-0.5}" --pids-limit="${WEB_PIDS:-128}" \
     --env-file "$envf" partvision-web >/dev/null
   log "Verificando web (localhost:8084)"
   health_wait http://localhost:8084/ 6 || echo "   AVISO: la web no respondio 200 a tiempo."

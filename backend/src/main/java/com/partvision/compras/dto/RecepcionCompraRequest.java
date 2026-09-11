@@ -12,5 +12,12 @@ public record RecepcionCompraRequest(
         @NotBlank String fechaFactura,
         String proveedor,
         @NotBlank String estatus,
-        @NotEmpty @Valid List<RecepcionLineaRequest> lineas
-) {}
+        @NotEmpty @Size(max = MAX_LINEAS) @Valid List<RecepcionLineaRequest> lineas
+) {
+    /**
+     * Tope de lineas por factura. La recepcion es publica, asi que sin limite el tamano del
+     * request lo decide quien llama: ademas del riesgo de memoria, un IN gigante contra el
+     * catalogo choca con el maximo de 65.535 parametros del driver JDBC.
+     */
+    public static final int MAX_LINEAS = 5_000;
+}

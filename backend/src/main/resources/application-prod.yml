@@ -1,3 +1,11 @@
+# Solo loopback. El contenedor corre con --network host en un VPS compartido con otro
+# proyecto (NexVia): sin esto, Tomcat escucha en 0.0.0.0 y la API queda publicada
+# directamente en internet por HTTP plano, salteando nginx, su TLS y sus limites.
+# nginx hace de reverse-proxy contra 127.0.0.1:8088, asi que no cambia nada para el usuario.
+# Si algun dia el backend corre en red bridge, hay que sobreescribir SERVER_ADDRESS=0.0.0.0.
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
 springdoc:
   api-docs:
     enabled: false

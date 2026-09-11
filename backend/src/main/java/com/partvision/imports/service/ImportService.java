@@ -47,7 +47,7 @@ public class ImportService {
             throw new BusinessException("El archivo esta vacio");
         }
         try (Reader reader = new InputStreamReader(archivo.getInputStream(), StandardCharsets.UTF_8)) {
-            return procesar(reader, null);
+            return procesar(reader);
         } catch (IOException ex) {
             throw new BusinessException("No se pudo leer el archivo CSV: " + ex.getMessage());
         }
@@ -106,10 +106,10 @@ public class ImportService {
     }
 
     /**
-     * Recorre el CSV fila por fila. Si {@code job} no es null, va reportando el
-     * progreso (procesadas/importadas/omitidas/errores) para el seguimiento en vivo.
+     * Recorre el CSV fila por fila y devuelve el resumen. El seguimiento en vivo lo hace
+     * la importacion asincrona por su cuenta ({@link #parsearYDeduplicar}).
      */
-    private ImportResultResponse procesar(Reader reader, ImportJob job) throws IOException {
+    private ImportResultResponse procesar(Reader reader) throws IOException {
         int total = 0;
         int importados = 0;
         int omitidos = 0;
@@ -131,33 +131,16 @@ public class ImportService {
                     // Duplicado dentro del mismo archivo: se salta antes de tocar la BD.
                     if (!clavesVistas.add(claveDedup(fila))) {
                         omitidos++;
-                        if (job != null) {
-                            job.marcarOmitida();
-                        }
                         continue;
                     }
                     productoImporter.importar(fila);
                     importados++;
-                    if (job != null) {
-                        job.marcarImportada();
-                    }
                 } catch (DuplicateResourceException ex) {
                     // Duplicado contra lo que ya hay en la BD: se cuenta como omitido, no como error.
                     omitidos++;
-                    if (job != null) {
-                        job.marcarOmitida();
-                    }
                 } catch (Exception ex) {
-                    ImportResultResponse.FilaError filaError =
-                            new ImportResultResponse.FilaError(registro.getRecordNumber(), ex.getMessage());
-                    errores.add(filaError);
-                    if (job != null) {
-                        job.agregarError(filaError);
-                    }
-                } finally {
-                    if (job != null) {
-                        job.marcarProcesada();
-                    }
+                    errores.add(new ImportResultResponse.FilaError(
+                            registro.getRecordNumber(), ex.getMessage()));
                 }
             }
         }

@@ -3,6 +3,7 @@ package com.partvision.compras;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.common.exception.BusinessException;
+import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
@@ -35,6 +36,9 @@ public class CompraService {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
+    /** Separador al comparar lineas: un caracter de control que no aparece en los datos. */
+    private static final String SEP = String.valueOf((char) 1);
+
     private final CompraRepository compraRepo;
     private final ProductoRepository productoRepo;
     private final StockService stockService;
@@ -43,14 +47,25 @@ public class CompraService {
 
     @Transactional
     public CompraResponse registrarRecepcion(RecepcionCompraRequest request) {
-        Optional<Compra> existente = compraRepo.findByNumeroFactura(request.factura());
-        if (existente.isPresent()) {
-            log.info("Factura {} ya registrada, retornando existente", request.factura());
-            return CompraResponse.from(existente.get(), true);
-        }
-
         LocalDate fecha = parseFecha(request.fechaFactura());
         CompraEstado estado = parseEstado(request.estatus());
+
+        Optional<Compra> existente = compraRepo.findByNumeroFactura(request.factura());
+        if (existente.isPresent()) {
+            // Reintento identico (Power Automate reintenta ante un timeout): idempotente.
+            if (mismoContenido(existente.get(), request, fecha)) {
+                log.info("Factura {} ya registrada con el mismo contenido, retornando existente",
+                        request.factura());
+                return CompraResponse.from(existente.get(), true);
+            }
+            // Mismo numero, contenido distinto. Devolver la vieja como si se hubiera
+            // guardado la nueva descartaba datos en silencio: o un reenvio corregido que
+            // nunca entraba, o alguien pisando un numero de factura a proposito.
+            log.warn("Factura {} ya existe con contenido distinto: se rechaza con 409",
+                    request.factura());
+            throw new DuplicateResourceException(
+                    "La factura " + request.factura() + " ya esta registrada con otro contenido");
+        }
 
         Compra compra = new Compra();
         compra.setNumeroFactura(request.factura());
@@ -186,6 +201,33 @@ public class CompraService {
 
     private static String codigoODefault(String codigo) {
         return (codigo == null || codigo.isBlank()) ? "IMPORTADOS" : codigo.trim();
+    }
+
+    /**
+     * Compara una factura ya guardada contra lo que llega, para distinguir un reintento
+     * legitimo de un intento de pisarla. El orden de las lineas no cuenta.
+     */
+    private boolean mismoContenido(Compra guardada, RecepcionCompraRequest request, LocalDate fecha) {
+        if (!Objects.equals(guardada.getFechaFactura(), fecha)) return false;
+        if (!Objects.equals(guardada.getProveedor(), request.proveedor())) return false;
+        if (guardada.getEstado() != parseEstado(request.estatus())) return false;
+        if (guardada.getLineas().size() != request.lineas().size()) return false;
+
+        List<String> deLaBase = guardada.getLineas().stream()
+                .map(l -> huellaLinea(l.getCodigo(), l.getDescripcion(), l.getCantidad()))
+                .sorted()
+                .toList();
+        List<String> delRequest = request.lineas().stream()
+                .map(l -> huellaLinea(codigoODefault(l.codigo()), l.descripcion(), l.cantidad()))
+                .sorted()
+                .toList();
+        return deLaBase.equals(delRequest);
+    }
+
+    private String huellaLinea(String codigo, String descripcion, int cantidad) {
+        return (codigo == null ? "" : codigo.toUpperCase())
+                + SEP + (descripcion == null ? "" : descripcion)
+                + SEP + cantidad;
     }
 
     private LocalDate parseFecha(String fecha) {

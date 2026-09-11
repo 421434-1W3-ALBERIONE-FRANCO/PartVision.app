@@ -5,6 +5,7 @@ import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.domain.ProductoEstado;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.common.exception.BusinessException;
+import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
@@ -80,15 +81,12 @@ class CompraServiceTest {
         verify(compraRepo).save(any(Compra.class));
     }
 
+    /**
+     * Reintento identico: Power Automate reintenta ante un timeout y no tiene que duplicar.
+     */
     @Test
-    void registrarRecepcion_facturaExistente_retornaExistente() {
-        Compra existente = new Compra();
-        existente.setId(5L);
-        existente.setNumeroFactura("FAC-DUP");
-        existente.setFechaFactura(LocalDate.of(2025, 1, 1));
-        existente.setProveedor("X");
-        existente.setEstado(CompraEstado.EN_TRANSITO);
-        existente.setCreatedAt(Instant.now());
+    void registrarRecepcion_facturaExistenteMismoContenido_retornaExistente() {
+        Compra existente = compraGuardada("FAC-DUP", "A", "desc", 1);
 
         when(compraRepo.findByNumeroFactura("FAC-DUP")).thenReturn(Optional.of(existente));
 
@@ -99,6 +97,169 @@ class CompraServiceTest {
 
         assertThat(resp.id()).isEqualTo(5L);
         verify(compraRepo, never()).save(any());
+    }
+
+    /** El orden de las lineas no deberia convertir un reintento en un conflicto. */
+    @Test
+    void registrarRecepcion_mismasLineasEnOtroOrden_siguenSiendoIguales() {
+        Compra existente = compraGuardada("FAC-ORD", "A", "uno", 1);
+        agregarLinea(existente, "B", "dos", 2);
+
+        when(compraRepo.findByNumeroFactura("FAC-ORD")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-ORD", "01/01/2025", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("B", "dos", 2),
+                        new RecepcionLineaRequest("A", "uno", 1)));
+
+        assertThat(service.registrarRecepcion(request).id()).isEqualTo(5L);
+        verify(compraRepo, never()).save(any());
+    }
+
+    /**
+     * Mismo numero de factura con contenido distinto: antes devolvia la vieja con 201 y el
+     * contenido nuevo se perdia en silencio —un reenvio corregido que nunca entraba, o alguien
+     * pisando el numero a proposito—. Ahora es 409.
+     */
+    @Test
+    void registrarRecepcion_facturaExistenteOtroContenido_lanza409() {
+        Compra existente = compraGuardada("FAC-DUP", "A", "desc", 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-DUP")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-DUP", "01/01/2025", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("A", "desc", 99)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("FAC-DUP");
+        verify(compraRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarRecepcion_facturaExistenteOtraFecha_lanza409() {
+        Compra existente = compraGuardada("FAC-F", "A", "desc", 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-F")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-F", "02/01/2025", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("A", "desc", 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void registrarRecepcion_facturaExistenteOtroProveedor_lanza409() {
+        Compra existente = compraGuardada("FAC-P", "A", "desc", 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-P")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-P", "01/01/2025", "OTRO", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("A", "desc", 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void registrarRecepcion_facturaExistenteOtroEstado_lanza409() {
+        Compra existente = compraGuardada("FAC-E", "A", "desc", 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-E")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-E", "01/01/2025", "X", "INGRESADA",
+                List.of(new RecepcionLineaRequest("A", "desc", 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void registrarRecepcion_facturaExistenteConMasLineas_lanza409() {
+        Compra existente = compraGuardada("FAC-N", "A", "desc", 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-N")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-N", "01/01/2025", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("A", "desc", 1),
+                        new RecepcionLineaRequest("B", "otra", 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    /** Una fecha invalida tiene que fallar como 422 aunque la factura ya exista. */
+    @Test
+    void registrarRecepcion_facturaExistenteFechaInvalida_lanzaBusinessException() {
+        var request = new RecepcionCompraRequest("FAC-DUP", "no-es-fecha", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("A", "desc", 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(BusinessException.class);
+        verify(compraRepo, never()).findByNumeroFactura(any());
+    }
+
+    /** Dos productos con el mismo SKU en distinta caja: se queda con el primero, no explota. */
+    @Test
+    void registrarRecepcion_skuDuplicadoEnCatalogo_tomaElPrimero() {
+        var request = new RecepcionCompraRequest("FAC-SKU", "01/01/2025", "Prov", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("sku-x", "desc", 1)));
+
+        when(compraRepo.findByNumeroFactura("FAC-SKU")).thenReturn(Optional.empty());
+        when(productoRepo.findBySkuIn(any()))
+                .thenReturn(List.of(buildProducto(1L, "SKU-X"), buildProducto(2L, "sku-x")));
+        when(compraRepo.save(any(Compra.class))).thenAnswer(inv -> {
+            Compra c = inv.getArgument(0);
+            c.setId(11L);
+            c.setCreatedAt(Instant.now());
+            return c;
+        });
+
+        CompraResponse resp = service.registrarRecepcion(request);
+
+        assertThat(resp.lineasMatcheadas()).isEqualTo(1);
+        assertThat(resp.lineas().get(0).productoId()).isEqualTo(1L);
+    }
+
+    /** Lineas viejas sin codigo ni descripcion: la comparacion no tiene que tirar NPE. */
+    @Test
+    void registrarRecepcion_lineaGuardadaConCamposNulos_comparaSinRomper() {
+        Compra existente = new Compra();
+        existente.setId(5L);
+        existente.setNumeroFactura("FAC-NULA");
+        existente.setFechaFactura(LocalDate.of(2025, 1, 1));
+        existente.setProveedor("X");
+        existente.setEstado(CompraEstado.EN_TRANSITO);
+        existente.setCreatedAt(Instant.now());
+        agregarLinea(existente, null, null, 1);
+
+        when(compraRepo.findByNumeroFactura("FAC-NULA")).thenReturn(Optional.of(existente));
+
+        var request = new RecepcionCompraRequest("FAC-NULA", "01/01/2025", "X", "EN_TRANSITO",
+                List.of(new RecepcionLineaRequest("IMPORTADOS", null, 1)));
+
+        assertThatThrownBy(() -> service.registrarRecepcion(request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    private Compra compraGuardada(String numero, String codigo, String descripcion, int cantidad) {
+        Compra existente = new Compra();
+        existente.setId(5L);
+        existente.setNumeroFactura(numero);
+        existente.setFechaFactura(LocalDate.of(2025, 1, 1));
+        existente.setProveedor("X");
+        existente.setEstado(CompraEstado.EN_TRANSITO);
+        existente.setCreatedAt(Instant.now());
+        agregarLinea(existente, codigo, descripcion, cantidad);
+        return existente;
+    }
+
+    private void agregarLinea(Compra compra, String codigo, String descripcion, int cantidad) {
+        CompraLinea linea = new CompraLinea();
+        linea.setCodigo(codigo);
+        linea.setDescripcion(descripcion);
+        linea.setCantidad(cantidad);
+        compra.addLinea(linea);
     }
 
     @Test
@@ -150,8 +311,7 @@ class CompraServiceTest {
         var request = new RecepcionCompraRequest("FAC-BAD", "not-a-date", "Prov", "EN_TRANSITO",
                 List.of(new RecepcionLineaRequest("X", "desc", 1)));
 
-        when(compraRepo.findByNumeroFactura("FAC-BAD")).thenReturn(Optional.empty());
-
+        // La fecha se parsea antes de buscar la factura, asi que el repo ni se toca.
         assertThatThrownBy(() -> service.registrarRecepcion(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Formato de fecha inválido");

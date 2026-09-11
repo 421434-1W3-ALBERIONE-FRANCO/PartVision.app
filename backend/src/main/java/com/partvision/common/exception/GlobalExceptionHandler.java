@@ -24,6 +24,13 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * Lo unico que ve el cliente ante un error no previsto. El detalle —clase y mensaje de
+     * la causa raiz— queda en el log del servidor: devolverlo le describe las internas de
+     * la app a cualquiera que provoque un 500, incluso sin estar autenticado.
+     */
+    private static final String MENSAJE_GENERICO = "Error interno del servidor";
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
@@ -152,8 +159,7 @@ public class GlobalExceptionHandler {
         while (root.getCause() != null) root = root.getCause();
         log.error("ServletException en {} — root: [{}] {}", request.getRequestURI(),
                 root.getClass().getName(), root.getMessage(), ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Error de servlet: " + root.getClass().getSimpleName() + " — " + root.getMessage(), request, null);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, MENSAJE_GENERICO, request, null);
     }
 
     /**
@@ -175,8 +181,7 @@ public class GlobalExceptionHandler {
         while (root.getCause() != null) root = root.getCause();
         log.error("Error no controlado en {} [{}]: {} — root: [{}] {}", request.getRequestURI(),
                 ex.getClass().getName(), ex.getMessage(), root.getClass().getName(), root.getMessage(), ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Error: " + root.getClass().getSimpleName() + " — " + root.getMessage(), request, null);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, MENSAJE_GENERICO, request, null);
     }
 
     private ApiError.FieldValidationError toFieldError(FieldError fieldError) {

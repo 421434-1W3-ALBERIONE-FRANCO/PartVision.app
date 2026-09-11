@@ -13,24 +13,45 @@ class RateLimitConfigTest {
 
     @Test
     void loginRateLimitFilter_registraEnLoginUrl() {
-        FilterRegistrationBean<LoginRateLimitFilter> bean =
+        FilterRegistrationBean<IpRateLimitFilter> bean =
                 config.loginRateLimitFilter(5, 1, objectMapper);
 
         assertThat(bean.getUrlPatterns()).containsExactly("/api/v1/auth/login");
-        assertThat(bean.getFilter()).isInstanceOf(LoginRateLimitFilter.class);
+        assertThat(bean.getFilter()).isInstanceOf(IpRateLimitFilter.class);
         assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
     }
 
     @Test
     void recoveryRateLimitFilter_registraEnRecoveryUrls() {
-        FilterRegistrationBean<LoginRateLimitFilter> bean =
+        FilterRegistrationBean<IpRateLimitFilter> bean =
                 config.recoveryRateLimitFilter(objectMapper);
 
         assertThat(bean.getUrlPatterns()).containsExactlyInAnyOrder(
                 "/api/v1/auth/forgot-password",
                 "/api/v1/auth/2fa/recover-request",
                 "/api/v1/auth/2fa/recover-confirm");
-        assertThat(bean.getFilter()).isInstanceOf(LoginRateLimitFilter.class);
+        assertThat(bean.getFilter()).isInstanceOf(IpRateLimitFilter.class);
         assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 1);
+    }
+
+    @Test
+    void comprasRateLimitFilter_registraEnLaRecepcion() {
+        FilterRegistrationBean<IpRateLimitFilter> bean =
+                config.comprasRateLimitFilter(30, 1, objectMapper);
+
+        assertThat(bean.getUrlPatterns()).containsExactly("/api/v1/compras/recepcion");
+        assertThat(bean.getFilter()).isInstanceOf(IpRateLimitFilter.class);
+        assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 2);
+    }
+
+    /** El tope de tamano tiene que correr antes que nada: es lo que evita el gasto de memoria. */
+    @Test
+    void comprasRequestSizeFilter_registraEnLaRecepcionYCorrePrimero() {
+        FilterRegistrationBean<RequestSizeLimitFilter> bean =
+                config.comprasRequestSizeFilter(2_097_152, objectMapper);
+
+        assertThat(bean.getUrlPatterns()).containsExactly("/api/v1/compras/recepcion");
+        assertThat(bean.getFilter()).isInstanceOf(RequestSizeLimitFilter.class);
+        assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
     }
 }

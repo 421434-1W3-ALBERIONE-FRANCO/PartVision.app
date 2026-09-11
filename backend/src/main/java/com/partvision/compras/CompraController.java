@@ -16,6 +16,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Map;
 
 @RestController
@@ -71,7 +73,8 @@ public class CompraController {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "Recepcion de compras no configurada");
         }
-        if (key == null || !key.equals(apiKey)) {
+        if (key == null || !MessageDigest.isEqual(
+                key.getBytes(StandardCharsets.UTF_8), apiKey.getBytes(StandardCharsets.UTF_8))) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "API key inválida");
         }
     }
