@@ -62,7 +62,7 @@ deploy_backend(){
   local envf; envf="$(mktemp)"; trap 'rm -f "$envf"' RETURN
   # COMPRAS_API_KEY va incluida a proposito: es lo unico que protege
   # POST /api/v1/compras/recepcion (endpoint publico, sin JWT). Si se pierde en un
-  # redeploy, el controller la da por vacia y deja de validar, dejando el endpoint abierto.
+  # redeploy el endpoint se apaga (503) y Power Automate deja de poder mandar facturas.
   reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|COMPRAS_|MAIL_|APP_|PORT|MANAGEMENT_)' "$envf"
   # Overlay opcional para AGREGAR o ROTAR secretos sin recrear el contenedor a mano:
   # un VAR=valor por linea en ~/.partvision-backend.env (chmod 600). Va despues del
@@ -72,6 +72,15 @@ deploy_backend(){
     log "Aplicando overlay $overlay"
     grep -E '^[A-Z_][A-Z0-9_]*=' "$overlay" >> "$envf" || true
   fi
+  # Una variable que viene del contenedor Y del overlay queda dos veces. Docker se queda
+  # con la ultima, pero las copias se acumulan en cada redeploy y al rotar un secreto la
+  # vieja sigue escrita en la config del contenedor. Se deja una por nombre: la ultima,
+  # que es la del overlay. El temporal se crea 600: tiene secretos.
+  local dedup; dedup="$(umask 077; mktemp)"
+  awk -F= '{ if (!($1 in valor)) orden[++n] = $1; valor[$1] = $0 }
+            END { for (i = 1; i <= n; i++) print valor[orden[i]] }' "$envf" > "$dedup" \
+    && mv "$dedup" "$envf" || { rm -f "$dedup"; echo "ERROR: no se pudo limpiar el env" >&2; exit 1; }
+  chmod 600 "$envf"
   log "Recreando contenedor backend"
   docker stop partvision-backend >/dev/null 2>&1 || true
   docker rm   partvision-backend >/dev/null 2>&1 || true
