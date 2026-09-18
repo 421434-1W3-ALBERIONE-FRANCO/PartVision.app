@@ -276,6 +276,29 @@ export interface CompraLinea {
   ubicacionIngresoCodigo: string | null;
 }
 
+/** Linea que llego sin codigo en la planilla (pedido puntual) y todavia no tiene producto. */
+export interface ImportadoPendiente {
+  lineaId: number;
+  compraId: number;
+  factura: string;
+  fechaFactura: string;
+  proveedor: string | null;
+  estadoCompra: 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
+  descripcion: string | null;
+  cantidad: number;
+}
+
+export interface ImportadoResuelto {
+  lineaId: number;
+  productoId: number;
+  sku: string;
+  descripcion: string;
+  /** true si la compra ya habia ingresado y el stock se cargo en el momento. */
+  stockCargado: boolean;
+  ubicacionCodigo: string | null;
+  mensaje: string;
+}
+
 export interface Compra {
   id: number;
   numeroFactura: string;

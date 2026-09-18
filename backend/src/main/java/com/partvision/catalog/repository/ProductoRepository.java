@@ -20,6 +20,16 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
 
     boolean existsByMarca(Marca marca);
 
+    /**
+     * Unicidad de SKU en todo el catalogo, sin importar marca, proveedor ni mayusculas. La
+     * del alta comun es por marca; para los SKU inventados (IMP-) tiene que ser global.
+     */
+    boolean existsBySkuIgnoreCase(String sku);
+
+    /** SKU que empiezan con un prefijo, sin distinguir mayusculas: para numerar los IMP-. */
+    @Query("select p.sku from Producto p where upper(p.sku) like concat(upper(:prefijo), '%')")
+    List<String> findSkusConPrefijo(@Param("prefijo") String prefijo);
+
     @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
     Optional<Producto> findWithDetallesById(Long id);
 

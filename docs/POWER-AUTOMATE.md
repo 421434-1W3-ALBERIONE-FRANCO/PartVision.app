@@ -105,7 +105,8 @@ planilla no sabe: en qué ubicación queda cada cosa.
 - **El código se busca en el catálogo.** Los 16 códigos de la muestra de la planilla existen;
   12 existen **para los dos proveedores**.
 - **Código vacío → `IMPORTADOS`.** Son pedidos puntuales de clientes. La línea queda
-  registrada en la compra pero no tiene producto, así que no carga stock al ingresarla.
+  registrada en la compra pero no tiene producto, así que no carga stock al ingresarla,
+  salvo que se la sume al catálogo (ver "Importados").
 - **Una línea sin producto** (código que no está, o repetido entre proveedores sin saber de
   cuál es) se ve en el panel con "—" y la compra muestra `3/5` en ámbar.
 
@@ -204,9 +205,35 @@ cd ~/Documents/Repos/PartVision.app && ./redeploy.sh --no-build backend
 
 Después actualizá la variable en Power Platform. Entre los dos pasos el flujo recibe 401.
 
+## Importados
+
+En la pantalla **Compras**, el botón **Importados** muestra cuántas líneas `IMPORTADOS`
+están sin producto y las lista, las facturas más nuevas primero. Para cada una hay dos
+opciones:
+
+- **Crear producto nuevo.** Propone un SKU `IMP-00001`, `IMP-00002`… (el siguiente libre).
+  Se puede cambiar, pero tiene que ser **único en todo el catálogo**, de cualquier marca y
+  proveedor: si ya existe, rebota y sugiere el siguiente libre. El producto queda con la
+  descripción de la línea (editable) y el proveedor de la compra.
+- **Ya está en el catálogo.** Busca un producto y asocia la línea. Es lo que corresponde
+  cuando **la misma pieza se vuelve a pedir**: como llega otra vez sin código, entra otra vez
+  como `IMPORTADOS`, y crearla de nuevo la duplicaría con otro SKU.
+
+Qué pasa con el stock depende de la compra:
+
+| La compra está… | Al resolver la línea |
+|---|---|
+| en tránsito o por ubicar | solo se asocia el producto. El stock entra al ingresar la compra, con la ubicación que se elija ahí |
+| ingresada | hay que elegir la ubicación, y el stock de esa línea se carga en el momento: había quedado afuera del ingreso por no tener producto |
+
+Una línea ya resuelta desaparece de la lista y no se puede resolver dos veces (cargaría el
+stock dos veces). Si después la planilla trae el proveedor de esa factura, el producto que se
+asoció a mano se respeta.
+
 ## Lo que todavía no existe
 
-- **Pasar un `IMPORTADOS` al catálogo.** Pedido: un botón que liste esas líneas y permita darlas
-  de alta con un SKU propuesto que no choque con ningún otro, ubicarlas y cargarles stock.
+- **Reconocer solo un importado que se repite.** La segunda vez que llega la misma pieza sin
+  código, hay que asociarla a mano con "Ya está en el catálogo": la planilla no trae nada que
+  la identifique de forma confiable.
 - **Precios desde Power Automate.** Hoy entran solo por la importación manual de Excel. Si se
   pide, hay que reusar el cálculo de costo y margen de `PrecioImportService`.

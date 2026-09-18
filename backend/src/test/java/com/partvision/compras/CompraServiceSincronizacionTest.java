@@ -289,6 +289,28 @@ class CompraServiceSincronizacionTest {
         assertThat(r.compra().getProveedor()).isEqualTo("EGSA");
     }
 
+    /**
+     * Un importado que alguien asocio a mano no se pierde cuando llega el proveedor: buscar
+     * de nuevo el codigo IMPORTADOS no encontraria nada y le borraria el producto.
+     */
+    @Test
+    void proveedorQueLlegaDespues_noDesasociaUnImportadoResueltoAMano() {
+        Compra existente = guardada(null, CompraEstado.EN_TRANSITO, "IMPORTADOS", "140000");
+        Producto aMano = producto(900L, "IMP-00001", null);
+        existente.getLineas().get(0).setProducto(aMano);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(existente));
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(
+                producto(279402L, "140000", "Autopartes del Sur"),
+                producto(245649L, "140000", "EGSA")));
+
+        ResultadoSincronizacion r = service.sincronizar(factura("EGSA", CompraEstado.EN_TRANSITO,
+                linea("IMPORTADOS", 1), linea("140000", 1)));
+
+        assertThat(r.compra().getLineas().get(0).getProducto()).isSameAs(aMano);
+        assertThat(r.compra().getLineas().get(1).getProducto().getId()).isEqualTo(245649L);
+        assertThat(r.lineasMatcheadas()).isEqualTo(2);
+    }
+
     /** Mientras la planilla no tenga columna de proveedor, los reenvios no cambian nada. */
     @Test
     void sinProveedorDeNingunLado_noHayNadaQueCompletar() {

@@ -2,9 +2,10 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { Compra, CompraLinea, Ubicacion } from '../core/models';
+import { Compra, CompraLinea, ImportadoPendiente, ProductoListItem, Ubicacion } from '../core/models';
 import { CompraService, LineaUbicacionAsignacion } from '../core/compra.service';
 import { UbicacionService } from '../core/ubicacion.service';
+import { ProductoService } from '../core/producto.service';
 
 type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
 
@@ -31,7 +32,8 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
         </p>
       </div>
 
-      <!-- Tabs de estado -->
+      <!-- Tabs de estado + importados -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-1 bg-dark-surface/60 rounded-xl p-1 w-fit overflow-x-auto">
         <button (click)="cambiarTab('TODAS')"
           [class]="tab() === 'TODAS'
@@ -59,6 +61,18 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
             ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-neon-green/15 text-neon-green border border-neon-green/30 transition-all cursor-pointer whitespace-nowrap'
             : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
           Ingresadas
+        </button>
+      </div>
+        <button (click)="abrirImportados()"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-neon-purple/40 text-neon-purple-light bg-neon-purple/10 hover:bg-neon-purple/20 transition-colors cursor-pointer whitespace-nowrap"
+          title="Piezas que llegaron sin código en la planilla">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          Importados
+          @if (importadosTotal() > 0) {
+            <span class="min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[11px] font-mono text-center bg-neon-purple/25 text-neon-purple-light">{{ importadosTotal() }}</span>
+          }
         </button>
       </div>
 
@@ -330,12 +344,223 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
           </div>
         </div>
       }
+
+      <!-- Modal importados: lineas que llegaron sin codigo -->
+      @if (importadosAbierto()) {
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" (click)="cerrarImportados()">
+          <div class="glass-panel w-full max-w-4xl max-h-[90vh] rounded-2xl border border-dark-border shadow-neon flex flex-col" (click)="$event.stopPropagation()">
+            <div class="flex items-start justify-between gap-4 p-5 border-b border-dark-border shrink-0">
+              <div>
+                <h3 class="text-lg font-bold text-white">Importados sin catalogar</h3>
+                <p class="text-xs text-gray-400 mt-1 max-w-2xl">
+                  Piezas que llegaron sin código en la planilla: pedidos puntuales de clientes, que no cargan stock.
+                  Si se van a volver a pedir, dalas de alta en el catálogo o asocialas a una que ya diste de alta.
+                </p>
+              </div>
+              <button (click)="cerrarImportados()" aria-label="Cerrar"
+                class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-dark-surface transition-colors cursor-pointer">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-5 space-y-3">
+              @if (avisoImportado()) {
+                <div class="flex items-center gap-2 text-xs text-neon-green bg-neon-green/5 border border-neon-green/20 rounded-xl px-4 py-2.5">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{{ avisoImportado() }}</span>
+                </div>
+              }
+
+              @if (cargandoImportados()) {
+                <div class="py-10 text-center text-gray-400 font-mono text-sm">Cargando importados...</div>
+              } @else if (importados().length === 0) {
+                <div class="py-10 text-center text-gray-500 text-sm">No hay importados pendientes.</div>
+              } @else {
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-dark-border">
+                        <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Factura</th>
+                        <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase hidden sm:table-cell">Fecha</th>
+                        <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Descripción</th>
+                        <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cant.</th>
+                        <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Compra</th>
+                        <th class="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (i of importados(); track i.lineaId) {
+                        <tr [class]="resolviendo()?.lineaId === i.lineaId ? 'bg-neon-purple/10' : 'border-b border-dark-border/30'">
+                          <td class="px-3 py-2 font-mono text-white text-xs">{{ i.factura }}</td>
+                          <td class="px-3 py-2 text-gray-300 text-xs hidden sm:table-cell">{{ i.fechaFactura | date:'dd/MM/yyyy' }}</td>
+                          <td class="px-3 py-2 text-gray-200 text-xs whitespace-normal break-words max-w-xs">{{ i.descripcion || '—' }}</td>
+                          <td class="px-3 py-2 text-center text-white font-semibold">{{ i.cantidad }}</td>
+                          <td class="px-3 py-2 text-center">
+                            @if (i.estadoCompra === 'EN_TRANSITO') {
+                              <span class="inline-flex items-center gap-1.5 text-xs text-amber-400" title="En tránsito">
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>Tránsito
+                              </span>
+                            } @else if (i.estadoCompra === 'POR_UBICAR') {
+                              <span class="inline-flex items-center gap-1.5 text-xs text-neon-cyan" title="Por ubicar">
+                                <span class="w-2 h-2 rounded-full bg-neon-cyan"></span>Por ubicar
+                              </span>
+                            } @else {
+                              <span class="inline-flex items-center gap-1.5 text-xs text-neon-green" title="Ingresada">
+                                <span class="w-2 h-2 rounded-full bg-neon-green"></span>Ingresada
+                              </span>
+                            }
+                          </td>
+                          <td class="px-3 py-2 text-right">
+                            @if (resolviendo()?.lineaId !== i.lineaId) {
+                              <button (click)="empezarResolver(i)"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-neon-purple-light border border-neon-purple/40 hover:bg-neon-purple/15 transition-colors cursor-pointer whitespace-nowrap">
+                                Resolver
+                              </button>
+                            }
+                          </td>
+                        </tr>
+                        @if (resolviendo()?.lineaId === i.lineaId) {
+                          <tr class="bg-neon-purple/10 border-b border-dark-border/30">
+                            <td colspan="6" class="px-3 pb-4 pt-1">
+                              <div class="space-y-3">
+                                <div class="flex items-center gap-1 bg-dark-surface/60 rounded-lg p-1 w-fit">
+                                  <button (click)="cambiarModo('CREAR')"
+                                    [class]="modoResolver() === 'CREAR'
+                                      ? 'px-3 py-1.5 rounded-md text-xs font-semibold bg-white/10 text-white cursor-pointer'
+                                      : 'px-3 py-1.5 rounded-md text-xs text-gray-400 hover:text-white cursor-pointer'">
+                                    Crear producto nuevo
+                                  </button>
+                                  <button (click)="cambiarModo('VINCULAR')"
+                                    [class]="modoResolver() === 'VINCULAR'
+                                      ? 'px-3 py-1.5 rounded-md text-xs font-semibold bg-white/10 text-white cursor-pointer'
+                                      : 'px-3 py-1.5 rounded-md text-xs text-gray-400 hover:text-white cursor-pointer'">
+                                    Ya está en el catálogo
+                                  </button>
+                                </div>
+
+                                @if (modoResolver() === 'CREAR') {
+                                  <div class="grid gap-3 sm:grid-cols-[190px_1fr]">
+                                    <label class="flex flex-col gap-1">
+                                      <span class="text-[11px] uppercase tracking-wider text-gray-400">SKU</span>
+                                      <input [(ngModel)]="skuNuevo" placeholder="IMP-00001"
+                                        class="px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm uppercase focus:outline-none focus:border-neon-purple" />
+                                      <span class="text-[10px] text-gray-500">Propuesto: no lo usa ningún otro producto.</span>
+                                    </label>
+                                    <label class="flex flex-col gap-1">
+                                      <span class="text-[11px] uppercase tracking-wider text-gray-400">Descripción</span>
+                                      <input [(ngModel)]="descripcionNueva"
+                                        class="px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-purple" />
+                                    </label>
+                                  </div>
+                                } @else {
+                                  <div class="space-y-2">
+                                    <div class="flex gap-2">
+                                      <input [(ngModel)]="busquedaProducto" (keydown.enter)="buscarProducto()"
+                                        placeholder="Buscar por SKU o descripción (por ejemplo IMP- o biela)"
+                                        class="flex-1 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-purple" />
+                                      <button (click)="buscarProducto()"
+                                        class="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-white/10 hover:bg-white/15 transition-colors cursor-pointer">
+                                        Buscar
+                                      </button>
+                                    </div>
+                                    @if (buscandoProducto()) {
+                                      <div class="text-xs text-gray-400 font-mono">Buscando...</div>
+                                    } @else if (resultadosProducto().length > 0) {
+                                      <div class="max-h-48 overflow-y-auto rounded-lg border border-dark-border divide-y divide-dark-border/40">
+                                        @for (p of resultadosProducto(); track p.id) {
+                                          <button (click)="productoElegido.set(p)"
+                                            [class]="productoElegido()?.id === p.id
+                                              ? 'w-full text-left px-3 py-2 flex items-baseline gap-3 bg-neon-purple/20 cursor-pointer'
+                                              : 'w-full text-left px-3 py-2 flex items-baseline gap-3 hover:bg-dark-surface cursor-pointer'">
+                                            <span class="font-mono text-xs text-white shrink-0">{{ p.sku || 'sin SKU' }}</span>
+                                            <span class="text-xs text-gray-300 truncate">{{ p.descripcion }}</span>
+                                            @if (p.marcaNombre) {
+                                              <span class="text-[10px] text-gray-500 shrink-0">{{ p.marcaNombre }}</span>
+                                            }
+                                          </button>
+                                        }
+                                      </div>
+                                    } @else if (buscoProducto()) {
+                                      <div class="text-xs text-gray-500">No hay productos que coincidan.</div>
+                                    }
+                                  </div>
+                                }
+
+                                @if (resolviendo()!.estadoCompra === 'INGRESADA') {
+                                  <label class="flex flex-col gap-1 max-w-sm">
+                                    <span class="text-[11px] uppercase tracking-wider text-gray-400">Ubicación</span>
+                                    <select [(ngModel)]="ubicacionImportado"
+                                      class="px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-purple">
+                                      <option [ngValue]="null">— elegí dónde queda —</option>
+                                      @for (u of ubicaciones(); track u.id) {
+                                        <option [ngValue]="u.id">{{ u.path || u.codigo }}</option>
+                                      }
+                                    </select>
+                                    <span class="text-[10px] text-gray-500">La compra ya ingresó: el stock de esta línea se carga ahora.</span>
+                                  </label>
+                                } @else {
+                                  <p class="text-[11px] text-gray-500">
+                                    El stock entra cuando se ingrese la compra, con la ubicación que elijas ahí.
+                                  </p>
+                                }
+
+                                @if (errorImportado()) {
+                                  <div class="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                                    {{ errorImportado() }}
+                                  </div>
+                                }
+
+                                <div class="flex items-center justify-end gap-2">
+                                  <button (click)="cancelarResolver()"
+                                    class="px-4 py-2 rounded-lg text-xs text-gray-300 hover:bg-dark-surface transition-colors cursor-pointer">
+                                    Cancelar
+                                  </button>
+                                  <button (click)="guardarImportado()" [disabled]="!puedeGuardarImportado() || guardandoImportado()"
+                                    class="px-5 py-2 rounded-lg text-xs font-semibold bg-neon-purple/25 text-neon-purple-light border border-neon-purple/50 hover:bg-neon-purple/35 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                                    {{ guardandoImportado() ? 'Guardando...' : textoBotonImportado() }}
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        }
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                @if (importadosPaginas() > 1) {
+                  <div class="flex items-center justify-between pt-1">
+                    <span class="text-xs text-gray-500">{{ importadosTotal() }} pendientes</span>
+                    <div class="flex items-center gap-1">
+                      <button (click)="cargarImportados(importadosPagina() - 1)" [disabled]="importadosPagina() === 0"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default text-gray-300 hover:bg-dark-surface">
+                        Ant.
+                      </button>
+                      <span class="px-3 py-1.5 text-xs text-gray-400">{{ importadosPagina() + 1 }} / {{ importadosPaginas() }}</span>
+                      <button (click)="cargarImportados(importadosPagina() + 1)" [disabled]="importadosPagina() >= importadosPaginas() - 1"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default text-gray-300 hover:bg-dark-surface">
+                        Sig.
+                      </button>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
 })
 export class Compras implements OnInit {
   private compraService = inject(CompraService);
   private ubicacionService = inject(UbicacionService);
+  private productoService = inject(ProductoService);
 
   tab = signal<TabEstado>('TODAS');
   compras = signal<Compra[]>([]);
@@ -352,8 +577,30 @@ export class Compras implements OnInit {
   ingresando = signal(false);
   errorIngreso = signal('');
 
+  // --- Importados: lineas que llegaron sin codigo (pedidos puntuales) ---
+  importadosAbierto = signal(false);
+  importados = signal<ImportadoPendiente[]>([]);
+  importadosTotal = signal(0);
+  importadosPagina = signal(0);
+  importadosPaginas = signal(0);
+  cargandoImportados = signal(false);
+  resolviendo = signal<ImportadoPendiente | null>(null);
+  modoResolver = signal<'CREAR' | 'VINCULAR'>('CREAR');
+  skuNuevo = '';
+  descripcionNueva = '';
+  ubicacionImportado: number | null = null;
+  busquedaProducto = '';
+  resultadosProducto = signal<ProductoListItem[]>([]);
+  buscandoProducto = signal(false);
+  buscoProducto = signal(false);
+  productoElegido = signal<ProductoListItem | null>(null);
+  guardandoImportado = signal(false);
+  errorImportado = signal('');
+  avisoImportado = signal('');
+
   ngOnInit(): void {
     this.cargar();
+    this.contarImportados();
     this.ubicacionService.listar().subscribe(u => this.ubicaciones.set(u));
   }
 
@@ -456,6 +703,132 @@ export class Compras implements OnInit {
       error: (err) => {
         this.errorIngreso.set(err.error?.message || err.error?.error || 'No se pudo ingresar al stock');
         this.ingresando.set(false);
+      },
+    });
+  }
+
+  // --- Importados ---
+
+  /** Solo el total, para el contador del boton. */
+  contarImportados(): void {
+    this.compraService.importados(0, 1).subscribe({
+      next: (res) => this.importadosTotal.set(res.totalElements),
+      error: () => this.importadosTotal.set(0),
+    });
+  }
+
+  abrirImportados(): void {
+    this.importadosAbierto.set(true);
+    this.avisoImportado.set('');
+    this.cancelarResolver();
+    this.cargarImportados(0);
+  }
+
+  cerrarImportados(): void {
+    this.importadosAbierto.set(false);
+    this.cancelarResolver();
+  }
+
+  cargarImportados(pagina: number): void {
+    this.cargandoImportados.set(true);
+    this.compraService.importados(pagina, 20).subscribe({
+      next: (res) => {
+        this.importados.set(res.content);
+        this.importadosTotal.set(res.totalElements);
+        this.importadosPaginas.set(res.totalPages);
+        this.importadosPagina.set(pagina);
+        this.cargandoImportados.set(false);
+      },
+      error: () => this.cargandoImportados.set(false),
+    });
+  }
+
+  empezarResolver(importado: ImportadoPendiente): void {
+    this.resolviendo.set(importado);
+    this.modoResolver.set('CREAR');
+    this.descripcionNueva = importado.descripcion ?? '';
+    this.skuNuevo = '';
+    this.ubicacionImportado = null;
+    this.busquedaProducto = importado.descripcion ?? '';
+    this.resultadosProducto.set([]);
+    this.buscoProducto.set(false);
+    this.productoElegido.set(null);
+    this.errorImportado.set('');
+    this.avisoImportado.set('');
+    // El SKU propuesto es el proximo IMP- libre; se puede cambiar, y el backend vuelve a
+    // controlar que no lo use ningun otro producto al guardar.
+    this.compraService.skuSugerido().subscribe({
+      next: (res) => {
+        if (!this.skuNuevo) this.skuNuevo = res.sku;
+      },
+    });
+  }
+
+  cancelarResolver(): void {
+    this.resolviendo.set(null);
+    this.errorImportado.set('');
+  }
+
+  cambiarModo(modo: 'CREAR' | 'VINCULAR'): void {
+    this.modoResolver.set(modo);
+    this.errorImportado.set('');
+  }
+
+  buscarProducto(): void {
+    const q = this.busquedaProducto.trim();
+    if (q.length < 2) return;
+    this.buscandoProducto.set(true);
+    this.productoElegido.set(null);
+    this.productoService.buscarTexto(q, 0, 8).subscribe({
+      next: (res) => {
+        this.resultadosProducto.set(res.content);
+        this.buscoProducto.set(true);
+        this.buscandoProducto.set(false);
+      },
+      error: () => this.buscandoProducto.set(false),
+    });
+  }
+
+  puedeGuardarImportado(): boolean {
+    const importado = this.resolviendo();
+    if (!importado) return false;
+    if (importado.estadoCompra === 'INGRESADA' && this.ubicacionImportado == null) return false;
+    return this.modoResolver() === 'CREAR'
+      ? this.skuNuevo.trim().length > 0 && this.descripcionNueva.trim().length > 0
+      : this.productoElegido() != null;
+  }
+
+  textoBotonImportado(): string {
+    const cargaAhora = this.resolviendo()?.estadoCompra === 'INGRESADA';
+    if (this.modoResolver() === 'CREAR') {
+      return cargaAhora ? 'Crear y cargar stock' : 'Crear producto';
+    }
+    return cargaAhora ? 'Asociar y cargar stock' : 'Asociar';
+  }
+
+  guardarImportado(): void {
+    const importado = this.resolviendo();
+    if (!importado || !this.puedeGuardarImportado()) return;
+
+    this.guardandoImportado.set(true);
+    this.errorImportado.set('');
+    const llamada = this.modoResolver() === 'CREAR'
+      ? this.compraService.darDeAltaImportado(importado.lineaId, this.skuNuevo.trim(),
+          this.descripcionNueva.trim(), this.ubicacionImportado)
+      : this.compraService.vincularImportado(importado.lineaId, this.productoElegido()!.id,
+          this.ubicacionImportado);
+
+    llamada.subscribe({
+      next: (res) => {
+        this.guardandoImportado.set(false);
+        this.avisoImportado.set(res.mensaje);
+        this.resolviendo.set(null);
+        this.cargarImportados(this.importadosPagina());
+        this.cargar();
+      },
+      error: (err) => {
+        this.guardandoImportado.set(false);
+        this.errorImportado.set(err.error?.message || err.error?.error || 'No se pudo guardar');
       },
     });
   }

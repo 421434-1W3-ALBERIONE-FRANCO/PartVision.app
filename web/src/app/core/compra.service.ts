@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Compra, Page } from './models';
+import { Compra, ImportadoPendiente, ImportadoResuelto, Page } from './models';
 
 export interface LineaUbicacionAsignacion {
   lineaId: number;
@@ -27,5 +27,28 @@ export class CompraService {
 
   marcarIngresada(id: number, asignaciones: LineaUbicacionAsignacion[]): Observable<Compra> {
     return this.http.patch<Compra>(`${this.base}/${id}/ingresar`, { asignaciones });
+  }
+
+  // --- importados: lineas que llegaron sin codigo ---
+
+  importados(page = 0, size = 20): Observable<Page<ImportadoPendiente>> {
+    const params = new HttpParams().set('page', page).set('size', size);
+    return this.http.get<Page<ImportadoPendiente>>(`${this.base}/importados`, { params });
+  }
+
+  skuSugerido(): Observable<{ sku: string }> {
+    return this.http.get<{ sku: string }>(`${this.base}/importados/sku-sugerido`);
+  }
+
+  darDeAltaImportado(lineaId: number, sku: string, descripcion: string, ubicacionId: number | null):
+      Observable<ImportadoResuelto> {
+    return this.http.post<ImportadoResuelto>(`${this.base}/importados/${lineaId}/alta`,
+      { sku, descripcion, ubicacionId });
+  }
+
+  vincularImportado(lineaId: number, productoId: number, ubicacionId: number | null):
+      Observable<ImportadoResuelto> {
+    return this.http.post<ImportadoResuelto>(`${this.base}/importados/${lineaId}/vincular`,
+      { productoId, ubicacionId });
   }
 }

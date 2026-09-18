@@ -207,15 +207,21 @@ public class CompraService {
         return compraRepo.save(compra);
     }
 
+    /**
+     * Busca el producto de las lineas que todavia no lo tienen. Las que ya lo tienen no se
+     * tocan: puede ser un importado que alguien asocio a mano, y el codigo IMPORTADOS no
+     * encontraria nada y le borraria el producto.
+     */
     private void asignarProductos(List<CompraLinea> lineas, String proveedor) {
-        Set<String> codigos = lineas.stream()
+        List<CompraLinea> sinProducto = lineas.stream().filter(l -> l.getProducto() == null).toList();
+        Set<String> codigos = sinProducto.stream()
                 .map(l -> Objects.toString(l.getCodigo(), "").toUpperCase())
                 .collect(Collectors.toSet());
 
         Map<String, List<Producto>> candidatosPorSku = productoRepo.findBySkuIn(codigos).stream()
                 .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase()));
 
-        for (CompraLinea linea : lineas) {
+        for (CompraLinea linea : sinProducto) {
             String codigo = Objects.toString(linea.getCodigo(), "").toUpperCase();
             linea.setProducto(elegirProducto(candidatosPorSku.getOrDefault(codigo, List.of()), proveedor));
         }
