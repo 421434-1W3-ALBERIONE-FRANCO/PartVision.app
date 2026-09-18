@@ -25,9 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * tocar la base ni el cuerpo del request.
  *
  * <p>Se registra scopeado a rutas puntuales (ver {@code RateLimitConfig}): login, recuperacion
- * de cuenta y la recepcion publica de compras. La IP se toma de {@code X-Forwarded-For} (estamos
- * detras del proxy nginx); es defensa en profundidad —un atacante podria rotar ese header— y
- * se complementa con BCrypt, 2FA y la API key segun la ruta.
+ * de cuenta y la recepcion publica de compras. Como estamos detras de nginx, la IP real sale de
+ * {@code X-Forwarded-For} (ver {@link #clientIp}). Se complementa con BCrypt, 2FA y la API key
+ * segun la ruta.
  */
 public class IpRateLimitFilter extends OncePerRequestFilter {
 
@@ -78,12 +78,33 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
         return Bucket.builder().addLimit(limit).build();
     }
 
-    private String clientIp(HttpServletRequest request) {
+    /**
+     * IP con la que se cuenta el limite. nginx arma el header con
+     * {@code $proxy_add_x_forwarded_for}: copia lo que mando el cliente y AGREGA al final la
+     * direccion desde la que realmente se conecto. Todo lo anterior al ultimo valor lo escribe
+     * el cliente, asi que leer el primero dejaba esquivar el limite cambiando el header en cada
+     * request. El ultimo es el unico que pone nginx.
+     *
+     * <p>Y solo se le cree al header si la conexion viene del propio host (nginx corre ahi):
+     * si alguna vez el backend vuelve a quedar expuesto, un request directo no puede elegir
+     * con que IP se lo cuenta.
+     */
+    static String clientIp(HttpServletRequest request) {
+        // El mapa de baldes no admite claves null: sin direccion, todos comparten uno.
+        String remota = request.getRemoteAddr() != null ? request.getRemoteAddr() : "desconocida";
         String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        if (forwarded == null || forwarded.isBlank() || !esLoopback(remota)) {
+            return remota;
         }
-        return request.getRemoteAddr();
+        // Con limite -1 split nunca devuelve un array vacio (",".split(",") si lo haria).
+        String[] saltos = forwarded.split(",", -1);
+        String ultima = saltos[saltos.length - 1].trim();
+        return ultima.isEmpty() ? remota : ultima;
+    }
+
+    private static boolean esLoopback(String ip) {
+        return ip.startsWith("127.") || ip.equals("::1")
+                || ip.equals("0:0:0:0:0:0:0:1") || ip.startsWith("::ffff:127.");
     }
 
     private void tooManyRequests(HttpServletRequest request, HttpServletResponse response) throws IOException {
