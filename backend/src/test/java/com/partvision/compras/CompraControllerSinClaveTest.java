@@ -32,6 +32,8 @@ class CompraControllerSinClaveTest {
     @MockBean
     private CompraService compraService;
     @MockBean
+    private RecepcionFilasService recepcionFilasService;
+    @MockBean
     private JwtService jwtService;
     @MockBean
     private TokenRevocationService revocationService;

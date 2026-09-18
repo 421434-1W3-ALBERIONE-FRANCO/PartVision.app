@@ -39,7 +39,8 @@ class RateLimitConfigTest {
         FilterRegistrationBean<IpRateLimitFilter> bean =
                 config.comprasRateLimitFilter(30, 1, objectMapper);
 
-        assertThat(bean.getUrlPatterns()).containsExactly("/api/v1/compras/recepcion");
+        assertThat(bean.getUrlPatterns()).containsExactlyInAnyOrder(
+                "/api/v1/compras/recepcion", "/api/v1/compras/recepcion/filas");
         assertThat(bean.getFilter()).isInstanceOf(IpRateLimitFilter.class);
         assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 2);
     }
@@ -50,7 +51,8 @@ class RateLimitConfigTest {
         FilterRegistrationBean<RequestSizeLimitFilter> bean =
                 config.comprasRequestSizeFilter(2_097_152, objectMapper);
 
-        assertThat(bean.getUrlPatterns()).containsExactly("/api/v1/compras/recepcion");
+        assertThat(bean.getUrlPatterns()).containsExactlyInAnyOrder(
+                "/api/v1/compras/recepcion", "/api/v1/compras/recepcion/filas");
         assertThat(bean.getFilter()).isInstanceOf(RequestSizeLimitFilter.class);
         assertThat(bean.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
     }

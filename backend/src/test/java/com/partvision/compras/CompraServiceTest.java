@@ -52,7 +52,8 @@ class CompraServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CompraService(compraRepo, productoRepo, stockService, stockRepository, ubicacionService);
+        service = new CompraService(compraRepo, productoRepo, stockService, stockRepository, ubicacionService,
+                new ProveedorResolver("ADS=Autopartes del Sur"));
     }
 
     // --- registrarRecepcion ---
@@ -161,17 +162,23 @@ class CompraServiceTest {
                 .isInstanceOf(DuplicateResourceException.class);
     }
 
+    /**
+     * El estado no es contenido de la factura: lo cambia la planilla con el tiempo. Una
+     * factura en transito que vuelve como INGRESADA llego, no choca.
+     */
     @Test
-    void registrarRecepcion_facturaExistenteOtroEstado_lanza409() {
+    void registrarRecepcion_facturaExistenteAhoraIngresada_quedaPorUbicar() {
         Compra existente = compraGuardada("FAC-E", "A", "desc", 1);
 
         when(compraRepo.findByNumeroFactura("FAC-E")).thenReturn(Optional.of(existente));
+        when(compraRepo.save(any(Compra.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var request = new RecepcionCompraRequest("FAC-E", "01/01/2025", "X", "INGRESADA",
                 List.of(new RecepcionLineaRequest("A", "desc", 1)));
 
-        assertThatThrownBy(() -> service.registrarRecepcion(request))
-                .isInstanceOf(DuplicateResourceException.class);
+        CompraResponse resp = service.registrarRecepcion(request);
+
+        assertThat(resp.estado()).isEqualTo("POR_UBICAR");
     }
 
     @Test
@@ -328,7 +335,8 @@ class CompraServiceTest {
         });
 
         CompraResponse resp = service.registrarRecepcion(request);
-        assertThat(resp.estado()).isEqualTo("INGRESADA");
+        // Nace por ubicar: el stock se carga recien cuando se le asigna ubicacion en el panel.
+        assertThat(resp.estado()).isEqualTo("POR_UBICAR");
     }
 
     @Test
@@ -353,7 +361,7 @@ class CompraServiceTest {
 
     @Test
     void marcarIngresada_cargaStockPorLinea() {
-        Compra compra = buildCompraConLineas(CompraEstado.EN_TRANSITO);
+        Compra compra = buildCompraConLineas(CompraEstado.POR_UBICAR);
         CompraLinea linea = compra.getLineas().getFirst();
         linea.setId(100L);
         Producto producto = buildProducto(1L, "SKU1");
@@ -376,7 +384,7 @@ class CompraServiceTest {
 
     @Test
     void marcarIngresada_sinProducto_noCargarStock() {
-        Compra compra = buildCompraConLineas(CompraEstado.EN_TRANSITO);
+        Compra compra = buildCompraConLineas(CompraEstado.POR_UBICAR);
         CompraLinea linea = compra.getLineas().getFirst();
         linea.setId(100L);
         linea.setProducto(null);
@@ -420,7 +428,7 @@ class CompraServiceTest {
 
     @Test
     void marcarIngresada_lineaSinAsignacion_skip() {
-        Compra compra = buildCompraConLineas(CompraEstado.EN_TRANSITO);
+        Compra compra = buildCompraConLineas(CompraEstado.POR_UBICAR);
         CompraLinea linea = compra.getLineas().getFirst();
         linea.setId(100L);
         linea.setProducto(buildProducto(1L, "SKU1"));

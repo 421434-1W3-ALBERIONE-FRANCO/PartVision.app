@@ -1,129 +1,212 @@
 # Power Automate → PartVision (recepción de compras)
 
-Cómo conectar un flujo de Power Automate del cliente para que las facturas de compra
-entren solas en PartVision.
+Cómo entran las facturas de compra del cliente en PartVision.
 
-## El endpoint
+## El recorrido
+
+1. La factura llega por mail al cliente.
+2. Un flujo del cliente la vuelca en la tabla **"Ingreso stock"** de su planilla (Excel en
+   SharePoint): una fila por producto, con el número de factura repetido.
+3. Otro paso del flujo lee la tabla y la manda **entera** a PartVision.
+4. PartVision agrupa las filas por factura, registra las nuevas y pone al día las que ya tenía.
+
+El flujo puede releer la planilla cada vez que quiera: reenviar una factura que ya está no
+duplica nada.
+
+## El endpoint de la planilla
 
 ```
-POST https://190.106.132.98.nip.io/pv-api/v1/compras/recepcion
+POST https://190.106.132.98.nip.io/pv-api/v1/compras/recepcion/filas
 Content-Type: application/json
-X-API-Key: <la clave; está en ~/.partvision-backend.env del server>
+X-API-Key: <la clave; ver "La clave" más abajo>
 ```
+
+El cuerpo es **lo que devuelve la acción "Enumerar las filas de una tabla", sin tocar**.
+PartVision entiende los nombres de columna de la planilla y descarta los campos propios de
+Power Automate (`@odata.etag`, `ItemInternalId`):
 
 ```json
 {
-  "factura": "A-0001-00012345",
-  "fechaFactura": "2026-09-11",
-  "proveedor": "EGSA",
-  "estatus": "PENDIENTE",
-  "lineas": [
-    { "codigo": "0082-20-00", "descripcion": "PISTONES FIAT 600", "cantidad": 4 }
+  "value": [
+    { "Factura": "900004110", "F. Factura": "46258", "Codigo": "808449(05)", "Cantidad": "1",
+      "Descripcion": "AROS RECTIFICACION VOLKSWAGEN", "Estatus stock": "EN TRÁNSITO" },
+    { "Factura": "900000482", "F. Factura": "46259", "Codigo": "", "Cantidad": "",
+      "Descripcion": "CONTROLO:", "Estatus stock": "EN TRÁNSITO" }
   ]
 }
 ```
 
-Responde `201` con la compra creada (incluye su `id`).
-
-### Reglas de los campos
-
-| Campo | Obligatorio | Notas |
-|---|---|---|
-| `factura` | sí | máx. 50 caracteres |
-| `fechaFactura` | sí | `YYYY-MM-DD` |
-| `proveedor` | **sí, en la práctica** | exactamente `EGSA` o `Autopartes del Sur` (ver abajo) |
-| `estatus` | sí | si **contiene** "INGRESADA" → `INGRESADA`; **cualquier otra cosa** → `EN_TRANSITO` |
-| `lineas` | sí, al menos una | |
-| `lineas[].codigo` | no | máx. 100; es lo que se intenta matchear contra el catálogo |
-| `lineas[].descripcion` | no | máx. 500 |
-| `lineas[].cantidad` | sí | entero ≥ 1 |
-
-Ojo con `estatus`: no valida, cae a `EN_TRANSITO` por defecto. Un typo no da error,
-entra con el estado equivocado.
-
-### El proveedor decide a qué producto va el stock
-
-Hay unos **10.300 SKU cargados dos veces**, uno por proveedor: el `140000` existe como
-producto de EGSA y como producto de Autopartes del Sur. Cuando un código tiene más de un
-producto, la línea se asigna al del proveedor de la factura.
-
-- El valor tiene que ser **el nombre del catálogo**: `EGSA` o `Autopartes del Sur`. No
-  distingue mayúsculas ni espacios en los extremos, pero `ADS` no es `Autopartes del Sur`.
-- Si el proveedor falta o no coincide, esas líneas **quedan sin producto** en lugar de
-  asignarse a cualquiera de los dos. Antes se quedaba con el primero que devolviera la base,
-  y una factura de EGSA podía cargar stock en el producto de ADS sin que nadie lo notara.
-- Un código que existe para un solo proveedor se asigna igual, sea cual sea el de la factura:
-  es la única ficha de esa pieza.
-
-La respuesta trae `lineasMatcheadas` y `totalLineas`: si no coinciden, el flujo puede avisar.
-
-Las líneas cuyo `codigo` no matchea un producto entran igual, con `productoId: null`.
-No es un error: quedan para resolver a mano desde la pantalla de compras.
-
-### Respuestas
-
-| Código | Qué pasó |
+| Columna | Qué se hace con ella |
 |---|---|
-| 201 | creada |
-| 400 | falta un campo obligatorio o `cantidad < 1` |
-| 401 | `X-API-Key` ausente o incorrecta |
-| 409 | ese número de factura ya existe **con otro contenido** (ver abajo) |
-| 413 | el cuerpo supera 2 MB |
-| 429 | demasiadas solicitudes desde la misma IP (30 por minuto) |
-| 503 | el server no tiene `COMPRAS_API_KEY` configurada — el endpoint está apagado |
+| `Factura` | agrupa las filas. Se toma tal cual; es único en PartVision |
+| `F. Factura` | acepta `24/08/2026`, `2026-08-24`, `2026-08-24T00:00:00Z` o el número de serie de Excel (`46258`). Power Automate manda este último por defecto |
+| `Codigo` | se busca en el catálogo. **Vacío → `IMPORTADOS`** (ver abajo) |
+| `Cantidad` | entero ≥ 1. **Una fila sin cantidad se saltea**: son anotaciones como "CONTROLO:" |
+| `Descripcion` | informativa |
+| `Estatus stock` | `EN TRÁNSITO` o `INGRESADA` (ver "Estados") |
+| `Proveedor` | **todavía no existe en la planilla**; ver "El proveedor" |
 
-### Reenvíos y facturas repetidas
+También acepta los nombres propios (`factura`, `fechaFactura`, `codigo`, `cantidad`,
+`descripcion`, `estatus`, `proveedor`) dentro de `filas` en lugar de `value`.
 
-Reenviar **la misma factura con el mismo contenido** devuelve `201` con la compra que ya
-estaba: el reintento de Power Automate ante un timeout no duplica nada.
+### La respuesta
 
-Reenviar el mismo número **con contenido distinto** devuelve `409`. Antes devolvía `201` y
-descartaba los datos nuevos en silencio: si el cliente corregía una factura y el flujo la
-reenviaba, la corrección no entraba nunca y nadie se enteraba. Si el reenvío es a propósito,
-hay que corregir la compra desde el panel.
+Siempre `200` si la planilla se pudo leer, aunque alguna factura tenga problemas: las demás
+se guardan igual (cada factura va en su propia transacción).
 
-### Límites
+```json
+{
+  "filasRecibidas": 7, "filasIgnoradas": 1, "facturas": 4,
+  "creadas": 3, "actualizadas": 1, "sinCambios": 0, "conflictos": 0, "errores": 0,
+  "resultados": [
+    { "factura": "900004110", "resultado": "CREADA", "estado": "EN_TRANSITO",
+      "lineas": 3, "lineasMatcheadas": 3, "mensaje": "registrada" }
+  ],
+  "ignoradas": [
+    { "posicion": 7, "factura": "900000482", "descripcion": "CONTROLO:",
+      "motivo": "sin cantidad (o no es un entero positivo)" }
+  ]
+}
+```
 
-- **2 MB** de cuerpo y **5.000 líneas** por factura. Una factura real no se acerca; el tope
-  está porque la ruta es pública y el servidor parsea el JSON entero antes de mirar la clave.
-- **30 requests por minuto por IP**. Un flujo normal manda una factura cada varios segundos.
-  Para una carga inicial de facturas viejas, el flujo tiene que ir de a una (concurrencia 1
-  en el *Apply to each*) o esperar entre envíos: un 429 trae `Retry-After`.
+| `resultado` | Qué pasó |
+|---|---|
+| `CREADA` | no existía: se registró |
+| `ACTUALIZADA` | ya estaba y la planilla cambió algo que manda ella: el estado, o el proveedor que antes no tenía |
+| `SIN_CAMBIOS` | ya estaba igual |
+| `CONFLICTO` | ya estaba **con otras líneas, fecha o proveedor**; no se toca. O la planilla la volvió a EN TRÁNSITO después de cargar su stock |
+| `ERROR` | no se pudo armar: filas de la misma factura con fechas o proveedores distintos, o fecha ilegible |
+
+`conflictos` y `errores` son lo que alguien tiene que mirar: conviene que el flujo mande un
+mail cuando alguno sea mayor que cero.
+
+## Estados
+
+La planilla decide el estado. PartVision solo decide el último paso, que es lo único que la
+planilla no sabe: en qué ubicación queda cada cosa.
+
+| Planilla | PartVision | Qué se puede hacer en el panel |
+|---|---|---|
+| `EN TRÁNSITO` | **En tránsito** | nada: la mercadería no llegó |
+| `INGRESADA` | **Por ubicar** | asignar una ubicación a cada línea e ingresar al stock |
+| — | **Ingresada** | nada: el stock ya se cargó |
+
+- Recién cuando la planilla dice INGRESADA se puede cargar el stock. El panel no se adelanta.
+- La ubicación la elige una persona: el panel precarga la sugerida cuando el producto ya
+  tiene stock en algún lado. Solo ~400 de los 135.000 productos tienen stock cargado, así
+  que para la mayoría no hay cómo adivinarla.
+- Si las filas de una factura no dicen todas lo mismo, queda **en tránsito** hasta que todas
+  digan INGRESADA, y la respuesta lo avisa.
+- Si la planilla la vuelve a EN TRÁNSITO (una corrección), la compra la sigue, salvo que su
+  stock ya se haya cargado: eso vuelve como `CONFLICTO`.
+
+## Qué pasa con cada línea
+
+- **El código se busca en el catálogo.** Los 16 códigos de la muestra de la planilla existen;
+  12 existen **para los dos proveedores**.
+- **Código vacío → `IMPORTADOS`.** Son pedidos puntuales de clientes. La línea queda
+  registrada en la compra pero no tiene producto, así que no carga stock al ingresarla.
+- **Una línea sin producto** (código que no está, o repetido entre proveedores sin saber de
+  cuál es) se ve en el panel con "—" y la compra muestra `3/5` en ámbar.
+
+### El proveedor
+
+Hay unos **10.300 SKU cargados dos veces**, uno por proveedor. El proveedor de la factura es
+lo único que dice a cuál de los dos productos va el stock.
+
+- **La planilla todavía no tiene columna de proveedor.** Hasta que la tenga, las líneas con
+  código repetido quedan sin producto: en la muestra, 12 de 16. No conviene encender el flujo
+  antes.
+- Cuando la columna aparezca, las facturas que ya estaban **se completan solas** en el
+  siguiente envío (no chocan), y sus líneas repetidas se resuelven, salvo que el stock ya se
+  haya cargado.
+- `ADS` se traduce a `Autopartes del Sur`. Otros alias se configuran en el server con
+  `PARTVISION_COMPRAS_PROVEEDOR_ALIAS=ADS=Autopartes del Sur;OTRO=Nombre del catálogo`
+  (en `~/.partvision-backend.env`). Sin alias, se compara sin mayúsculas ni tildes.
+- Un código que existe para un solo proveedor se asigna igual, sea cual sea el de la factura.
 
 ## Armar el flujo
 
-1. **Trigger**: el que use el cliente (mail con adjunto, carpeta de SharePoint, botón).
-2. **Parsear la factura** hasta tener el array de líneas.
-3. **Acción HTTP**:
-   - Method: `POST`
+1. **Disparador**: una recurrencia (por ejemplo cada 15 minutos) o el mismo flujo que carga
+   la planilla, al terminar.
+2. **Enumerar las filas de una tabla** (Excel Online Business) sobre "Ingreso stock". El
+   formato de fecha puede quedar en el valor por defecto.
+3. **HTTP**:
+   - Método: `POST`
    - URI: la de arriba
-   - Headers: `Content-Type: application/json` y `X-API-Key: <clave>`
-   - Body: el JSON
+   - Encabezados: `Content-Type: application/json` y `X-API-Key: <clave>`
+   - Cuerpo: `body('Enumerar_las_filas_de_una_tabla')`, la salida completa del paso anterior
+4. **Aviso**: una condición sobre `conflictos` o `errores` mayor que cero que mande un mail.
+   También `Configurar ejecución posterior` para avisar si el HTTP falla (un 401 después de
+   rotar la clave es silencioso si nadie lo mira).
 
-Guardá la clave como **variable de entorno de Power Platform**, no escrita en la
-acción. Así rotarla no obliga a editar el flujo.
+Guardá la clave como **variable de entorno de Power Platform**, no escrita en la acción.
 
-4. **Manejo de error**: configurá `Configure run after` en fallo para que avise.
-   Un 401 después de una rotación es silencioso si nadie lo mira.
+### Qué filas mandar
+
+- **No mandes facturas anteriores a la puesta en marcha.** Su stock seguramente ya se cargó a
+  mano; si alguien las ingresara de nuevo desde el panel, quedaría contado dos veces.
+- Si la planilla nunca se vacía, cada envío crece. El tope es **5.000 filas** por envío: borrar
+  las filas de facturas ya ingresadas la mantiene chica.
+
+### Límites
+
+- **5.000 filas** y **2 MB** por envío. El tope existe porque la ruta es pública y el servidor
+  lee el cuerpo entero antes de mirar la clave.
+- **30 envíos por minuto por IP.** Con la planilla entera en un solo envío, sobra.
+
+## El endpoint de una factura
+
+Sigue disponible para quien arme el JSON de una factura con sus líneas. Usa las mismas reglas
+de estado, proveedor y reenvíos que el de la planilla, pero responde con códigos HTTP.
+
+```
+POST https://190.106.132.98.nip.io/pv-api/v1/compras/recepcion
+```
+
+```json
+{
+  "factura": "900004110",
+  "fechaFactura": "24/08/2026",
+  "proveedor": "EGSA",
+  "estatus": "EN TRÁNSITO",
+  "lineas": [ { "codigo": "808449(05)", "descripcion": "AROS RECTIFICACION", "cantidad": 1 } ]
+}
+```
+
+| Código | Qué pasó |
+|---|---|
+| 201 | registrada, actualizada o ya estaba igual |
+| 400 | falta un campo obligatorio o `cantidad < 1` |
+| 401 | `X-API-Key` ausente o incorrecta |
+| 409 | ese número ya existe con otro contenido |
+| 413 | el cuerpo supera 2 MB |
+| 422 | fecha ilegible |
+| 429 | demasiadas solicitudes desde la misma IP |
+| 503 | el server no tiene `COMPRAS_API_KEY` configurada: el endpoint está apagado |
 
 ## La clave
 
-Vive en `~/.partvision-backend.env` del server (chmod 600) y `redeploy.sh` la aplica
-como overlay al recrear el contenedor, así que sobrevive los deploys.
+Vive **solo** en `~/.partvision-backend.env` del server (chmod 600); `redeploy.sh` la aplica al
+recrear el contenedor. Para leerla al configurar el flujo:
 
-Para rotarla:
+```bash
+ssh partvision "grep COMPRAS_API_KEY ~/.partvision-backend.env"
+```
+
+Para rotarla (reemplaza solo esa línea; el archivo puede tener otras variables):
 
 ```bash
 ssh partvision
-umask 077 && printf 'COMPRAS_API_KEY=%s\n' "$(head -c 24 /dev/urandom | base64 | tr -d '=+/' | cut -c1-32)" > ~/.partvision-backend.env
+umask 077 && grep -v '^COMPRAS_API_KEY=' ~/.partvision-backend.env > ~/.pv-env.tmp; printf 'COMPRAS_API_KEY=%s\n' "$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40)" >> ~/.pv-env.tmp && mv ~/.pv-env.tmp ~/.partvision-backend.env
 cd ~/Documents/Repos/PartVision.app && ./redeploy.sh --no-build backend
 ```
 
-Después actualizá la variable de entorno en Power Platform. Entre los dos pasos el
-flujo recibe 401.
+Después actualizá la variable en Power Platform. Entre los dos pasos el flujo recibe 401.
 
-## Lo que NO existe
+## Lo que todavía no existe
 
-**Precios.** No hay endpoint para empujar precios desde Power Automate; hoy entran
-solo por la importación manual de Excel. Si el cliente lo pide, hay que diseñarlo
-reusando el cálculo de costo/margen de `PrecioImportService` en vez de rehacerlo.
+- **Pasar un `IMPORTADOS` al catálogo.** Pedido: un botón que liste esas líneas y permita darlas
+  de alta con un SKU propuesto que no choque con ningún otro, ubicarlas y cargarles stock.
+- **Precios desde Power Automate.** Hoy entran solo por la importación manual de Excel. Si se
+  pide, hay que reusar el cálculo de costo y margen de `PrecioImportService`.

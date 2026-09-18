@@ -281,7 +281,8 @@ export interface Compra {
   numeroFactura: string;
   fechaFactura: string;
   proveedor: string | null;
-  estado: 'EN_TRANSITO' | 'INGRESADA';
+  /** EN_TRANSITO y POR_UBICAR los decide la planilla del cliente; INGRESADA, el panel. */
+  estado: 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
   ubicacionIngresoId: number | null;
   ubicacionIngresoCodigo: string | null;
   totalLineas: number;

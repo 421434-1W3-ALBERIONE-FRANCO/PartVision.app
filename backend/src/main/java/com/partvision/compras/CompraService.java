@@ -4,6 +4,7 @@ import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
+import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
@@ -22,9 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -34,8 +32,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CompraService {
 
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-
     /** Separador al comparar lineas: un caracter de control que no aparece en los datos. */
     private static final String SEP = String.valueOf((char) 1);
 
@@ -44,67 +40,87 @@ public class CompraService {
     private final StockService stockService;
     private final StockRepository stockRepository;
     private final UbicacionService ubicacionService;
+    private final ProveedorResolver proveedores;
 
+    /** Una factura por request. Mismo criterio que las filas de la planilla, con errores HTTP. */
     @Transactional
     public CompraResponse registrarRecepcion(RecepcionCompraRequest request) {
-        LocalDate fecha = parseFecha(request.fechaFactura());
-        CompraEstado estado = parseEstado(request.estatus());
+        FacturaEntrante factura = new FacturaEntrante(
+                request.factura().trim(),
+                LectorSheet.fecha(request.fechaFactura()),
+                proveedores.resolver(request.proveedor()),
+                LectorSheet.dicenIngresada(request.estatus()) ? CompraEstado.POR_UBICAR : CompraEstado.EN_TRANSITO,
+                request.lineas().stream()
+                        .map(l -> new FacturaEntrante.Linea(
+                                LectorSheet.codigo(l.codigo()), LectorSheet.limpio(l.descripcion()), l.cantidad()))
+                        .toList());
 
-        Optional<Compra> existente = compraRepo.findByNumeroFactura(request.factura());
-        if (existente.isPresent()) {
-            // Reintento identico (Power Automate reintenta ante un timeout): idempotente.
-            if (mismoContenido(existente.get(), request, fecha)) {
-                log.info("Factura {} ya registrada con el mismo contenido, retornando existente",
-                        request.factura());
-                return CompraResponse.from(existente.get(), true);
-            }
-            // Mismo numero, contenido distinto. Devolver la vieja como si se hubiera
-            // guardado la nueva descartaba datos en silencio: o un reenvio corregido que
-            // nunca entraba, o alguien pisando un numero de factura a proposito.
-            log.warn("Factura {} ya existe con contenido distinto: se rechaza con 409",
-                    request.factura());
-            throw new DuplicateResourceException(
-                    "La factura " + request.factura() + " ya esta registrada con otro contenido");
+        ResultadoSincronizacion resultado = sincronizar(factura);
+        if (resultado.tipo() == Tipo.CONFLICTO) {
+            throw new DuplicateResourceException(resultado.mensaje());
         }
-
-        Compra compra = new Compra();
-        compra.setNumeroFactura(request.factura());
-        compra.setFechaFactura(fecha);
-        compra.setProveedor(request.proveedor());
-        compra.setEstado(estado);
-
-        Set<String> codigos = request.lineas().stream()
-                .map(l -> codigoODefault(l.codigo()).toUpperCase())
-                .collect(Collectors.toSet());
-
-        Map<String, List<Producto>> candidatosPorSku = productoRepo.findBySkuIn(codigos).stream()
-                .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase()));
-
-        for (RecepcionLineaRequest lineaReq : request.lineas()) {
-            String codigo = codigoODefault(lineaReq.codigo());
-            CompraLinea linea = new CompraLinea();
-            linea.setCodigo(codigo);
-            linea.setDescripcion(lineaReq.descripcion());
-            linea.setCantidad(lineaReq.cantidad());
-
-            Producto producto = elegirProducto(
-                    candidatosPorSku.getOrDefault(codigo.toUpperCase(), List.of()), request.proveedor());
-            if (producto != null) {
-                linea.setProducto(producto);
-            }
-
-            compra.addLinea(linea);
-        }
-
-        compra = compraRepo.save(compra);
-
-        int matcheadas = (int) compra.getLineas().stream().filter(l -> l.getProducto() != null).count();
-        log.info("Factura {} registrada: {} líneas, {} matcheadas, estado {}",
-                compra.getNumeroFactura(), compra.getLineas().size(), matcheadas, estado);
-
-        return CompraResponse.from(compra, true);
+        return CompraResponse.from(resultado.compra(), true);
     }
 
+    /**
+     * Registra la factura o la pone al dia con lo que dice la planilla. Se reenvia a menudo
+     * (el flujo relee la planilla), asi que recibirla igual no hace nada; lo que cambia es el
+     * estado cuando la planilla la pasa a INGRESADA, y el proveedor si antes no lo tenia.
+     *
+     * <p>Una factura con el mismo numero y otras lineas, fecha o proveedor no se pisa: queda
+     * como estaba y se informa el conflicto. Tampoco se vuelve a transito una compra cuyo
+     * stock ya se cargo.
+     */
+    @Transactional
+    public ResultadoSincronizacion sincronizar(FacturaEntrante factura) {
+        Optional<Compra> existente = compraRepo.findByNumeroFactura(factura.numero());
+        if (existente.isEmpty()) {
+            Compra compra = crear(factura);
+            log.info("Factura {} registrada: {} lineas, estado {}",
+                    compra.getNumeroFactura(), compra.getLineas().size(), compra.getEstado());
+            return resultado(Tipo.CREADA, compra, "registrada");
+        }
+
+        Compra compra = existente.get();
+        if (!mismoContenido(compra, factura)) {
+            log.warn("Factura {} ya existe con contenido distinto: no se modifica", factura.numero());
+            return resultado(Tipo.CONFLICTO, compra,
+                    "La factura " + factura.numero() + " ya esta registrada con otro contenido");
+        }
+        if (compra.getEstado() == CompraEstado.INGRESADA && factura.estado() == CompraEstado.EN_TRANSITO) {
+            return resultado(Tipo.CONFLICTO, compra,
+                    "La planilla la marca EN TRANSITO pero su stock ya se cargo en PartVision");
+        }
+
+        List<String> cambios = new ArrayList<>();
+        if (compra.getProveedor() == null && factura.proveedor() != null) {
+            // Llego antes de que la planilla tuviera proveedor: se completa. Con el proveedor
+            // se pueden resolver los SKU repetidos, salvo que el stock ya se haya cargado.
+            compra.setProveedor(factura.proveedor());
+            if (compra.getEstado() != CompraEstado.INGRESADA) {
+                asignarProductos(compra.getLineas(), factura.proveedor());
+            }
+            cambios.add("se completo el proveedor");
+        }
+        if (compra.getEstado() != CompraEstado.INGRESADA && compra.getEstado() != factura.estado()) {
+            compra.setEstado(factura.estado());
+            cambios.add(factura.estado() == CompraEstado.POR_UBICAR
+                    ? "llego: queda por ubicar"
+                    : "la planilla la volvio a EN TRANSITO");
+        }
+
+        if (cambios.isEmpty()) {
+            return resultado(Tipo.SIN_CAMBIOS, compra, "ya estaba registrada");
+        }
+        compra = compraRepo.save(compra);
+        log.info("Factura {} actualizada: {}", compra.getNumeroFactura(), cambios);
+        return resultado(Tipo.ACTUALIZADA, compra, String.join("; ", cambios));
+    }
+
+    /**
+     * Carga el stock de cada linea en la ubicacion elegida en el panel. Solo cuando la
+     * planilla ya la marco INGRESADA: es la planilla la que dice que la mercaderia llego.
+     */
     @Transactional
     public CompraResponse marcarIngresada(Long compraId, CambiarEstadoRequest request) {
         Compra compra = compraRepo.findWithLineasById(compraId)
@@ -112,6 +128,10 @@ public class CompraService {
 
         if (compra.getEstado() == CompraEstado.INGRESADA) {
             throw new BusinessException("La compra ya fue marcada como ingresada");
+        }
+        if (compra.getEstado() == CompraEstado.EN_TRANSITO) {
+            throw new BusinessException(
+                    "La planilla todavia la marca EN TRANSITO: se puede ingresar cuando figure INGRESADA");
         }
 
         Map<Long, Long> ubicacionPorLinea = request.asignaciones().stream()
@@ -170,6 +190,42 @@ public class CompraService {
         return CompraResponse.from(compra, true, stockSugerido);
     }
 
+    private Compra crear(FacturaEntrante factura) {
+        Compra compra = new Compra();
+        compra.setNumeroFactura(factura.numero());
+        compra.setFechaFactura(factura.fecha());
+        compra.setProveedor(factura.proveedor());
+        compra.setEstado(factura.estado());
+        for (FacturaEntrante.Linea l : factura.lineas()) {
+            CompraLinea linea = new CompraLinea();
+            linea.setCodigo(l.codigo());
+            linea.setDescripcion(l.descripcion());
+            linea.setCantidad(l.cantidad());
+            compra.addLinea(linea);
+        }
+        asignarProductos(compra.getLineas(), factura.proveedor());
+        return compraRepo.save(compra);
+    }
+
+    private void asignarProductos(List<CompraLinea> lineas, String proveedor) {
+        Set<String> codigos = lineas.stream()
+                .map(l -> Objects.toString(l.getCodigo(), "").toUpperCase())
+                .collect(Collectors.toSet());
+
+        Map<String, List<Producto>> candidatosPorSku = productoRepo.findBySkuIn(codigos).stream()
+                .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase()));
+
+        for (CompraLinea linea : lineas) {
+            String codigo = Objects.toString(linea.getCodigo(), "").toUpperCase();
+            linea.setProducto(elegirProducto(candidatosPorSku.getOrDefault(codigo, List.of()), proveedor));
+        }
+    }
+
+    private ResultadoSincronizacion resultado(Tipo tipo, Compra compra, String mensaje) {
+        int matcheadas = (int) compra.getLineas().stream().filter(l -> l.getProducto() != null).count();
+        return new ResultadoSincronizacion(tipo, compra, compra.getLineas().size(), matcheadas, mensaje);
+    }
+
     private Map<Long, CompraResponse.UbicacionSugerida> calcularSugerencias(Compra compra) {
         List<Long> productoIds = compra.getLineas().stream()
                 .filter(l -> l.getProducto() != null)
@@ -207,7 +263,8 @@ public class CompraService {
         if (candidatos.size() == 1) {
             return candidatos.get(0);
         }
-        if (candidatos.isEmpty() || proveedor == null || proveedor.isBlank()) {
+        // Un proveedor en blanco ya llega como null: lo resuelve ProveedorResolver.
+        if (candidatos.isEmpty() || proveedor == null) {
             return null;
         }
         List<Producto> delProveedor = candidatos.stream()
@@ -217,53 +274,31 @@ public class CompraService {
         return delProveedor.size() == 1 ? delProveedor.get(0) : null;
     }
 
-    private static String codigoODefault(String codigo) {
-        return (codigo == null || codigo.isBlank()) ? "IMPORTADOS" : codigo.trim();
-    }
-
     /**
-     * Compara una factura ya guardada contra lo que llega, para distinguir un reintento
-     * legitimo de un intento de pisarla. El orden de las lineas no cuenta.
+     * Compara una factura guardada contra lo que llega, para distinguir un reenvio de un
+     * intento de pisarla. No cuenta el estado (lo cambia la planilla con el tiempo), ni el
+     * orden de las lineas, ni un proveedor que falta de alguno de los dos lados.
      */
-    private boolean mismoContenido(Compra guardada, RecepcionCompraRequest request, LocalDate fecha) {
-        if (!Objects.equals(guardada.getFechaFactura(), fecha)) return false;
-        if (!Objects.equals(guardada.getProveedor(), request.proveedor())) return false;
-        if (guardada.getEstado() != parseEstado(request.estatus())) return false;
-        if (guardada.getLineas().size() != request.lineas().size()) return false;
+    private boolean mismoContenido(Compra guardada, FacturaEntrante factura) {
+        if (!Objects.equals(guardada.getFechaFactura(), factura.fecha())) return false;
+        if (guardada.getProveedor() != null && factura.proveedor() != null
+                && !guardada.getProveedor().equalsIgnoreCase(factura.proveedor())) return false;
+        if (guardada.getLineas().size() != factura.lineas().size()) return false;
 
         List<String> deLaBase = guardada.getLineas().stream()
                 .map(l -> huellaLinea(l.getCodigo(), l.getDescripcion(), l.getCantidad()))
                 .sorted()
                 .toList();
-        List<String> delRequest = request.lineas().stream()
-                .map(l -> huellaLinea(codigoODefault(l.codigo()), l.descripcion(), l.cantidad()))
+        List<String> recibidas = factura.lineas().stream()
+                .map(l -> huellaLinea(l.codigo(), l.descripcion(), l.cantidad()))
                 .sorted()
                 .toList();
-        return deLaBase.equals(delRequest);
+        return deLaBase.equals(recibidas);
     }
 
     private String huellaLinea(String codigo, String descripcion, int cantidad) {
         return (codigo == null ? "" : codigo.toUpperCase())
-                + SEP + (descripcion == null ? "" : descripcion)
+                + SEP + (descripcion == null ? "" : descripcion.trim())
                 + SEP + cantidad;
-    }
-
-    private LocalDate parseFecha(String fecha) {
-        try {
-            return LocalDate.parse(fecha, FMT);
-        } catch (DateTimeParseException e) {
-            try {
-                return LocalDate.parse(fecha);
-            } catch (DateTimeParseException e2) {
-                throw new BusinessException("Formato de fecha inválido: " + fecha + ". Usar dd/MM/yyyy");
-            }
-        }
-    }
-
-    private CompraEstado parseEstado(String estatus) {
-        if (estatus == null) return CompraEstado.EN_TRANSITO;
-        String normalizado = estatus.toUpperCase().trim();
-        if (normalizado.contains("INGRESADA")) return CompraEstado.INGRESADA;
-        return CompraEstado.EN_TRANSITO;
     }
 }

@@ -4,6 +4,8 @@ import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.dto.CambiarEstadoRequest;
 import com.partvision.compras.dto.CompraResponse;
 import com.partvision.compras.dto.RecepcionCompraRequest;
+import com.partvision.compras.dto.RecepcionFilasRequest;
+import com.partvision.compras.dto.RecepcionFilasResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +28,7 @@ import java.util.Map;
 public class CompraController {
 
     private final CompraService compraService;
+    private final RecepcionFilasService recepcionFilasService;
 
     @Value("${partvision.compras.api-key:}")
     private String apiKey;
@@ -38,6 +41,19 @@ public class CompraController {
         validarApiKey(key);
         CompraResponse response = compraService.registrarRecepcion(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * La planilla "Ingreso stock" entera, tal como la lee Power Automate. Devuelve 200 con
+     * el resultado de cada factura aunque alguna tenga conflicto o error.
+     */
+    @PostMapping("/recepcion/filas")
+    public RecepcionFilasResponse recepcionFilas(
+            @RequestHeader(value = "X-API-Key", required = false) String key,
+            @Valid @RequestBody RecepcionFilasRequest request) {
+
+        validarApiKey(key);
+        return recepcionFilasService.recibir(request.filas());
     }
 
     @GetMapping

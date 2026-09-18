@@ -60,6 +60,8 @@ partvision:
       cache-ttl-minutes: ${PARTVISION_SEARCH_AI_CACHE_TTL_MINUTES:720}
   compras:
     api-key: ${COMPRAS_API_KEY:}
+    # Como aparece el proveedor en la planilla -> como esta en el catalogo. CLAVE=Nombre;OTRA=Otro
+    proveedor-alias: ${PARTVISION_COMPRAS_PROVEEDOR_ALIAS:ADS=Autopartes del Sur}
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME:noreply@partvision.com}}
     base-url: ${APP_BASE_URL:http://localhost:4200}

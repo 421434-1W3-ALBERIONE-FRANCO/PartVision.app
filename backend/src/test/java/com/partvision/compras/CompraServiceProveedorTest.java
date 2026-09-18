@@ -43,7 +43,8 @@ class CompraServiceProveedorTest {
 
     @BeforeEach
     void setUp() {
-        service = new CompraService(compraRepo, productoRepo, stockService, stockRepository, ubicacionService);
+        service = new CompraService(compraRepo, productoRepo, stockService, stockRepository, ubicacionService,
+                new ProveedorResolver("ADS=Autopartes del Sur"));
         when(compraRepo.findByNumeroFactura(any())).thenReturn(Optional.empty());
         when(compraRepo.save(any(Compra.class))).thenAnswer(inv -> {
             Compra c = inv.getArgument(0);
@@ -92,9 +93,22 @@ class CompraServiceProveedorTest {
         assertThat(resp.lineas().get(0).productoId()).isEqualTo(279402L);
     }
 
+    /** La planilla puede decir "ADS": el alias lo lleva al nombre del catalogo. */
+    @Test
+    void aliasDelProveedor_encuentraAlProductoDelCatalogo() {
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(
+                producto(279402L, "140000", "Autopartes del Sur"),
+                producto(245649L, "140000", "EGSA")));
+
+        CompraResponse resp = recibir("ADS", "140000");
+
+        assertThat(resp.lineas().get(0).productoId()).isEqualTo(279402L);
+        assertThat(resp.proveedor()).isEqualTo("Autopartes del Sur");
+    }
+
     /**
-     * Si el proveedor de la factura no coincide con ninguno ("ADS" en vez del nombre del
-     * catalogo), no se adivina: antes el stock iba al primero que devolviera la base.
+     * Un proveedor que no esta en el catalogo ni tiene alias no se adivina: antes el stock iba
+     * al primero que devolviera la base.
      */
     @Test
     void proveedorQueNoCoincide_dejaLaLineaSinProducto() {
@@ -102,7 +116,7 @@ class CompraServiceProveedorTest {
                 producto(279402L, "140000", "Autopartes del Sur"),
                 producto(245649L, "140000", "EGSA")));
 
-        CompraResponse resp = recibir("ADS", "140000");
+        CompraResponse resp = recibir("Repuestos del Norte", "140000");
 
         assertThat(resp.lineas().get(0).productoId()).isNull();
         assertThat(resp.lineasMatcheadas()).isZero();

@@ -12,6 +12,12 @@ import java.time.Duration;
 @Configuration
 public class RateLimitConfig {
 
+    /** Las dos puertas publicas de compras: una factura, o la planilla entera. */
+    static final String[] RUTAS_RECEPCION = {
+            "/api/v1/compras/recepcion",
+            "/api/v1/compras/recepcion/filas"
+    };
+
     @Bean
     public FilterRegistrationBean<IpRateLimitFilter> loginRateLimitFilter(
             @Value("${security.rate-limit.login.capacity:5}") int capacity,
@@ -55,7 +61,7 @@ public class RateLimitConfig {
                 "Demasiadas solicitudes de recepcion. Espera un momento e intenta de nuevo.");
 
         FilterRegistrationBean<IpRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/api/v1/compras/recepcion");
+        registration.addUrlPatterns(RUTAS_RECEPCION);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 2);
         return registration;
     }
@@ -72,7 +78,7 @@ public class RateLimitConfig {
         RequestSizeLimitFilter filter = new RequestSizeLimitFilter(maxBytes, objectMapper);
 
         FilterRegistrationBean<RequestSizeLimitFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/api/v1/compras/recepcion");
+        registration.addUrlPatterns(RUTAS_RECEPCION);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }

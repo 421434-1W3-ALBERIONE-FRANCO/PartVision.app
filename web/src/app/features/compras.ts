@@ -6,7 +6,7 @@ import { Compra, CompraLinea, Ubicacion } from '../core/models';
 import { CompraService, LineaUbicacionAsignacion } from '../core/compra.service';
 import { UbicacionService } from '../core/ubicacion.service';
 
-type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
+type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
 
 @Component({
   selector: 'app-compras',
@@ -26,7 +26,8 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">
-          Facturas de compra recibidas desde Power Automate. Marcá como ingresada para cargar stock automáticamente.
+          Facturas de compra que llegan de la planilla del cliente. Cuando la planilla las marca INGRESADA,
+          quedan por ubicar: asigná una ubicación a cada línea para cargar el stock.
         </p>
       </div>
 
@@ -46,6 +47,12 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
             ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 transition-all cursor-pointer whitespace-nowrap'
             : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
           En Tránsito
+        </button>
+        <button (click)="cambiarTab('POR_UBICAR')"
+          [class]="tab() === 'POR_UBICAR'
+            ? 'px-5 py-2 rounded-lg text-sm font-semibold bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 transition-all cursor-pointer whitespace-nowrap'
+            : 'px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all cursor-pointer whitespace-nowrap'">
+          Por ubicar
         </button>
         <button (click)="cambiarTab('INGRESADA')"
           [class]="tab() === 'INGRESADA'
@@ -92,6 +99,11 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                         <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400">
                           <span class="w-2 h-2 rounded-full bg-amber-400"></span>
                           Tránsito
+                        </span>
+                      } @else if (c.estado === 'POR_UBICAR') {
+                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-cyan">
+                          <span class="w-2 h-2 rounded-full bg-neon-cyan"></span>
+                          Por ubicar
                         </span>
                       } @else {
                         <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-green">
@@ -156,6 +168,10 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                     <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full">
                       <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>En Tránsito
                     </span>
+                  } @else if (detalleCompra()!.estado === 'POR_UBICAR') {
+                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-neon-cyan bg-neon-cyan/10 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-neon-cyan"></span>Por ubicar
+                    </span>
                   } @else {
                     <span class="inline-flex items-center gap-1 text-xs font-semibold text-neon-green bg-neon-green/10 px-2 py-0.5 rounded-full">
                       <span class="w-1.5 h-1.5 rounded-full bg-neon-green"></span>Ingresada
@@ -187,6 +203,15 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
               }
 
               @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+                <div class="mb-4 flex items-center gap-2 text-xs text-amber-400 bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-2.5">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>La planilla todavía la marca EN TRÁNSITO. Se va a poder ubicar e ingresar al stock cuando figure INGRESADA.</span>
+                </div>
+              }
+
+              @if (detalleCompra()!.estado === 'POR_UBICAR') {
                 <!-- Bulk assign -->
                 <div class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-dark-surface/40 border border-dark-border rounded-xl px-4 py-3">
                   <span class="text-xs text-gray-400 shrink-0">Asignar a todas:</span>
@@ -233,7 +258,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                           }
                         </td>
                         <td class="px-3 py-2">
-                          @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+                          @if (detalleCompra()!.estado === 'POR_UBICAR') {
                             <select [value]="ubicacionPorLinea[l.id] || ''"
                               (change)="setUbicacionLinea(l.id, $event)"
                               class="w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border rounded-lg text-xs focus:outline-none focus:border-neon-cyan"
@@ -274,7 +299,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
             </div>
 
             <!-- Footer modal: acción de ingreso -->
-            @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+            @if (detalleCompra()!.estado === 'POR_UBICAR') {
               <div class="p-5 border-t border-dark-border shrink-0">
                 @if (errorIngreso()) {
                   <div class="mb-3 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
@@ -296,7 +321,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'INGRESADA';
                         Cargando stock...
                       </span>
                     } @else {
-                      Marcar como Ingresada
+                      Ingresar al stock
                     }
                   </button>
                 </div>
@@ -429,14 +454,14 @@ export class Compras implements OnInit {
         this.cargar();
       },
       error: (err) => {
-        this.errorIngreso.set(err.error?.message || err.error?.error || 'Error al marcar como ingresada');
+        this.errorIngreso.set(err.error?.message || err.error?.error || 'No se pudo ingresar al stock');
         this.ingresando.set(false);
       },
     });
   }
 
   private inicializarUbicaciones(compra: Compra): void {
-    if (compra.estado !== 'EN_TRANSITO') return;
+    if (compra.estado !== 'POR_UBICAR') return;
     this.ubicacionPorLinea = {};
     for (const l of compra.lineas) {
       if (l.ubicacionSugeridaId) {
