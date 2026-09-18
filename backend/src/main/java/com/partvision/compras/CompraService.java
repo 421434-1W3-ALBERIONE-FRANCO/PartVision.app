@@ -77,12 +77,8 @@ public class CompraService {
                 .map(l -> codigoODefault(l.codigo()).toUpperCase())
                 .collect(Collectors.toSet());
 
-        Map<String, Producto> productosPorSku = productoRepo.findBySkuIn(codigos).stream()
-                .collect(Collectors.toMap(
-                        p -> p.getSku().toUpperCase(),
-                        Function.identity(),
-                        (a, b) -> a
-                ));
+        Map<String, List<Producto>> candidatosPorSku = productoRepo.findBySkuIn(codigos).stream()
+                .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase()));
 
         for (RecepcionLineaRequest lineaReq : request.lineas()) {
             String codigo = codigoODefault(lineaReq.codigo());
@@ -91,7 +87,8 @@ public class CompraService {
             linea.setDescripcion(lineaReq.descripcion());
             linea.setCantidad(lineaReq.cantidad());
 
-            Producto producto = productosPorSku.get(codigo.toUpperCase());
+            Producto producto = elegirProducto(
+                    candidatosPorSku.getOrDefault(codigo.toUpperCase(), List.of()), request.proveedor());
             if (producto != null) {
                 linea.setProducto(producto);
             }
@@ -197,6 +194,27 @@ public class CompraService {
                                     best.getUbicacion().getCodigo())));
         }
         return result;
+    }
+
+    /**
+     * Un mismo SKU puede estar cargado una vez por proveedor (hay ~10.300 repetidos entre
+     * EGSA y Autopartes del Sur). Con un solo candidato no hay nada que decidir. Con varios,
+     * se queda con el del proveedor de la factura; si ninguno o mas de uno coinciden, la
+     * linea queda sin producto: el panel la muestra sin match y la resuelve una persona.
+     * Adivinar cargaria el stock en el producto de otro proveedor sin que nadie lo note.
+     */
+    private static Producto elegirProducto(List<Producto> candidatos, String proveedor) {
+        if (candidatos.size() == 1) {
+            return candidatos.get(0);
+        }
+        if (candidatos.isEmpty() || proveedor == null || proveedor.isBlank()) {
+            return null;
+        }
+        List<Producto> delProveedor = candidatos.stream()
+                .filter(p -> p.getProveedor() != null
+                        && p.getProveedor().trim().equalsIgnoreCase(proveedor.trim()))
+                .toList();
+        return delProveedor.size() == 1 ? delProveedor.get(0) : null;
     }
 
     private static String codigoODefault(String codigo) {

@@ -31,7 +31,7 @@ Responde `201` con la compra creada (incluye su `id`).
 |---|---|---|
 | `factura` | sí | máx. 50 caracteres |
 | `fechaFactura` | sí | `YYYY-MM-DD` |
-| `proveedor` | no | texto libre |
+| `proveedor` | **sí, en la práctica** | exactamente `EGSA` o `Autopartes del Sur` (ver abajo) |
 | `estatus` | sí | si **contiene** "INGRESADA" → `INGRESADA`; **cualquier otra cosa** → `EN_TRANSITO` |
 | `lineas` | sí, al menos una | |
 | `lineas[].codigo` | no | máx. 100; es lo que se intenta matchear contra el catálogo |
@@ -40,6 +40,22 @@ Responde `201` con la compra creada (incluye su `id`).
 
 Ojo con `estatus`: no valida, cae a `EN_TRANSITO` por defecto. Un typo no da error,
 entra con el estado equivocado.
+
+### El proveedor decide a qué producto va el stock
+
+Hay unos **10.300 SKU cargados dos veces**, uno por proveedor: el `140000` existe como
+producto de EGSA y como producto de Autopartes del Sur. Cuando un código tiene más de un
+producto, la línea se asigna al del proveedor de la factura.
+
+- El valor tiene que ser **el nombre del catálogo**: `EGSA` o `Autopartes del Sur`. No
+  distingue mayúsculas ni espacios en los extremos, pero `ADS` no es `Autopartes del Sur`.
+- Si el proveedor falta o no coincide, esas líneas **quedan sin producto** en lugar de
+  asignarse a cualquiera de los dos. Antes se quedaba con el primero que devolviera la base,
+  y una factura de EGSA podía cargar stock en el producto de ADS sin que nadie lo notara.
+- Un código que existe para un solo proveedor se asigna igual, sea cual sea el de la factura:
+  es la única ficha de esa pieza.
+
+La respuesta trae `lineasMatcheadas` y `totalLineas`: si no coinciden, el flujo puede avisar.
 
 Las líneas cuyo `codigo` no matchea un producto entran igual, con `productoId: null`.
 No es un error: quedan para resolver a mano desde la pantalla de compras.
@@ -71,6 +87,8 @@ hay que corregir la compra desde el panel.
 - **2 MB** de cuerpo y **5.000 líneas** por factura. Una factura real no se acerca; el tope
   está porque la ruta es pública y el servidor parsea el JSON entero antes de mirar la clave.
 - **30 requests por minuto por IP**. Un flujo normal manda una factura cada varios segundos.
+  Para una carga inicial de facturas viejas, el flujo tiene que ir de a una (concurrencia 1
+  en el *Apply to each*) o esperar entre envíos: un 429 trae `Retry-After`.
 
 ## Armar el flujo
 

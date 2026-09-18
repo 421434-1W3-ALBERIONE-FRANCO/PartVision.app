@@ -199,28 +199,6 @@ class CompraServiceTest {
         verify(compraRepo, never()).findByNumeroFactura(any());
     }
 
-    /** Dos productos con el mismo SKU en distinta caja: se queda con el primero, no explota. */
-    @Test
-    void registrarRecepcion_skuDuplicadoEnCatalogo_tomaElPrimero() {
-        var request = new RecepcionCompraRequest("FAC-SKU", "01/01/2025", "Prov", "EN_TRANSITO",
-                List.of(new RecepcionLineaRequest("sku-x", "desc", 1)));
-
-        when(compraRepo.findByNumeroFactura("FAC-SKU")).thenReturn(Optional.empty());
-        when(productoRepo.findBySkuIn(any()))
-                .thenReturn(List.of(buildProducto(1L, "SKU-X"), buildProducto(2L, "sku-x")));
-        when(compraRepo.save(any(Compra.class))).thenAnswer(inv -> {
-            Compra c = inv.getArgument(0);
-            c.setId(11L);
-            c.setCreatedAt(Instant.now());
-            return c;
-        });
-
-        CompraResponse resp = service.registrarRecepcion(request);
-
-        assertThat(resp.lineasMatcheadas()).isEqualTo(1);
-        assertThat(resp.lineas().get(0).productoId()).isEqualTo(1L);
-    }
-
     /** Lineas viejas sin codigo ni descripcion: la comparacion no tiene que tirar NPE. */
     @Test
     void registrarRecepcion_lineaGuardadaConCamposNulos_comparaSinRomper() {
