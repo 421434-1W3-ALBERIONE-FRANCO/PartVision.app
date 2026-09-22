@@ -168,6 +168,31 @@ class GlobalExceptionHandlerUnitTest {
         assertThat(response.getBody().message()).isEqualTo("Error interno del servidor");
     }
 
+    /** Con causas anidadas busca la raiz para el log, pero al cliente le sigue diciendo lo mismo. */
+    @Test
+    void excepcionConCausaAnidada_devuelveElGenerico() {
+        ResponseEntity<ApiError> response = handler.handleUnexpected(
+                new IllegalStateException("envoltorio",
+                        new IllegalArgumentException("causa raiz")), request());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message()).isEqualTo("Error interno del servidor");
+    }
+
+    /** El cuerpo ausente o ilegible es culpa del que llama: 400, no 500. */
+    @Test
+    void cuerpoIlegible_devuelve400() {
+        ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(
+                new org.springframework.http.converter.HttpMessageNotReadableException(
+                        "Required request body is missing", (org.springframework.http.HttpInputMessage) null),
+                request());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message()).contains("cuerpo del pedido");
+    }
+
     /** Un ResponseStatusException tiene que conservar SU status, no degradar a 500. */
     @Test
     void errorResponse_conservaElStatusYElDetalle() {

@@ -91,6 +91,21 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, msg, request, null);
     }
 
+    /**
+     * El cuerpo falta o no es el JSON esperado. Caia en el handler generico y salia 500:
+     * ademas de ser mentira (el error es del que llama), un 5xx hace que Power Automate
+     * reintente cuatro veces un pedido que nunca va a funcionar.
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleCuerpoIlegible(
+            org.springframework.http.converter.HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
+        log.warn("Cuerpo ilegible en {}: {}", request.getRequestURI(),
+                ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.BAD_REQUEST,
+                "Falta el cuerpo del pedido o no es un JSON que se pueda leer", request, null);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         List<ApiError.FieldValidationError> details = ex.getBindingResult().getFieldErrors().stream()

@@ -119,6 +119,43 @@ class CompraControllerFilasTest {
         verify(recepcionFilasService, never()).recibir(any());
     }
 
+    /** Lo que mandaba el flujo del cliente: Power Automate reintenta 4 veces si damos 5xx. */
+    @Test
+    void sinCuerpo_devuelve400YNo500() throws Exception {
+        mvc.perform(post(URL).header("X-API-Key", "clave-secreta").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("cuerpo")));
+
+        verify(recepcionFilasService, never()).recibir(any());
+    }
+
+    @Test
+    void jsonRoto_devuelve400() throws Exception {
+        mvc.perform(post(URL).header("X-API-Key", "clave-secreta")
+                        .contentType(MediaType.APPLICATION_JSON).content("{roto"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** Si en el cuerpo se inserta solo el contenido dinamico, llega el array suelto. */
+    @Test
+    void soloElArrayDeFilas_tambienSeAcepta() throws Exception {
+        when(recepcionFilasService.recibir(any())).thenReturn(respuesta());
+
+        mvc.perform(post(URL)
+                        .header("X-API-Key", "clave-secreta")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                [{"Factura": "900004110", "F. Factura": "46258", "Codigo": "X",
+                                  "Cantidad": "1", "Estatus stock": "EN TRÁNSITO"}]
+                                """))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<FilaSheetRequest>> captor = ArgumentCaptor.forClass(List.class);
+        verify(recepcionFilasService).recibir(captor.capture());
+        assertThat(captor.getValue()).hasSize(1);
+    }
+
     @Test
     void sinFilas_devuelve400() throws Exception {
         mvc.perform(post(URL)
