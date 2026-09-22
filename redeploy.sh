@@ -138,5 +138,13 @@ case "$TARGET" in
   all)     deploy_backend; deploy_web ;;
 esac
 
+# Cada build deja sin etiqueta la imagen del deploy anterior: ~900 MB por vez. Sin esto el
+# disco del VPS se llena, y lo comparte NexVia. Solo borra huerfanas viejas, nunca imagenes
+# en uso ni las base (ver limpiar-imagenes.sh). Si la limpieza falla, el deploy ya esta hecho.
+if [ -x "$REPO_DIR/limpiar-imagenes.sh" ]; then
+  log "Limpiando imagenes viejas"
+  "$REPO_DIR/limpiar-imagenes.sh" || true
+fi
+
 log "Estado final"
 docker ps --filter name=partvision --format 'table {{.Names}}\t{{.Status}}'
