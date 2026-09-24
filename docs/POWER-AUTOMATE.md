@@ -104,9 +104,12 @@ planilla no sabe: en qué ubicación queda cada cosa.
 
 - **El código se busca en el catálogo.** Los 16 códigos de la muestra de la planilla existen;
   12 existen **para los dos proveedores**.
-- **Código vacío → `IMPORTADOS`.** Son pedidos puntuales de clientes. La línea queda
-  registrada en la compra pero no tiene producto, así que no carga stock al ingresarla,
-  salvo que se la sume al catálogo (ver "Importados").
+- **Sin código propio → `IMPORTADOS`.** Son pedidos puntuales de clientes. Cuenta la celda
+  vacía y también la palabra "Importado" o "Importados" escrita en la columna, que es lo que
+  usa la planilla en la práctica (76 de 228 líneas en el primer envío real). Un código que
+  *empieza* con esa palabra, como `IMPORTADO-4512`, se respeta: cuenta la palabra sola.
+  La línea queda registrada en la compra pero no tiene producto, así que no carga stock al
+  ingresarla, salvo que se la sume al catálogo (ver "Importados").
 - **Una línea sin producto** (código que no está, o repetido entre proveedores sin saber de
   cuál es) se ve en el panel con "—" y la compra muestra `3/5` en ámbar.
 
@@ -115,11 +118,11 @@ planilla no sabe: en qué ubicación queda cada cosa.
 Hay unos **10.300 SKU cargados dos veces**, uno por proveedor. El proveedor de la factura es
 lo único que dice a cuál de los dos productos va el stock.
 
-- **La planilla todavía no tiene columna de proveedor.** Hasta que la tenga, las líneas con
-  código repetido quedan sin producto: en la muestra, 12 de 16. No conviene encender el flujo
-  antes.
-- Cuando la columna aparezca, las facturas que ya estaban **se completan solas** en el
-  siguiente envío (no chocan), y sus líneas repetidas se resuelven, salvo que el stock ya se
+- **La planilla ya trae la columna Proveedor** (desde el 2026-09-21), con el nombre exacto del
+  catálogo. En el primer envío real, 145 de 228 líneas quedaron vinculadas al producto del
+  proveedor correcto.
+- Si una factura llegara sin proveedor, **se completa sola** en el siguiente envío cuando la
+  planilla lo traiga (no choca), y sus líneas repetidas se resuelven, salvo que el stock ya se
   haya cargado.
 - `ADS` se traduce a `Autopartes del Sur`. Otros alias se configuran en el server con
   `PARTVISION_COMPRAS_PROVEEDOR_ALIAS=ADS=Autopartes del Sur;OTRO=Nombre del catálogo`
