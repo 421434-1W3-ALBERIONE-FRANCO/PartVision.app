@@ -180,7 +180,11 @@ Automate que no insista.
 El conector de Excel escapa los caracteres que no puede usar en un identificador, y manda
 `F_x002e_ Factura` donde la planilla dice "F. Factura". El backend deshace ese escape antes de
 leer la fila, así que las columnas se pueden nombrar con puntos o acentos sin romper nada.
-Hasta el 2026-09-24 no lo hacía, y la fecha de todas las facturas quedaba vacía en silencio.
+
+Hasta el 2026-09-24 no lo hacía. La columna no coincidía con ninguna conocida, así que la fila
+quedaba sin fecha y **cada factura volvía como `ERROR: "Falta la fecha de la factura"`, sin
+crearse ninguna** — un 200 con `creadas: 0` y `errores: N`. Si alguna vez aparece esa respuesta,
+la causa es una columna que el backend no reconoce, no un problema de la fecha en sí.
 
 ## El endpoint de una factura
 
