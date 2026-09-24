@@ -95,15 +95,65 @@ public class GlobalExceptionHandler {
      * El cuerpo falta o no es el JSON esperado. Caia en el handler generico y salia 500:
      * ademas de ser mentira (el error es del que llama), un 5xx hace que Power Automate
      * reintente cuatro veces un pedido que nunca va a funcionar.
+     *
+     * <p>Separa las dos causas a proposito. El 2026-09-24 el flujo del cliente mandaba el pedido
+     * sin cuerpo mientras Power Automate mostraba el cuerpo en "Entradas": con un unico mensaje
+     * para las dos causas, la pantalla del flujo no alcanzaba para saber si el JSON venia mal o
+     * si directamente no venia, y hubo que leer los logs del servidor para distinguirlo. Cuando
+     * falta, el mensaje describe COMO llego el pedido —cabeceras de transporte, que son del que
+     * llama, no internas nuestras—, que es lo unico que permite encontrar la causa desde afuera.
      */
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleCuerpoIlegible(
             org.springframework.http.converter.HttpMessageNotReadableException ex,
             HttpServletRequest request) {
-        log.warn("Cuerpo ilegible en {}: {}", request.getRequestURI(),
-                ex.getMostSpecificCause().getMessage());
-        return build(HttpStatus.BAD_REQUEST,
-                "Falta el cuerpo del pedido o no es un JSON que se pueda leer", request, null);
+        String causa = ex.getMostSpecificCause().getMessage();
+        if (causa == null || !causa.startsWith(SIN_CUERPO)) {
+            log.warn("Cuerpo ilegible en {}: {}", request.getRequestURI(), causa);
+            return build(HttpStatus.BAD_REQUEST,
+                    "El cuerpo del pedido no es un JSON que se pueda leer", request, null);
+        }
+        String transporte = comoLlego(request);
+        log.warn("Pedido sin cuerpo en {} ({})", request.getRequestURI(), transporte);
+        String mensaje = "El pedido llego sin cuerpo (" + transporte + ")";
+        if (sanear(request.getHeader(TRANSFERENCIA_FRAGMENTADA)) != null) {
+            mensaje += ". El flujo esta mandando el cuerpo fragmentado: desactiva"
+                    + " la fragmentacion en la configuracion de la accion HTTP";
+        }
+        return build(HttpStatus.BAD_REQUEST, mensaje, request, null);
+    }
+
+    /** Lo que Spring dice cuando el stream del pedido venia vacio. */
+    private static final String SIN_CUERPO = "Required request body is missing";
+
+    /** Con esta cabecera Power Automate anuncia que el cuerpo va aparte, en pedidos sucesivos. */
+    private static final String TRANSFERENCIA_FRAGMENTADA = "x-ms-transfer-mode";
+
+    /**
+     * Las cabeceras de transporte del pedido. Vienen del que llama, asi que se recortan y se
+     * dejan solo caracteres imprimibles antes de devolverlas.
+     */
+    private String comoLlego(HttpServletRequest request) {
+        StringBuilder detalle = new StringBuilder("Content-Length: ")
+                .append(request.getContentLengthLong());
+        for (String nombre : List.of("Transfer-Encoding", TRANSFERENCIA_FRAGMENTADA)) {
+            String valor = sanear(request.getHeader(nombre));
+            if (valor != null) {
+                detalle.append(", ").append(nombre).append(": ").append(valor);
+            }
+        }
+        return detalle.toString();
+    }
+
+    private String sanear(String valor) {
+        if (valor == null) {
+            return null;
+        }
+        String limpio = valor.replaceAll("[^ -~]", "").trim();
+        if (limpio.isEmpty()) {
+            return null;
+        }
+        return limpio.length() > 40 ? limpio.substring(0, 40) : limpio;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

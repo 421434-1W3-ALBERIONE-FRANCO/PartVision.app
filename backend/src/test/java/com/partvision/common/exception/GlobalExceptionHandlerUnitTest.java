@@ -180,17 +180,82 @@ class GlobalExceptionHandlerUnitTest {
         assertThat(response.getBody().message()).isEqualTo("Error interno del servidor");
     }
 
-    /** El cuerpo ausente o ilegible es culpa del que llama: 400, no 500. */
+    private org.springframework.http.converter.HttpMessageNotReadableException ilegible(String causa) {
+        return new org.springframework.http.converter.HttpMessageNotReadableException(
+                causa, (org.springframework.http.HttpInputMessage) null);
+    }
+
+    /**
+     * El cuerpo ausente es culpa del que llama: 400, no 500. Y el mensaje tiene que decir como
+     * llego el pedido: sin eso hubo que entrar a los logs del servidor para saber que el flujo
+     * de Power Automate no estaba mandando cuerpo, mientras su pantalla mostraba uno.
+     */
     @Test
-    void cuerpoIlegible_devuelve400() {
+    void sinCuerpo_devuelve400YDiceComoLlego() {
+        HttpServletRequest request = request();
+        when(request.getContentLengthLong()).thenReturn(0L);
+
         ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(
-                new org.springframework.http.converter.HttpMessageNotReadableException(
-                        "Required request body is missing", (org.springframework.http.HttpInputMessage) null),
-                request());
+                ilegible("Required request body is missing: public void algo()"), request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().message()).contains("cuerpo del pedido");
+        assertThat(response.getBody().message())
+                .contains("llego sin cuerpo")
+                .contains("Content-Length: 0");
+    }
+
+    /** Si el que llama anuncia transferencia fragmentada, eso solo explica el cuerpo vacio. */
+    @Test
+    void sinCuerpo_conTransferenciaFragmentada_loNombra() {
+        HttpServletRequest request = request();
+        when(request.getHeader("x-ms-transfer-mode")).thenReturn("chunked");
+
+        ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(
+                ilegible("Required request body is missing"), request);
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message())
+                .contains("x-ms-transfer-mode: chunked")
+                .contains("desactiva");
+    }
+
+    /** Un JSON roto no es lo mismo que un cuerpo ausente, y el detalle queda en el log. */
+    @Test
+    void jsonRoto_noSeConfundeConCuerpoAusente() {
+        ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(
+                ilegible("JSON parse error: Unexpected character ('}' (code 125))"), request());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message()).isEqualTo("El cuerpo del pedido no es un JSON que se pueda leer");
+        assertThat(response.getBody().message()).doesNotContain("Unexpected character");
+    }
+
+    @Test
+    void sinMensaje_tampocoSeConfunde() {
+        ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(ilegible(null), request());
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message()).contains("no es un JSON que se pueda leer");
+    }
+
+    /** Las cabeceras las manda el que llama: se recortan y se les sacan los caracteres raros. */
+    @Test
+    void cabecerasDelQueLlama_seSanean() {
+        HttpServletRequest request = request();
+        when(request.getHeader("Transfer-Encoding")).thenReturn("chunk\u0007ed" + "x".repeat(60));
+        when(request.getHeader("x-ms-transfer-mode")).thenReturn("\u0000  ");
+
+        ResponseEntity<ApiError> response = handler.handleCuerpoIlegible(
+                ilegible("Required request body is missing"), request);
+
+        assertThat(response.getBody()).isNotNull();
+        String mensaje = response.getBody().message();
+        assertThat(mensaje).doesNotContain("\u0007").doesNotContain("\u0000");
+        assertThat(mensaje).contains("Transfer-Encoding: chunkedxxx");
+        assertThat(mensaje.length()).isLessThan(120);
+        assertThat(mensaje).doesNotContain("x-ms-transfer-mode").doesNotContain("desactiva");
     }
 
     /** Un ResponseStatusException tiene que conservar SU status, no degradar a 500. */

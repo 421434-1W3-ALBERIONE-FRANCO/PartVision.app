@@ -156,6 +156,32 @@ Guardá la clave como **variable de entorno de Power Platform**, no escrita en l
   lee el cuerpo entero antes de mirar la clave.
 - **30 envíos por minuto por IP.** Con la planilla entera en un solo envío, sobra.
 
+### Cuando el envío falla
+
+El mensaje de la respuesta, que se ve en **Salidas** de la acción HTTP, dice cuál de las dos
+cosas pasó. Son distintas a propósito:
+
+- **"El pedido llegó sin cuerpo (Content-Length: 0)"**: el servidor no recibió nada, aunque la
+  pestaña *Entradas* del flujo muestre el JSON. Pasó el 2026-09-24 y costó encontrarlo porque
+  las dos causas daban el mismo texto. Mirá, en ese orden: que el campo **Cuerpo** tenga
+  `body('Enumerar_las_filas_de_una_tabla')` con el nombre real del paso, y que en
+  `...` → **Configuración** de la acción HTTP la **transferencia fragmentada** esté desactivada.
+  Si el pedido trae la cabecera `x-ms-transfer-mode`, el propio mensaje lo nombra: con
+  fragmentación, Power Automate anuncia el envío en un pedido sin cuerpo y manda el contenido
+  aparte, que no es lo que este endpoint entiende.
+- **"El cuerpo del pedido no es un JSON que se pueda leer"**: llegó algo, pero no se puede
+  interpretar. El detalle queda en el log del servidor (`docker logs partvision-backend`).
+
+Ninguno de los dos se arregla reintentando: los dos responden **400**, que le dice a Power
+Automate que no insista.
+
+### Los nombres de las columnas
+
+El conector de Excel escapa los caracteres que no puede usar en un identificador, y manda
+`F_x002e_ Factura` donde la planilla dice "F. Factura". El backend deshace ese escape antes de
+leer la fila, así que las columnas se pueden nombrar con puntos o acentos sin romper nada.
+Hasta el 2026-09-24 no lo hacía, y la fecha de todas las facturas quedaba vacía en silencio.
+
 ## El endpoint de una factura
 
 Sigue disponible para quien arme el JSON de una factura con sus líneas. Usa las mismas reglas
