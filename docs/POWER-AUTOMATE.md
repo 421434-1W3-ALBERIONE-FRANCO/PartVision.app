@@ -41,10 +41,10 @@ Power Automate (`@odata.etag`, `ItemInternalId`):
 | `Factura` | agrupa las filas. Se toma tal cual; es único en PartVision |
 | `F. Factura` | acepta `24/08/2026`, `2026-08-24`, `2026-08-24T00:00:00Z` o el número de serie de Excel (`46258`). Power Automate manda este último por defecto |
 | `Codigo` | se busca en el catálogo. **Vacío → `IMPORTADOS`** (ver abajo) |
-| `Cantidad` | entero ≥ 1. **Una fila sin cantidad se saltea**: son anotaciones como "CONTROLO:" |
+| `Cantidad` | entero entre 1 y 10.000. **Una fila sin cantidad se saltea**: son anotaciones como "CONTROLO:" |
 | `Descripcion` | informativa |
 | `Estatus stock` | `EN TRÁNSITO` o `INGRESADA` (ver "Estados") |
-| `Proveedor` | **todavía no existe en la planilla**; ver "El proveedor" |
+| `Proveedor` | el nombre del catálogo (`EGSA`, `Autopartes del Sur`); ver "El proveedor" |
 
 También acepta los nombres propios (`factura`, `fechaFactura`, `codigo`, `cantidad`,
 `descripcion`, `estatus`, `proveedor`) dentro de `filas` en lugar de `value`.
@@ -147,6 +147,13 @@ evita los conflictos falsos con la planilla.
   *empieza* con esa palabra, como `IMPORTADO-4512`, se respeta: cuenta la palabra sola.
   La línea queda registrada en la compra pero no tiene producto, así que no carga stock al
   ingresarla, salvo que se la sume al catálogo (ver "Importados").
+- **El código suele venir dentro de la descripción**: la planilla anota estas piezas a mano,
+  con el código adelante y el nombre corto atrás (`bie0199 biela`, `jt1232 junta tapa om926`).
+  El botón Importados lo detecta y **sugiere** el producto del catálogo, eligiendo el del
+  proveedor de la factura; si ese SKU solo existe para el otro proveedor lo dice y pregunta
+  antes de asociar. Es una sugerencia a propósito: con ~10.300 SKU repetidos uno por proveedor,
+  asociar solo cargaría el stock en el producto equivocado. En el primer envío real, 3 de las
+  81 líneas importadas tenían un código que existe en el catálogo.
 - **Una línea sin producto** (código que no está, o repetido entre proveedores sin saber de
   cuál es) se ve en el panel con "—" y la compra muestra `3/5` en ámbar.
 
@@ -216,6 +223,17 @@ Guardá la clave como **variable de entorno de Power Platform**, no escrita en l
   mano; si alguien las ingresara de nuevo desde el panel, quedaría contado dos veces.
 - Si la planilla nunca se vacía, cada envío crece. El tope es **5.000 filas** por envío: borrar
   las filas de facturas ya ingresadas la mantiene chica.
+
+### Cantidades imposibles
+
+Una fila con **más de 10.000 unidades** se rechaza y se explica en `ignoradas`. No es un límite
+del negocio: es para detectar una fila mal armada en la planilla. El 2026-09-24 llegó una con
+cantidad **1.197.421** y la descripción partida en dos líneas (`1.00⏎04178311 std jgo aros`):
+se le había colado el valor de otra columna. Lo más alto legítimo visto son 240 unidades, así
+que el tope deja pasar cualquier compra real.
+
+La fila rechazada **no frena a las demás**, y si es la única de su factura, esa factura no se
+registra. El motivo aparece en la respuesta con el número, para poder arreglar la planilla.
 
 ### Límites
 

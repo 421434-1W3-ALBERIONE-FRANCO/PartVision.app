@@ -54,13 +54,17 @@ class ImportadosControllerTest {
     @Test
     void pendientes_devuelveLaPagina() throws Exception {
         when(importadosService.listarPendientes(any())).thenReturn(new PageImpl<>(List.of(
-                new ImportadoPendienteResponse(40L, 3L, "900000482", LocalDate.of(2026, 8, 25), null,
-                        "EN_TRANSITO", "bie0381 biela om651", 2))));
+                new ImportadoPendienteResponse(40L, 3L, "900000482", LocalDate.of(2026, 8, 25), "EGSA",
+                        "EN_TRANSITO", "bie0381 biela om651", 2,
+                        new ImportadoPendienteResponse.Sugerencia(
+                                901L, "BIE0381", "BIELA OM651", "EGSA", true)))));
 
         mvc.perform(get(URL))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].lineaId").value(40))
-                .andExpect(jsonPath("$.content[0].descripcion").value("bie0381 biela om651"));
+                .andExpect(jsonPath("$.content[0].descripcion").value("bie0381 biela om651"))
+                .andExpect(jsonPath("$.content[0].sugerencia.sku").value("BIE0381"))
+                .andExpect(jsonPath("$.content[0].sugerencia.mismoProveedor").value(true));
     }
 
     @Test

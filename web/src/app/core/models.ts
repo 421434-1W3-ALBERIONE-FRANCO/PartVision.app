@@ -286,6 +286,21 @@ export interface ImportadoPendiente {
   estadoCompra: 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
   descripcion: string | null;
   cantidad: number;
+  /** Producto del catalogo que podria ser esta pieza, deducido del codigo de la descripcion. */
+  sugerencia: SugerenciaImportado | null;
+}
+
+/**
+ * El backend deduce esto del codigo que la planilla escribe al principio de la descripcion
+ * ("bie0199 biela"). Es una sugerencia: la asocia una persona, no el sistema. `mismoProveedor`
+ * en false significa que ese SKU existe pero para el otro proveedor.
+ */
+export interface SugerenciaImportado {
+  productoId: number;
+  sku: string;
+  descripcion: string;
+  proveedor: string | null;
+  mismoProveedor: boolean;
 }
 
 export interface ImportadoResuelto {

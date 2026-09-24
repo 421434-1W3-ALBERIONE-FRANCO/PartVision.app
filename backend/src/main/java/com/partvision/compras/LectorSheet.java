@@ -37,6 +37,16 @@ final class LectorSheet {
     private static final long SERIE_MIN = 32874;
     private static final long SERIE_MAX = 73050;
 
+    /**
+     * Tope de cordura para la cantidad de una linea. No es un limite del negocio: es para
+     * detectar una fila mal armada en la planilla. El 2026-09-24 llego una con cantidad
+     * 1.197.421 y la descripcion partida en dos lineas ("1.00
+04178311 std jgo aros"): se le
+     * habia colado el valor de otra columna. Lo mas alto legitimo visto son 240 unidades
+     * (retenes PKRV-043), asi que 10.000 deja pasar cualquier compra real.
+     */
+    static final int CANTIDAD_MAXIMA = 10_000;
+
     /** Entero positivo, admitiendo el ".0" con el que a veces se serializa un numero. */
     private static final Pattern ENTERO = Pattern.compile("\\d+(\\.0+)?");
 

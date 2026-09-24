@@ -28,8 +28,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Las lineas que llegan sin codigo en la planilla son pedidos puntuales de clientes: entran
@@ -54,8 +59,57 @@ public class ImportadosService {
 
     @Transactional(readOnly = true)
     public Page<ImportadoPendienteResponse> listarPendientes(Pageable pageable) {
-        return lineaRepo.findSinProductoPorCodigo(LectorSheet.CODIGO_IMPORTADO, pageable)
-                .map(ImportadoPendienteResponse::from);
+        Page<CompraLinea> pagina = lineaRepo.findSinProductoPorCodigo(LectorSheet.CODIGO_IMPORTADO, pageable);
+
+        Set<String> codigos = pagina.getContent().stream()
+                .map(l -> codigoEnLaDescripcion(l.getDescripcion()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<String, List<Producto>> porSku = codigos.isEmpty() ? Map.of()
+                : productoRepo.findBySkuIn(codigos).stream()
+                        .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase(Locale.ROOT)));
+
+        return pagina.map(linea -> ImportadoPendienteResponse.from(linea, sugerir(linea, porSku)));
+    }
+
+    /**
+     * El codigo que la planilla escribe al principio de la descripcion. El cliente anota estas
+     * piezas a mano, con el codigo adelante y el nombre corto atras: "bie0199 biela",
+     * "jt1232 junta tapa om926". Se pide al menos un digito para no confundir la primera
+     * palabra de una descripcion comun ("termotato perkins") con un codigo.
+     */
+    static String codigoEnLaDescripcion(String descripcion) {
+        if (descripcion == null) {
+            return null;
+        }
+        String primera = descripcion.trim().split("\\s+", 2)[0].toUpperCase(Locale.ROOT);
+        boolean pareceCodigo = primera.length() >= 4 && primera.length() <= 40
+                && primera.chars().anyMatch(Character::isDigit)
+                && primera.chars().anyMatch(Character::isLetter);
+        return pareceCodigo ? primera : null;
+    }
+
+    /**
+     * Entre los productos con ese SKU gana el del proveedor de la factura. Si ninguno es de ese
+     * proveedor igual se muestra uno, marcado como de otro proveedor: sirve para que la persona
+     * lo vea, y es justo el caso en el que asociar a ciegas seria un error.
+     */
+    private ImportadoPendienteResponse.Sugerencia sugerir(CompraLinea linea,
+                                                          Map<String, List<Producto>> porSku) {
+        String codigo = codigoEnLaDescripcion(linea.getDescripcion());
+        if (codigo == null) {
+            return null;
+        }
+        List<Producto> candidatos = porSku.getOrDefault(codigo, List.of());
+        if (candidatos.isEmpty()) {
+            return null;
+        }
+        String proveedor = linea.getCompra().getProveedor();
+        Producto elegido = candidatos.stream()
+                .filter(p -> p.getProveedor() != null && p.getProveedor().equalsIgnoreCase(proveedor))
+                .findFirst()
+                .orElse(candidatos.get(0));
+        return ImportadoPendienteResponse.Sugerencia.from(elegido, proveedor);
     }
 
     /**

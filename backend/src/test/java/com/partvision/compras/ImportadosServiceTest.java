@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -122,6 +123,85 @@ class ImportadosServiceTest {
         assertThat(r.estadoCompra()).isEqualTo("EN_TRANSITO");
         assertThat(r.descripcion()).isEqualTo("bie0381 biela om651");
         assertThat(r.cantidad()).isEqualTo(2);
+        assertThat(r.sugerencia()).isNull();   // ese codigo no esta en el catalogo
+    }
+
+    // --- sugerencia: el codigo que la planilla escribe dentro de la descripcion ---
+
+    @Test
+    void codigoEnLaDescripcion_loSacaDeLaPrimeraPalabra() {
+        assertThat(ImportadosService.codigoEnLaDescripcion("bie0199 biela")).isEqualTo("BIE0199");
+        assertThat(ImportadosService.codigoEnLaDescripcion("  jt1232 junta tapa om926 "))
+                .isEqualTo("JT1232");
+        assertThat(ImportadosService.codigoEnLaDescripcion("KDRB4D*C*CH kit distr kwin"))
+                .isEqualTo("KDRB4D*C*CH");
+    }
+
+    /** Una descripcion normal no es un codigo: asociar por la primera palabra seria un desastre. */
+    @Test
+    void codigoEnLaDescripcion_descartaLoQueNoParezcaUno() {
+        assertThat(ImportadosService.codigoEnLaDescripcion("termotato perkins")).isNull();  // sin digitos
+        assertThat(ImportadosService.codigoEnLaDescripcion("6913 reten")).isNull();         // sin letras
+        assertThat(ImportadosService.codigoEnLaDescripcion("ab1 cosa")).isNull();           // muy corta
+        assertThat(ImportadosService.codigoEnLaDescripcion("   ")).isNull();
+        assertThat(ImportadosService.codigoEnLaDescripcion(null)).isNull();
+    }
+
+    /**
+     * Con ~10.300 SKU repetidos uno por proveedor, el mismo codigo devuelve dos productos.
+     * Gana el del proveedor de la factura: el otro cargaria el stock en el producto equivocado.
+     */
+    @Test
+    void sugerencia_prefiereElProductoDelProveedorDeLaFactura() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);   // factura de EGSA
+        when(lineaRepo.findSinProductoPorCodigo(eq("IMPORTADOS"), any()))
+                .thenReturn(new PageImpl<>(List.of(linea)));
+        when(productoRepo.findBySkuIn(Set.of("BIE0381"))).thenReturn(List.of(
+                proveedorDe(producto(900L, "BIE0381"), "Autopartes del Sur"),
+                proveedorDe(producto(901L, "BIE0381"), "EGSA")));
+
+        var sugerencia = service.listarPendientes(PageRequest.of(0, 20))
+                .getContent().get(0).sugerencia();
+
+        assertThat(sugerencia).isNotNull();
+        assertThat(sugerencia.productoId()).isEqualTo(901L);
+        assertThat(sugerencia.sku()).isEqualTo("BIE0381");
+        assertThat(sugerencia.mismoProveedor()).isTrue();
+    }
+
+    /** Si el unico candidato es de otro proveedor se muestra igual, pero avisando. */
+    @Test
+    void sugerencia_deOtroProveedor_seMarca() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);   // factura de EGSA
+        when(lineaRepo.findSinProductoPorCodigo(eq("IMPORTADOS"), any()))
+                .thenReturn(new PageImpl<>(List.of(linea)));
+        when(productoRepo.findBySkuIn(Set.of("BIE0381"))).thenReturn(List.of(
+                proveedorDe(producto(900L, "BIE0381"), "Autopartes del Sur")));
+
+        var sugerencia = service.listarPendientes(PageRequest.of(0, 20))
+                .getContent().get(0).sugerencia();
+
+        assertThat(sugerencia.productoId()).isEqualTo(900L);
+        assertThat(sugerencia.proveedor()).isEqualTo("Autopartes del Sur");
+        assertThat(sugerencia.mismoProveedor()).isFalse();
+    }
+
+    /** Sin codigo reconocible no se consulta el catalogo: son la mayoria de las lineas. */
+    @Test
+    void sugerencia_sinCodigoEnLaDescripcion_niConsultaElCatalogo() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        linea.setDescripcion("termotato perkins");
+        when(lineaRepo.findSinProductoPorCodigo(eq("IMPORTADOS"), any()))
+                .thenReturn(new PageImpl<>(List.of(linea)));
+
+        assertThat(service.listarPendientes(PageRequest.of(0, 20))
+                .getContent().get(0).sugerencia()).isNull();
+        verify(productoRepo, never()).findBySkuIn(any());
+    }
+
+    private static Producto proveedorDe(Producto p, String proveedor) {
+        p.setProveedor(proveedor);
+        return p;
     }
 
     // --- SKU propuesto ---

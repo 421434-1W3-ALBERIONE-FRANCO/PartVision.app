@@ -427,7 +427,29 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                         <tr [class]="resolviendo()?.lineaId === i.lineaId ? 'bg-neon-purple/10' : 'border-b border-dark-border/30'">
                           <td class="px-3 py-2 font-mono text-white text-xs">{{ i.factura }}</td>
                           <td class="px-3 py-2 text-gray-300 text-xs hidden sm:table-cell">{{ i.fechaFactura | date:'dd/MM/yyyy' }}</td>
-                          <td class="px-3 py-2 text-gray-200 text-xs whitespace-normal break-words max-w-xs">{{ i.descripcion || '—' }}</td>
+                          <td class="px-3 py-2 text-gray-200 text-xs whitespace-normal break-words max-w-xs">
+                            {{ i.descripcion || '—' }}
+                            @if (i.sugerencia; as sug) {
+                              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                @if (sug.mismoProveedor) {
+                                  <span class="text-[11px] text-neon-cyan" [title]="sug.descripcion">
+                                    Parece ser <span class="font-mono font-semibold">{{ sug.sku }}</span>
+                                  </span>
+                                } @else {
+                                  <span class="text-[11px] text-amber-400"
+                                    [title]="sug.descripcion + ' — ojo: es de ' + sug.proveedor + ', no de ' + (i.proveedor || 'este proveedor')">
+                                    <span class="font-mono font-semibold">{{ sug.sku }}</span> existe, pero de {{ sug.proveedor }}
+                                  </span>
+                                }
+                                @if (i.estadoCompra !== 'INGRESADA') {
+                                  <button (click)="asociarSugerida(i)" [disabled]="guardandoImportado()"
+                                    class="px-2 py-0.5 rounded-md text-[11px] font-semibold text-neon-cyan border border-neon-cyan/40 hover:bg-neon-cyan/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                                    Asociar
+                                  </button>
+                                }
+                              </div>
+                            }
+                          </td>
                           <td class="px-3 py-2 text-center text-white font-semibold">{{ i.cantidad }}</td>
                           <td class="px-3 py-2 text-center">
                             @if (i.estadoCompra === 'EN_TRANSITO') {
@@ -875,6 +897,37 @@ export class Compras implements OnInit {
       return cargaAhora ? 'Crear y cargar stock' : 'Crear producto';
     }
     return cargaAhora ? 'Asociar y cargar stock' : 'Asociar';
+  }
+
+  /**
+   * Asocia la linea al producto sugerido en un clic. Solo mientras la compra no este ingresada:
+   * con el stock ya cargado hace falta elegir ubicacion, y eso va por el flujo de Resolver.
+   * Si el proveedor no coincide se pregunta, porque es justo el caso en que suele estar mal.
+   */
+  asociarSugerida(importado: ImportadoPendiente): void {
+    const sug = importado.sugerencia;
+    if (!sug || this.guardandoImportado()) return;
+    if (!sug.mismoProveedor && !confirm(
+        `${sug.sku} existe en el catálogo pero es de ${sug.proveedor}, y esta factura es de `
+        + `${importado.proveedor || 'otro proveedor'}. Asociarla carga el stock en el producto `
+        + 'del otro proveedor. ¿Seguir igual?')) {
+      return;
+    }
+
+    this.guardandoImportado.set(true);
+    this.errorImportado.set('');
+    this.compraService.vincularImportado(importado.lineaId, sug.productoId, null).subscribe({
+      next: (res) => {
+        this.guardandoImportado.set(false);
+        this.avisoImportado.set(res.mensaje);
+        this.cargarImportados(this.importadosPagina());
+        this.cargar();
+      },
+      error: (err) => {
+        this.guardandoImportado.set(false);
+        this.errorImportado.set(err.error?.message || err.error?.error || 'No se pudo asociar');
+      },
+    });
   }
 
   guardarImportado(): void {
