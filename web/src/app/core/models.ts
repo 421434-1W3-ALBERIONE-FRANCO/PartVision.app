@@ -306,8 +306,11 @@ export interface Compra {
   proveedor: string | null;
   /** EN_TRANSITO y POR_UBICAR los decide la planilla del cliente; INGRESADA, el panel. */
   estado: 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
-  /** Quien lo dejo en ese estado: la planilla o alguien desde el panel. */
-  estadoOrigen: 'PLANILLA' | 'PANEL';
+  /**
+   * Lo ultimo que dijo la planilla. Que difiera de `estado` significa que el estado lo movio
+   * alguien desde el panel; la planilla solo lo pisa cuando ella misma cambia de valor.
+   */
+  estadoPlanilla: 'EN_TRANSITO' | 'POR_UBICAR';
   ubicacionIngresoId: number | null;
   ubicacionIngresoCodigo: string | null;
   totalLineas: number;

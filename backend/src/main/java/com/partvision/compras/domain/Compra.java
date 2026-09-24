@@ -32,10 +32,18 @@ public class Compra extends Auditable {
     @Column(nullable = false)
     private CompraEstado estado = CompraEstado.EN_TRANSITO;
 
-    /** Quien dejo la compra en ese estado. Ver {@link OrigenEstado}. */
+    /**
+     * Lo ultimo que dijo la planilla del cliente: {@code EN_TRANSITO} o {@code POR_UBICAR}
+     * (que en la planilla se llama INGRESADA). Nunca {@code INGRESADA}, que es un estado
+     * nuestro: la planilla no sabe si el stock se cargo.
+     *
+     * <p>Que nuestro {@link #estado} difiera de este significa que lo movio el panel. Que este
+     * valor cambie entre un envio y el siguiente significa que la planilla cambio de opinion.
+     * Con esas dos cosas alcanza para no pelear: la planilla pisa el estado solo cuando cambia.
+     */
     @Enumerated(EnumType.STRING)
-    @Column(name = "estado_origen", nullable = false)
-    private OrigenEstado estadoOrigen = OrigenEstado.PLANILLA;
+    @Column(name = "estado_planilla", nullable = false)
+    private CompraEstado estadoPlanilla = CompraEstado.EN_TRANSITO;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ubicacion_ingreso_id")

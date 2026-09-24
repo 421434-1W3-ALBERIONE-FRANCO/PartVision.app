@@ -97,21 +97,31 @@ planilla no sabe: en qué ubicación queda cada cosa.
 - Si las filas de una factura no dicen todas lo mismo, queda **en tránsito** hasta que todas
   digan INGRESADA, y la respuesta lo avisa.
 
-### Quién puso el estado
+### Quién manda cuando la planilla y el panel no coinciden
 
-Cada compra guarda **quién la dejó en el estado que tiene**: la planilla o el panel. Sin eso
-no se pueden distinguir dos situaciones opuestas, y la diferencia importa:
+Cada compra guarda, además de su estado, **lo último que dijo la planilla**. De ahí sale una
+sola regla:
 
-- **Nos adelantamos nosotros.** La mercadería llegó, se ingresó desde el panel, y la planilla
-  todavía dice EN TRÁNSITO. Es a propósito: el envío responde `SIN_CAMBIOS` y el stock no se
-  toca. Si esto contara como conflicto, mandaría un aviso en cada corrida del flujo hasta que
-  el cliente actualice la celda.
-- **La planilla vuelve atrás.** La planilla misma había dicho INGRESADA, se cargó el stock, y
-  ahora dice EN TRÁNSITO otra vez: alguien la editó hacia atrás. Eso vuelve como `CONFLICTO`,
-  porque el stock ya está cargado.
+> La planilla pisa el estado **solo cuando la planilla cambia**.
+
+La planilla repite su valor en cada envío. Si ese valor bastara para imponerse, un cambio
+hecho a mano duraría hasta el envío siguiente y se desharía solo, minutos después. Y como la
+planilla no conoce el estado *Ingresada* —no sabe si el stock se cargó—, comparar los dos
+valores es lo único que distingue dos situaciones opuestas:
+
+- **Nos adelantamos nosotros.** La mercadería llegó y se ingresó desde el panel; la planilla
+  todavía dice EN TRÁNSITO, que es lo que venía diciendo. No cambió: el envío responde
+  `SIN_CAMBIOS`, el estado queda como está y el stock no se toca. Si esto contara como
+  conflicto, mandaría un aviso en cada corrida hasta que el cliente actualice la celda.
+- **La planilla vuelve atrás.** Había dicho INGRESADA, se cargó el stock, y ahora dice
+  EN TRÁNSITO: cambió de opinión sobre algo que ya entró. Eso vuelve como `CONFLICTO` en cada
+  envío, a propósito, hasta que se arregle la planilla o se revierta el ingreso acá.
 
 En los dos casos **el stock queda como está**: la planilla nunca descarga stock, y recibir la
 misma factura mil veces no la carga dos veces.
+
+En el panel, una compra cuyo estado no coincide con la planilla muestra **"estado puesto a
+mano"**, y el título dice qué dice la planilla.
 
 ### Cambiar el estado a mano
 

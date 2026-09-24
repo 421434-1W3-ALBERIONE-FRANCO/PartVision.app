@@ -8,7 +8,6 @@ import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
-import com.partvision.compras.domain.OrigenEstado;
 import com.partvision.compras.dto.*;
 import com.partvision.compras.repository.CompraRepository;
 import com.partvision.inventory.domain.Stock;
@@ -89,17 +88,15 @@ public class CompraService {
             return resultado(Tipo.CONFLICTO, compra,
                     "La factura " + factura.numero() + " ya esta registrada con otro contenido");
         }
-        if (compra.getEstado() == CompraEstado.INGRESADA && factura.estado() == CompraEstado.EN_TRANSITO) {
-            if (compra.getEstadoOrigen() == OrigenEstado.PANEL) {
-                // Nos adelantamos a la planilla a proposito: la mercaderia llego y se cargo
-                // antes de que el cliente actualizara la celda. No es un conflicto, y marcarlo
-                // como tal llenaria de avisos cada corrida del flujo hasta que la planilla se
-                // ponga al dia. El stock no se toca igual.
-                return resultado(Tipo.SIN_CAMBIOS, compra,
-                        "ingresada desde el panel; la planilla todavia dice EN TRANSITO");
-            }
+        boolean laPlanillaCambio = compra.getEstadoPlanilla() != factura.estado();
+
+        // La planilla se contradice y el stock ya esta cargado: alguien la edito hacia atras
+        // despues de que entrara la mercaderia. No se toca nada y se avisa en cada envio, a
+        // proposito: queda sin resolver hasta que se arregle la planilla o se revierta aca.
+        if (compra.getEstado() == CompraEstado.INGRESADA
+                && factura.estado() == CompraEstado.EN_TRANSITO && laPlanillaCambio) {
             return resultado(Tipo.CONFLICTO, compra,
-                    "La planilla la marca EN TRANSITO pero su stock ya se cargo en PartVision");
+                    "La planilla la volvio a EN TRANSITO pero su stock ya se cargo en PartVision");
         }
 
         List<String> cambios = new ArrayList<>();
@@ -112,16 +109,30 @@ public class CompraService {
             }
             cambios.add("se completo el proveedor");
         }
-        if (compra.getEstado() != CompraEstado.INGRESADA && compra.getEstado() != factura.estado()) {
+
+        if (laPlanillaCambio) {
+            compra.setEstadoPlanilla(factura.estado());
+        }
+
+        // La planilla pisa el estado solo cuando la planilla CAMBIA. Si no cambio y igual
+        // diferimos, es porque alguien lo movio desde el panel: eso se respeta, o el cambio
+        // hecho a mano se desharia solo en el siguiente envio, quince minutos despues.
+        if (laPlanillaCambio && compra.getEstado() != CompraEstado.INGRESADA
+                && compra.getEstado() != factura.estado()) {
             compra.setEstado(factura.estado());
-            compra.setEstadoOrigen(OrigenEstado.PLANILLA);
             cambios.add(factura.estado() == CompraEstado.POR_UBICAR
                     ? "llego: queda por ubicar"
                     : "la planilla la volvio a EN TRANSITO");
         }
 
         if (cambios.isEmpty()) {
-            return resultado(Tipo.SIN_CAMBIOS, compra, "ya estaba registrada");
+            if (laPlanillaCambio) {
+                compraRepo.save(compra);   // cambio lo que dice la planilla, aunque no el estado
+            }
+            return resultado(Tipo.SIN_CAMBIOS, compra, seDiferencia(compra, factura)
+                    ? "en el panel esta como %s; la planilla dice %s"
+                            .formatted(compra.getEstado(), factura.estado())
+                    : "ya estaba registrada");
         }
         compra = compraRepo.save(compra);
         log.info("Factura {} actualizada: {}", compra.getNumeroFactura(), cambios);
@@ -133,8 +144,8 @@ public class CompraService {
      *
      * <p>Lo normal es hacerlo cuando la planilla ya la marco INGRESADA, pero tambien se puede
      * adelantar: si la mercaderia esta en el deposito, obligar a esperar a que el cliente
-     * actualice la celda solo retrasa el stock. Queda anotado como {@link OrigenEstado#PANEL},
-     * asi que la planilla no lo trata como conflicto despues.
+     * actualice la celda solo retrasa el stock. La planilla no lo pisa despues:
+     * solo cambia el estado cuando ella misma cambia de valor.
      */
     @Transactional
     public CompraResponse marcarIngresada(Long compraId, CambiarEstadoRequest request) {
@@ -160,7 +171,6 @@ public class CompraService {
                 .collect(Collectors.toMap(Function.identity(), ubicacionService::getEntity));
 
         compra.setEstado(CompraEstado.INGRESADA);
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
 
         int cargados = 0;
         for (CompraLinea linea : compra.getLineas()) {
@@ -196,8 +206,9 @@ public class CompraService {
      * historial en vez de desaparecer. Si esa mercaderia ya no esta —se vendio o se movio— la
      * salida falla y no se revierte nada: es preferible a dejar el stock en negativo.
      *
-     * <p>El estado queda marcado como {@link OrigenEstado#PANEL}, que es lo que despues evita
-     * que el flujo lo lea como una pelea con la planilla.
+     * <p>El cambio se respeta aunque la planilla siga diciendo otra cosa: solo la pisa un
+     * valor NUEVO de la planilla. Si no, el cambio hecho a mano se desharia en el envio
+     * siguiente, minutos despues.
      */
     @Transactional
     public CompraResponse cambiarEstado(Long compraId, CompraEstado destino) {
@@ -219,7 +230,6 @@ public class CompraService {
         }
 
         compra.setEstado(destino);
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
         compraRepo.save(compra);
 
         log.info("Compra {} pasada a {} desde el panel{}", compra.getNumeroFactura(), destino,
@@ -278,6 +288,7 @@ public class CompraService {
         compra.setFechaFactura(factura.fecha());
         compra.setProveedor(factura.proveedor());
         compra.setEstado(factura.estado());
+        compra.setEstadoPlanilla(factura.estado());
         for (FacturaEntrante.Linea l : factura.lineas()) {
             CompraLinea linea = new CompraLinea();
             linea.setCodigo(l.codigo());
@@ -307,6 +318,11 @@ public class CompraService {
             String codigo = Objects.toString(linea.getCodigo(), "").toUpperCase();
             linea.setProducto(elegirProducto(candidatosPorSku.getOrDefault(codigo, List.of()), proveedor));
         }
+    }
+
+    /** El panel y la planilla no dicen lo mismo: alguien movio el estado a mano. */
+    private boolean seDiferencia(Compra compra, FacturaEntrante factura) {
+        return compra.getEstado() != factura.estado();
     }
 
     private ResultadoSincronizacion resultado(Tipo tipo, Compra compra, String mensaje) {

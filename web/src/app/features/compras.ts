@@ -193,8 +193,9 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   }
                 </h3>
                 <p class="text-xs text-gray-400 mt-1">
-                  @if (detalleCompra()!.estadoOrigen === 'PANEL') {
-                    <span class="text-neon-cyan" title="Lo cambiamos desde el panel, no la planilla">estado puesto a mano</span> ·
+                  @if (detalleCompra()!.estado !== detalleCompra()!.estadoPlanilla) {
+                    <span class="text-neon-cyan"
+                      [title]="'La planilla dice ' + (detalleCompra()!.estadoPlanilla === 'POR_UBICAR' ? 'INGRESADA' : 'EN TRÁNSITO') + '. El estado lo movimos desde el panel y la planilla no lo va a pisar salvo que cambie.'">estado puesto a mano</span> ·
                   }
                   {{ detalleCompra()!.fechaFactura | date:'dd/MM/yyyy' }}
                   @if (detalleCompra()!.proveedor) { · {{ detalleCompra()!.proveedor }} }

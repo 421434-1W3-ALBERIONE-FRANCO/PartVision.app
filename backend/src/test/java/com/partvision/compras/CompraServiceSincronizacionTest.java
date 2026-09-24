@@ -8,7 +8,6 @@ import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
-import com.partvision.compras.domain.OrigenEstado;
 import com.partvision.compras.dto.CambiarEstadoRequest;
 import com.partvision.compras.repository.CompraRepository;
 import com.partvision.inventory.dto.SalidaRequest;
@@ -84,6 +83,7 @@ class CompraServiceSincronizacionTest {
         c.setFechaFactura(FECHA);
         c.setProveedor(proveedor);
         c.setEstado(estado);
+        c.setEstadoPlanilla(estado == CompraEstado.INGRESADA ? CompraEstado.POR_UBICAR : estado);
         c.setCreatedAt(Instant.now());
         for (String codigo : codigos) {
             CompraLinea l = new CompraLinea();
@@ -336,7 +336,7 @@ class CompraServiceSincronizacionTest {
      * a que el cliente actualice la celda solo retrasa el stock. Queda marcado como PANEL.
      */
     @Test
-    void ingresarMientrasLaPlanillaDiceTransito_cargaElStockYQuedaComoPanel() {
+    void ingresarMientrasLaPlanillaDiceTransito_cargaElStock() {
         Compra compra = guardada("EGSA", CompraEstado.EN_TRANSITO, "140000");
         compra.getLineas().get(0).setId(1L);
         compra.getLineas().get(0).setProducto(producto(10L, "140000", "EGSA"));
@@ -347,7 +347,7 @@ class CompraServiceSincronizacionTest {
                 List.of(new CambiarEstadoRequest.LineaUbicacion(1L, 50L))));
 
         assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
-        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PANEL);
+        assertThat(compra.getEstadoPlanilla()).isEqualTo(CompraEstado.EN_TRANSITO);
         verify(stockService).registrarEntrada(any());
     }
 
@@ -360,7 +360,6 @@ class CompraServiceSincronizacionTest {
     @Test
     void planillaDiceIngresada_conElStockYaCargado_noVuelveACargarlo() {
         Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
         when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
 
         ResultadoSincronizacion r = service.sincronizar(
@@ -380,14 +379,14 @@ class CompraServiceSincronizacionTest {
     @Test
     void planillaDiceTransito_peroLoIngresamosNosotros_noEsConflicto() {
         Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        compra.setEstadoPlanilla(CompraEstado.EN_TRANSITO);   // la planilla nunca dijo que llego
         when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
 
         ResultadoSincronizacion r = service.sincronizar(
                 factura("EGSA", CompraEstado.EN_TRANSITO, linea("140000", 1)));
 
         assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
-        assertThat(r.mensaje()).contains("desde el panel");
+        assertThat(r.mensaje()).contains("en el panel esta como INGRESADA");
         assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
     }
 
@@ -398,7 +397,7 @@ class CompraServiceSincronizacionTest {
     @Test
     void planillaVuelveAtrasLoQueElllaMismaDijo_siEsConflicto() {
         Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
-        compra.setEstadoOrigen(OrigenEstado.PLANILLA);
+        assertThat(compra.getEstadoPlanilla()).isEqualTo(CompraEstado.POR_UBICAR);   // lo dijo ella
         when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
 
         ResultadoSincronizacion r = service.sincronizar(
@@ -408,18 +407,55 @@ class CompraServiceSincronizacionTest {
         assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
     }
 
-    /** Un cambio de estado que viene de la planilla queda anotado como tal. */
+    /**
+     * Lo que se cambia a mano no se deshace solo. La planilla repite su valor en cada envio;
+     * si eso pisara el estado, marcar una compra como llegada duraria hasta el envio siguiente.
+     */
     @Test
-    void cambioDeEstadoDeLaPlanilla_quedaMarcadoComoPlanilla() {
+    void cambioHechoAMano_noLoDeshaceElEnvioSiguiente() {
+        Compra compra = guardada("EGSA", CompraEstado.POR_UBICAR, "140000");
+        compra.setEstadoPlanilla(CompraEstado.EN_TRANSITO);   // la planilla no cambio de opinion
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.EN_TRANSITO, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.POR_UBICAR);
+        assertThat(r.mensaje()).contains("la planilla dice EN_TRANSITO");
+    }
+
+    /** Pero un valor NUEVO de la planilla si manda: es informacion que antes no tenia. */
+    @Test
+    void siLaPlanillaCambiaDeValor_mandaLaPlanilla() {
         Compra compra = guardada("EGSA", CompraEstado.EN_TRANSITO, "140000");
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
         when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
 
         ResultadoSincronizacion r = service.sincronizar(
                 factura("EGSA", CompraEstado.POR_UBICAR, linea("140000", 1)));
 
         assertThat(r.tipo()).isEqualTo(Tipo.ACTUALIZADA);
-        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PLANILLA);
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.POR_UBICAR);
+        assertThat(compra.getEstadoPlanilla()).isEqualTo(CompraEstado.POR_UBICAR);
+    }
+
+    /**
+     * Con el stock ya cargado, un valor nuevo de la planilla se anota igual aunque no mueva
+     * el estado: si no, la proxima vez pareceria un cambio y volveria a evaluarse.
+     */
+    @Test
+    void conStockCargado_seAnotaLoQueDiceLaPlanillaAunqueNoCambieElEstado() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
+        compra.setEstadoPlanilla(CompraEstado.EN_TRANSITO);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.POR_UBICAR, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+        assertThat(compra.getEstadoPlanilla()).isEqualTo(CompraEstado.POR_UBICAR);
+        verify(compraRepo).save(any(Compra.class));
     }
 
     // --- cambiar el estado a mano y revertir ---
@@ -432,7 +468,6 @@ class CompraServiceSincronizacionTest {
         service.cambiarEstado(7L, CompraEstado.EN_TRANSITO);
 
         assertThat(compra.getEstado()).isEqualTo(CompraEstado.EN_TRANSITO);
-        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PANEL);
         verify(stockService, never()).registrarSalida(any());
     }
 
@@ -510,7 +545,6 @@ class CompraServiceSincronizacionTest {
 
     private static Compra ingresadaConStock() {
         Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
-        compra.setEstadoOrigen(OrigenEstado.PANEL);
         CompraLinea linea = compra.getLineas().get(0);
         linea.setId(1L);
         linea.setProducto(producto(10L, "140000", "EGSA"));

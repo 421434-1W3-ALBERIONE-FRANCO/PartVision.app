@@ -51,7 +51,7 @@ class CompraControllerTest {
 
     private static CompraResponse respuesta() {
         return new CompraResponse(1L, "A-0001-00012345", LocalDate.of(2026, 9, 11), "EGSA",
-                "PENDIENTE", "PLANILLA", null, null, 1, 4, 0, Instant.now(), List.of());
+                "PENDIENTE", "EN_TRANSITO", null, null, 1, 4, 0, Instant.now(), List.of());
     }
 
     @Test
@@ -91,7 +91,7 @@ class CompraControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"EN_TRANSITO\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.estadoOrigen").value("PLANILLA"));
+                .andExpect(jsonPath("$.estadoPlanilla").value("EN_TRANSITO"));
 
         verify(compraService).cambiarEstado(7L, CompraEstado.EN_TRANSITO);
     }
