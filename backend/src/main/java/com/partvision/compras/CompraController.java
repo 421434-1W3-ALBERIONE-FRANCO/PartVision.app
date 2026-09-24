@@ -1,6 +1,7 @@
 package com.partvision.compras;
 
 import com.partvision.compras.domain.CompraEstado;
+import com.partvision.compras.dto.CambiarEstadoManualRequest;
 import com.partvision.compras.dto.CambiarEstadoRequest;
 import com.partvision.compras.dto.CompraResponse;
 import com.partvision.compras.dto.RecepcionCompraRequest;
@@ -77,6 +78,18 @@ public class CompraController {
             @PathVariable Long id,
             @Valid @RequestBody CambiarEstadoRequest request) {
         return compraService.marcarIngresada(id, request);
+    }
+
+    /**
+     * Cambia el estado a mano, sin pasar por la planilla. Volver atras una compra ingresada
+     * devuelve el stock que habia cargado.
+     */
+    @PatchMapping("/{id}/estado")
+    @PreAuthorize("hasRole('ADMIN')")
+    public CompraResponse cambiarEstado(
+            @PathVariable Long id,
+            @Valid @RequestBody CambiarEstadoManualRequest request) {
+        return compraService.cambiarEstado(id, request.estado());
     }
 
     /**

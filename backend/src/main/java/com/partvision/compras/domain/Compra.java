@@ -32,6 +32,11 @@ public class Compra extends Auditable {
     @Column(nullable = false)
     private CompraEstado estado = CompraEstado.EN_TRANSITO;
 
+    /** Quien dejo la compra en ese estado. Ver {@link OrigenEstado}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_origen", nullable = false)
+    private OrigenEstado estadoOrigen = OrigenEstado.PLANILLA;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ubicacion_ingreso_id")
     private Ubicacion ubicacionIngreso;

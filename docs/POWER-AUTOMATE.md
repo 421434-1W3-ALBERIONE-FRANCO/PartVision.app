@@ -87,18 +87,45 @@ planilla no sabe: en qué ubicación queda cada cosa.
 
 | Planilla | PartVision | Qué se puede hacer en el panel |
 |---|---|---|
-| `EN TRÁNSITO` | **En tránsito** | nada: la mercadería no llegó |
+| `EN TRÁNSITO` | **En tránsito** | ubicar e ingresar igual, si la mercadería ya está |
 | `INGRESADA` | **Por ubicar** | asignar una ubicación a cada línea e ingresar al stock |
-| — | **Ingresada** | nada: el stock ya se cargó |
+| — | **Ingresada** | revertir el ingreso, que devuelve el stock |
 
-- Recién cuando la planilla dice INGRESADA se puede cargar el stock. El panel no se adelanta.
 - La ubicación la elige una persona: el panel precarga la sugerida cuando el producto ya
   tiene stock en algún lado. Solo ~400 de los 135.000 productos tienen stock cargado, así
   que para la mayoría no hay cómo adivinarla.
 - Si las filas de una factura no dicen todas lo mismo, queda **en tránsito** hasta que todas
   digan INGRESADA, y la respuesta lo avisa.
-- Si la planilla la vuelve a EN TRÁNSITO (una corrección), la compra la sigue, salvo que su
-  stock ya se haya cargado: eso vuelve como `CONFLICTO`.
+
+### Quién puso el estado
+
+Cada compra guarda **quién la dejó en el estado que tiene**: la planilla o el panel. Sin eso
+no se pueden distinguir dos situaciones opuestas, y la diferencia importa:
+
+- **Nos adelantamos nosotros.** La mercadería llegó, se ingresó desde el panel, y la planilla
+  todavía dice EN TRÁNSITO. Es a propósito: el envío responde `SIN_CAMBIOS` y el stock no se
+  toca. Si esto contara como conflicto, mandaría un aviso en cada corrida del flujo hasta que
+  el cliente actualice la celda.
+- **La planilla vuelve atrás.** La planilla misma había dicho INGRESADA, se cargó el stock, y
+  ahora dice EN TRÁNSITO otra vez: alguien la editó hacia atrás. Eso vuelve como `CONFLICTO`,
+  porque el stock ya está cargado.
+
+En los dos casos **el stock queda como está**: la planilla nunca descarga stock, y recibir la
+misma factura mil veces no la carga dos veces.
+
+### Cambiar el estado a mano
+
+Desde el detalle de la compra, en el panel:
+
+- **Marcar como llegada** (de En tránsito a Por ubicar), sin esperar a la planilla.
+- **Volver a EN TRÁNSITO** (de Por ubicar a En tránsito). No toca stock: todavía no se cargó.
+- **Revertir ingreso** (de Ingresada a Por ubicar). Descuenta de cada ubicación lo que esa
+  compra había cargado, con el motivo "Se revirtió el ingreso de la factura #N", así queda en
+  el historial de movimientos. Si esa mercadería ya no está —se vendió o se movió— **no se
+  revierte nada** y se explica por qué: dejar el stock en negativo sería peor.
+
+Todo lo que se cambia a mano queda marcado como puesto por el panel, que es lo que después
+evita los conflictos falsos con la planilla.
 
 ## Qué pasa con cada línea
 
@@ -140,9 +167,36 @@ lo único que dice a cuál de los dos productos va el stock.
    - URI: la de arriba
    - Encabezados: `Content-Type: application/json` y `X-API-Key: <clave>`
    - Cuerpo: `body('Enumerar_las_filas_de_una_tabla')`, la salida completa del paso anterior
-4. **Aviso**: una condición sobre `conflictos` o `errores` mayor que cero que mande un mail.
-   También `Configurar ejecución posterior` para avisar si el HTTP falla (un 401 después de
-   rotar la clave es silencioso si nadie lo mira).
+4. **Aviso**: una condición sobre `conflictos` o `errores` mayor que cero que mande un mail
+   (receta abajo). También `Configurar ejecución posterior` para avisar si el HTTP falla (un
+   401 después de rotar la clave es silencioso si nadie lo mira).
+
+### La condición de aviso
+
+Hace falta porque **el flujo se ve verde aunque una factura falle**: la respuesta es 200 y el
+detalle de cada factura viene adentro del cuerpo. Sin esta condición, un conflicto no lo ve
+nadie. Después de la acción HTTP:
+
+1. **Analizar JSON** (Operaciones de datos).
+   - Contenido: `body('HTTP')`
+   - Esquema: pegar esto en "Usar la carga de ejemplo para generar el esquema":
+     ```json
+     {"filasRecibidas":0,"filasIgnoradas":0,"facturas":0,"creadas":0,"actualizadas":0,
+      "sinCambios":0,"conflictos":0,"errores":0,"resultados":[],"ignoradas":[]}
+     ```
+2. **Condición**:
+   - `body('Analizar_JSON')?['conflictos']` **es mayor que** `0`
+   - `O` (botón "Agregar" → "Agregar fila", y arriba elegir **O**)
+   - `body('Analizar_JSON')?['errores']` **es mayor que** `0`
+3. En la rama **Si es verdadero**, **Enviar un correo electrónico** con el detalle:
+   - Asunto: `PartVision: @{body('Analizar_JSON')?['conflictos']} conflictos y @{body('Analizar_JSON')?['errores']} errores en la sincronización de compras`
+   - Cuerpo: `@{string(body('Analizar_JSON')?['resultados'])}` — trae el motivo de cada
+     factura, que es lo único que dice qué pasó.
+   - La rama **Si es falso** se deja vacía.
+
+Conviene que el mail salga de una cuenta que alguien mire. Si el flujo vive en el entorno con
+la política que bloquea HTTP junto a Gmail, el correo va por el conector que ya esté permitido
+en ese entorno.
 
 Guardá la clave como **variable de entorno de Power Platform**, no escrita en la acción.
 

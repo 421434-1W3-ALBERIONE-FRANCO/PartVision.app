@@ -64,14 +64,14 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
         </button>
       </div>
         <button (click)="abrirImportados()"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-neon-purple/40 text-neon-purple-light bg-neon-purple/10 hover:bg-neon-purple/20 transition-colors cursor-pointer whitespace-nowrap"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-neon-purple-light/60 text-white bg-neon-purple/35 hover:bg-neon-purple/50 shadow-neon transition-colors cursor-pointer whitespace-nowrap"
           title="Piezas que llegaron sin código en la planilla">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
           Importados
           @if (importadosTotal() > 0) {
-            <span class="min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[11px] font-mono text-center bg-neon-purple/25 text-neon-purple-light">{{ importadosTotal() }}</span>
+            <span class="min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[11px] font-mono text-center bg-neon-purple-light text-dark font-bold">{{ importadosTotal() }}</span>
           }
         </button>
       </div>
@@ -193,6 +193,9 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   }
                 </h3>
                 <p class="text-xs text-gray-400 mt-1">
+                  @if (detalleCompra()!.estadoOrigen === 'PANEL') {
+                    <span class="text-neon-cyan" title="Lo cambiamos desde el panel, no la planilla">estado puesto a mano</span> ·
+                  }
                   {{ detalleCompra()!.fechaFactura | date:'dd/MM/yyyy' }}
                   @if (detalleCompra()!.proveedor) { · {{ detalleCompra()!.proveedor }} }
                   · {{ detalleCompra()!.totalLineas }} líneas · {{ detalleCompra()!.totalUnidades }} unidades
@@ -221,11 +224,13 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>La planilla todavía la marca EN TRÁNSITO. Se va a poder ubicar e ingresar al stock cuando figure INGRESADA.</span>
+                  <span>La planilla todavía la marca EN TRÁNSITO. Si la mercadería ya está en el depósito podés
+                    ubicarla e ingresarla igual: queda anotado que el estado lo pusimos nosotros, y la planilla no
+                    lo va a marcar como conflicto después.</span>
                 </div>
               }
 
-              @if (detalleCompra()!.estado === 'POR_UBICAR') {
+              @if (puedeUbicar()) {
                 <!-- Bulk assign -->
                 <div class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-dark-surface/40 border border-dark-border rounded-xl px-4 py-3">
                   <span class="text-xs text-gray-400 shrink-0">Asignar a todas:</span>
@@ -272,7 +277,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           }
                         </td>
                         <td class="px-3 py-2">
-                          @if (detalleCompra()!.estado === 'POR_UBICAR') {
+                          @if (puedeUbicar()) {
                             <select [value]="ubicacionPorLinea[l.id] || ''"
                               (change)="setUbicacionLinea(l.id, $event)"
                               class="w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border rounded-lg text-xs focus:outline-none focus:border-neon-cyan"
@@ -312,35 +317,59 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
               </div>
             </div>
 
-            <!-- Footer modal: acción de ingreso -->
-            @if (detalleCompra()!.estado === 'POR_UBICAR') {
-              <div class="p-5 border-t border-dark-border shrink-0">
-                @if (errorIngreso()) {
-                  <div class="mb-3 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-                    {{ errorIngreso() }}
+            <!-- Footer modal: ingresar, revertir, o corregir el estado a mano -->
+            <div class="p-5 border-t border-dark-border shrink-0">
+              @if (errorIngreso()) {
+                <div class="mb-3 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                  {{ errorIngreso() }}
+                </div>
+              }
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                @if (detalleCompra()!.estado === 'INGRESADA') {
+                  <div class="text-xs text-gray-400 max-w-md">
+                    El stock de esta compra ya está cargado. Revertirlo lo descuenta de las mismas ubicaciones
+                    en las que entró; si esa mercadería ya no está, no se revierte nada.
                   </div>
-                }
-                <div class="flex items-center justify-between gap-3">
+                  <button (click)="revertirIngreso()" [disabled]="cambiandoEstado()"
+                    class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
+                    {{ cambiandoEstado() ? 'Revirtiendo...' : 'Revertir ingreso' }}
+                  </button>
+                } @else {
                   <div class="text-xs text-gray-400">
                     {{ lineasAsignadas() }}/{{ detalleCompra()!.lineas.length }} líneas con ubicación
                   </div>
-                  <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando()"
-                    class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-neon-green/20 text-neon-green border border-neon-green/40 hover:bg-neon-green/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
-                    @if (ingresando()) {
-                      <span class="inline-flex items-center gap-2">
-                        <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
-                          <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"></path>
-                        </svg>
-                        Cargando stock...
-                      </span>
+                  <div class="flex flex-wrap items-center gap-2">
+                    @if (detalleCompra()!.estado === 'EN_TRANSITO') {
+                      <button (click)="cambiarEstado('POR_UBICAR')" [disabled]="cambiandoEstado()"
+                        class="px-4 py-2.5 rounded-xl font-medium text-sm text-gray-300 border border-dark-border hover:bg-dark-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap"
+                        title="Marcarla como llegada sin esperar a que la planilla lo diga">
+                        Marcar como llegada
+                      </button>
                     } @else {
-                      Ingresar al stock
+                      <button (click)="cambiarEstado('EN_TRANSITO')" [disabled]="cambiandoEstado()"
+                        class="px-4 py-2.5 rounded-xl font-medium text-sm text-gray-300 border border-dark-border hover:bg-dark-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap"
+                        title="Volverla a EN TRÁNSITO: no toca el stock, porque todavía no se cargó">
+                        Volver a EN TRÁNSITO
+                      </button>
                     }
-                  </button>
-                </div>
+                    <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando()"
+                      class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-neon-green/20 text-neon-green border border-neon-green/40 hover:bg-neon-green/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
+                      @if (ingresando()) {
+                        <span class="inline-flex items-center gap-2">
+                          <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
+                            <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"></path>
+                          </svg>
+                          Cargando stock...
+                        </span>
+                      } @else {
+                        Ingresar al stock
+                      }
+                    </button>
+                  </div>
+                }
               </div>
-            }
+            </div>
           </div>
         </div>
       }
@@ -575,6 +604,7 @@ export class Compras implements OnInit {
   ubicaciones = signal<Ubicacion[]>([]);
   ubicacionPorLinea: Record<number, number> = {};
   ingresando = signal(false);
+  cambiandoEstado = signal(false);
   errorIngreso = signal('');
 
   // --- Importados: lineas que llegaron sin codigo (pedidos puntuales) ---
@@ -681,6 +711,46 @@ export class Compras implements OnInit {
     for (const l of compra.lineas) {
       this.ubicacionPorLinea[l.id] = ubicId;
     }
+  }
+
+  /** Se puede asignar ubicacion mientras el stock no este cargado, diga lo que diga la planilla. */
+  puedeUbicar(): boolean {
+    const compra = this.detalleCompra();
+    return !!compra && compra.estado !== 'INGRESADA';
+  }
+
+  /**
+   * Cambia el estado sin esperar a la planilla. El backend anota que salio del panel, asi que
+   * el proximo envio del flujo no lo trata como una pelea con la planilla.
+   */
+  cambiarEstado(destino: 'EN_TRANSITO' | 'POR_UBICAR'): void {
+    const compra = this.detalleCompra();
+    if (!compra || this.cambiandoEstado()) return;
+
+    this.cambiandoEstado.set(true);
+    this.errorIngreso.set('');
+    this.compraService.cambiarEstado(compra.id, destino).subscribe({
+      next: (actualizada) => {
+        this.detalleCompra.set(actualizada);
+        this.ubicacionPorLinea = {};
+        this.cambiandoEstado.set(false);
+        this.cargar();
+      },
+      error: (err) => {
+        this.errorIngreso.set(err.error?.message || err.error?.error || 'No se pudo cambiar el estado');
+        this.cambiandoEstado.set(false);
+      },
+    });
+  }
+
+  /** Deshace un ingreso: descuenta el stock que cargo. Se pregunta antes porque toca stock. */
+  revertirIngreso(): void {
+    const compra = this.detalleCompra();
+    if (!compra) return;
+    const ok = confirm(
+      `Revertir el ingreso de la factura ${compra.numeroFactura} descuenta de las ubicaciones `
+      + 'todo lo que esta compra cargó. ¿Seguir?');
+    if (ok) this.cambiarEstado('POR_UBICAR');
   }
 
   confirmarIngreso(): void {

@@ -8,14 +8,18 @@ import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
+import com.partvision.compras.domain.OrigenEstado;
 import com.partvision.compras.dto.CambiarEstadoRequest;
 import com.partvision.compras.repository.CompraRepository;
+import com.partvision.inventory.dto.SalidaRequest;
 import com.partvision.inventory.repository.StockRepository;
 import com.partvision.inventory.service.StockService;
+import com.partvision.location.domain.Ubicacion;
 import com.partvision.location.service.UbicacionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -27,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -326,16 +331,197 @@ class CompraServiceSincronizacionTest {
 
     // --- ingresar desde el panel ---
 
-    /** El panel no se adelanta a la planilla: sin INGRESADA en la planilla no hay stock. */
+    /**
+     * El panel puede adelantarse a la planilla: si la mercaderia esta en el deposito, esperar
+     * a que el cliente actualice la celda solo retrasa el stock. Queda marcado como PANEL.
+     */
     @Test
-    void ingresarMientrasLaPlanillaDiceTransito_seRechaza() {
+    void ingresarMientrasLaPlanillaDiceTransito_cargaElStockYQuedaComoPanel() {
+        Compra compra = guardada("EGSA", CompraEstado.EN_TRANSITO, "140000");
+        compra.getLineas().get(0).setId(1L);
+        compra.getLineas().get(0).setProducto(producto(10L, "140000", "EGSA"));
+        when(compraRepo.findWithLineasById(7L)).thenReturn(Optional.of(compra));
+        when(ubicacionService.getEntity(50L)).thenReturn(ubicacion(50L, "A-01-01"));
+
+        service.marcarIngresada(7L, new CambiarEstadoRequest(
+                List.of(new CambiarEstadoRequest.LineaUbicacion(1L, 50L))));
+
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PANEL);
+        verify(stockService).registrarEntrada(any());
+    }
+
+    // --- la planilla contra lo que hicimos a mano ---
+
+    /**
+     * Lo que mas importa: la planilla sigue diciendo INGRESADA en cada envio, y el stock ya
+     * esta cargado. Recibirla de nuevo no puede volver a cargarlo.
+     */
+    @Test
+    void planillaDiceIngresada_conElStockYaCargado_noVuelveACargarlo() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.POR_UBICAR, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+        verify(stockService, never()).registrarEntrada(any());
+        verify(compraRepo, never()).save(any(Compra.class));
+    }
+
+    /**
+     * Nos adelantamos a la planilla: la diferencia es a proposito, asi que no es conflicto.
+     * Marcarla como tal mandaria un aviso en cada corrida del flujo hasta que el cliente
+     * actualice la celda.
+     */
+    @Test
+    void planillaDiceTransito_peroLoIngresamosNosotros_noEsConflicto() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.EN_TRANSITO, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
+        assertThat(r.mensaje()).contains("desde el panel");
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+    }
+
+    /**
+     * En cambio, si la planilla misma habia dicho INGRESADA y ahora vuelve atras con el stock
+     * ya cargado, alguien la edito hacia atras: eso si hay que avisarlo.
+     */
+    @Test
+    void planillaVuelveAtrasLoQueElllaMismaDijo_siEsConflicto() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
+        compra.setEstadoOrigen(OrigenEstado.PLANILLA);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.EN_TRANSITO, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.CONFLICTO);
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+    }
+
+    /** Un cambio de estado que viene de la planilla queda anotado como tal. */
+    @Test
+    void cambioDeEstadoDeLaPlanilla_quedaMarcadoComoPlanilla() {
+        Compra compra = guardada("EGSA", CompraEstado.EN_TRANSITO, "140000");
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.of(compra));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.POR_UBICAR, linea("140000", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.ACTUALIZADA);
+        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PLANILLA);
+    }
+
+    // --- cambiar el estado a mano y revertir ---
+
+    @Test
+    void cambiarEstado_aTransito_noTocaElStock() {
+        Compra compra = guardada("EGSA", CompraEstado.POR_UBICAR, "140000");
+        when(compraRepo.findWithLineasById(7L)).thenReturn(Optional.of(compra));
+
+        service.cambiarEstado(7L, CompraEstado.EN_TRANSITO);
+
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.EN_TRANSITO);
+        assertThat(compra.getEstadoOrigen()).isEqualTo(OrigenEstado.PANEL);
+        verify(stockService, never()).registrarSalida(any());
+    }
+
+    /** Revertir un ingreso devuelve lo que habia cargado, ubicacion por ubicacion. */
+    @Test
+    void cambiarEstado_revirtiendoUnIngreso_devuelveElStock() {
+        Compra compra = ingresadaConStock();
+        when(compraRepo.findWithLineasById(7L)).thenReturn(Optional.of(compra));
+
+        service.cambiarEstado(7L, CompraEstado.POR_UBICAR);
+
+        ArgumentCaptor<SalidaRequest> salida = ArgumentCaptor.forClass(SalidaRequest.class);
+        verify(stockService).registrarSalida(salida.capture());
+        assertThat(salida.getValue().productoId()).isEqualTo(10L);
+        assertThat(salida.getValue().ubicacionId()).isEqualTo(50L);
+        assertThat(salida.getValue().cantidad()).isEqualTo(1);
+        assertThat(salida.getValue().motivo()).contains("900004113");
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.POR_UBICAR);
+        assertThat(compra.getLineas().get(0).getUbicacionIngreso()).isNull();
+    }
+
+    /** Si la mercaderia ya no esta, no se revierte nada: mejor eso que stock en negativo. */
+    @Test
+    void cambiarEstado_revirtiendoSinStock_falla() {
+        Compra compra = ingresadaConStock();
+        when(compraRepo.findWithLineasById(7L)).thenReturn(Optional.of(compra));
+        doThrow(new BusinessException("Stock insuficiente: disponible 0, solicitado 1"))
+                .when(stockService).registrarSalida(any());
+
+        assertThatThrownBy(() -> service.cambiarEstado(7L, CompraEstado.POR_UBICAR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("No se puede revertir")
+                .hasMessageContaining("A-01-01");
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.INGRESADA);
+    }
+
+    /** Una linea sin producto o sin ubicacion nunca cargo stock: no hay nada que devolver. */
+    @Test
+    void cambiarEstado_revirtiendoLineasQueNoCargaronStock_noRegistraSalidas() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "IMPORTADOS");
+        when(compraRepo.findWithLineasById(7L)).thenReturn(Optional.of(compra));
+
+        service.cambiarEstado(7L, CompraEstado.POR_UBICAR);
+
+        verify(stockService, never()).registrarSalida(any());
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.POR_UBICAR);
+    }
+
+    @Test
+    void cambiarEstado_aIngresada_seRechaza() {
+        assertThatThrownBy(() -> service.cambiarEstado(7L, CompraEstado.INGRESADA))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("ubicacion");
+        verify(compraRepo, never()).findWithLineasById(any());
+    }
+
+    @Test
+    void cambiarEstado_alMismoQueTiene_seRechaza() {
         when(compraRepo.findWithLineasById(7L))
                 .thenReturn(Optional.of(guardada("EGSA", CompraEstado.EN_TRANSITO, "140000")));
 
-        assertThatThrownBy(() -> service.marcarIngresada(7L, new CambiarEstadoRequest(
-                List.of(new CambiarEstadoRequest.LineaUbicacion(1L, 50L)))))
+        assertThatThrownBy(() -> service.cambiarEstado(7L, CompraEstado.EN_TRANSITO))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("EN TRANSITO");
-        verify(stockService, never()).registrarEntrada(any());
+                .hasMessageContaining("ya esta en ese estado");
+    }
+
+    @Test
+    void cambiarEstado_deUnaCompraQueNoExiste_seRechaza() {
+        when(compraRepo.findWithLineasById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.cambiarEstado(99L, CompraEstado.EN_TRANSITO))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("no encontrada");
+    }
+
+    private static Compra ingresadaConStock() {
+        Compra compra = guardada("EGSA", CompraEstado.INGRESADA, "140000");
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        CompraLinea linea = compra.getLineas().get(0);
+        linea.setId(1L);
+        linea.setProducto(producto(10L, "140000", "EGSA"));
+        linea.setUbicacionIngreso(ubicacion(50L, "A-01-01"));
+        return compra;
+    }
+
+    private static Ubicacion ubicacion(Long id, String codigo) {
+        Ubicacion u = new Ubicacion();
+        u.setId(id);
+        u.setCodigo(codigo);
+        return u;
     }
 }

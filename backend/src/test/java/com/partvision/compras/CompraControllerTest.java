@@ -3,6 +3,7 @@ package com.partvision.compras;
 import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.common.exception.GlobalExceptionHandler;
+import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.dto.CompraResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,7 +51,7 @@ class CompraControllerTest {
 
     private static CompraResponse respuesta() {
         return new CompraResponse(1L, "A-0001-00012345", LocalDate.of(2026, 9, 11), "EGSA",
-                "PENDIENTE", null, null, 1, 4, 0, Instant.now(), List.of());
+                "PENDIENTE", "PLANILLA", null, null, 1, 4, 0, Instant.now(), List.of());
     }
 
     @Test
@@ -78,5 +81,34 @@ class CompraControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(BODY))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void cambiarEstado_aTransito_pasaElEstadoAlServicio() throws Exception {
+        when(compraService.cambiarEstado(any(), any())).thenReturn(respuesta());
+
+        mvc.perform(patch("/api/v1/compras/7/estado")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"EN_TRANSITO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estadoOrigen").value("PLANILLA"));
+
+        verify(compraService).cambiarEstado(7L, CompraEstado.EN_TRANSITO);
+    }
+
+    @Test
+    void cambiarEstado_sinEstado_devuelve400() throws Exception {
+        mvc.perform(patch("/api/v1/compras/7/estado")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cambiarEstado_conUnEstadoQueNoExiste_devuelve400() throws Exception {
+        mvc.perform(patch("/api/v1/compras/7/estado")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"INVENTADO\"}"))
+                .andExpect(status().isBadRequest());
     }
 }

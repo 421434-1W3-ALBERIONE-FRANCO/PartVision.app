@@ -29,6 +29,14 @@ export class CompraService {
     return this.http.patch<Compra>(`${this.base}/${id}/ingresar`, { asignaciones });
   }
 
+  /**
+   * Cambia el estado a mano, sin esperar a la planilla. Volver atras una compra ingresada
+   * devuelve el stock que habia cargado, asi que el backend puede rechazarlo si ya no esta.
+   */
+  cambiarEstado(id: number, estado: 'EN_TRANSITO' | 'POR_UBICAR'): Observable<Compra> {
+    return this.http.patch<Compra>(`${this.base}/${id}/estado`, { estado });
+  }
+
   // --- importados: lineas que llegaron sin codigo ---
 
   importados(page = 0, size = 20): Observable<Page<ImportadoPendiente>> {

@@ -8,10 +8,12 @@ import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
+import com.partvision.compras.domain.OrigenEstado;
 import com.partvision.compras.dto.*;
 import com.partvision.compras.repository.CompraRepository;
 import com.partvision.inventory.domain.Stock;
 import com.partvision.inventory.dto.EntradaRequest;
+import com.partvision.inventory.dto.SalidaRequest;
 import com.partvision.inventory.repository.StockRepository;
 import com.partvision.inventory.service.StockService;
 import com.partvision.location.domain.Ubicacion;
@@ -88,6 +90,14 @@ public class CompraService {
                     "La factura " + factura.numero() + " ya esta registrada con otro contenido");
         }
         if (compra.getEstado() == CompraEstado.INGRESADA && factura.estado() == CompraEstado.EN_TRANSITO) {
+            if (compra.getEstadoOrigen() == OrigenEstado.PANEL) {
+                // Nos adelantamos a la planilla a proposito: la mercaderia llego y se cargo
+                // antes de que el cliente actualizara la celda. No es un conflicto, y marcarlo
+                // como tal llenaria de avisos cada corrida del flujo hasta que la planilla se
+                // ponga al dia. El stock no se toca igual.
+                return resultado(Tipo.SIN_CAMBIOS, compra,
+                        "ingresada desde el panel; la planilla todavia dice EN TRANSITO");
+            }
             return resultado(Tipo.CONFLICTO, compra,
                     "La planilla la marca EN TRANSITO pero su stock ya se cargo en PartVision");
         }
@@ -104,6 +114,7 @@ public class CompraService {
         }
         if (compra.getEstado() != CompraEstado.INGRESADA && compra.getEstado() != factura.estado()) {
             compra.setEstado(factura.estado());
+            compra.setEstadoOrigen(OrigenEstado.PLANILLA);
             cambios.add(factura.estado() == CompraEstado.POR_UBICAR
                     ? "llego: queda por ubicar"
                     : "la planilla la volvio a EN TRANSITO");
@@ -118,8 +129,12 @@ public class CompraService {
     }
 
     /**
-     * Carga el stock de cada linea en la ubicacion elegida en el panel. Solo cuando la
-     * planilla ya la marco INGRESADA: es la planilla la que dice que la mercaderia llego.
+     * Carga el stock de cada linea en la ubicacion elegida en el panel.
+     *
+     * <p>Lo normal es hacerlo cuando la planilla ya la marco INGRESADA, pero tambien se puede
+     * adelantar: si la mercaderia esta en el deposito, obligar a esperar a que el cliente
+     * actualice la celda solo retrasa el stock. Queda anotado como {@link OrigenEstado#PANEL},
+     * asi que la planilla no lo trata como conflicto despues.
      */
     @Transactional
     public CompraResponse marcarIngresada(Long compraId, CambiarEstadoRequest request) {
@@ -130,8 +145,8 @@ public class CompraService {
             throw new BusinessException("La compra ya fue marcada como ingresada");
         }
         if (compra.getEstado() == CompraEstado.EN_TRANSITO) {
-            throw new BusinessException(
-                    "La planilla todavia la marca EN TRANSITO: se puede ingresar cuando figure INGRESADA");
+            log.info("Compra {} se ingresa desde el panel aunque la planilla dice EN TRANSITO",
+                    compra.getNumeroFactura());
         }
 
         Map<Long, Long> ubicacionPorLinea = request.asignaciones().stream()
@@ -145,6 +160,7 @@ public class CompraService {
                 .collect(Collectors.toMap(Function.identity(), ubicacionService::getEntity));
 
         compra.setEstado(CompraEstado.INGRESADA);
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
 
         int cargados = 0;
         for (CompraLinea linea : compra.getLineas()) {
@@ -170,6 +186,72 @@ public class CompraService {
                 compra.getNumeroFactura(), cargados);
 
         return CompraResponse.from(compra, true);
+    }
+
+    /**
+     * Cambia el estado a mano desde el panel, sin pasar por la planilla.
+     *
+     * <p>Volver atras una compra INGRESADA devuelve el stock que habia cargado: se registra la
+     * salida de cada linea desde la ubicacion en la que entro, asi el movimiento queda en el
+     * historial en vez de desaparecer. Si esa mercaderia ya no esta —se vendio o se movio— la
+     * salida falla y no se revierte nada: es preferible a dejar el stock en negativo.
+     *
+     * <p>El estado queda marcado como {@link OrigenEstado#PANEL}, que es lo que despues evita
+     * que el flujo lo lea como una pelea con la planilla.
+     */
+    @Transactional
+    public CompraResponse cambiarEstado(Long compraId, CompraEstado destino) {
+        if (destino == CompraEstado.INGRESADA) {
+            throw new BusinessException(
+                    "Para ingresar una compra hay que asignarle una ubicacion a cada linea");
+        }
+
+        Compra compra = compraRepo.findWithLineasById(compraId)
+                .orElseThrow(() -> new BusinessException("Compra no encontrada"));
+
+        if (compra.getEstado() == destino) {
+            throw new BusinessException("La compra ya esta en ese estado");
+        }
+
+        boolean revertido = compra.getEstado() == CompraEstado.INGRESADA;
+        if (revertido) {
+            devolverStock(compra);
+        }
+
+        compra.setEstado(destino);
+        compra.setEstadoOrigen(OrigenEstado.PANEL);
+        compraRepo.save(compra);
+
+        log.info("Compra {} pasada a {} desde el panel{}", compra.getNumeroFactura(), destino,
+                revertido ? " (se devolvio el stock que habia cargado)" : "");
+        return CompraResponse.from(compra, true);
+    }
+
+    /** Saca de cada ubicacion lo que la compra habia cargado al ingresarse. */
+    private void devolverStock(Compra compra) {
+        int devueltas = 0;
+        for (CompraLinea linea : compra.getLineas()) {
+            if (linea.getProducto() == null || linea.getUbicacionIngreso() == null) {
+                continue;
+            }
+            try {
+                stockService.registrarSalida(new SalidaRequest(
+                        linea.getProducto().getId(),
+                        linea.getUbicacionIngreso().getId(),
+                        linea.getCantidad(),
+                        "Se revirtio el ingreso de la factura #" + compra.getNumeroFactura()
+                ));
+            } catch (BusinessException noSePuede) {
+                throw new BusinessException(
+                        "No se puede revertir: el stock de %s en %s ya no esta como quedo al ingresar (%s)"
+                                .formatted(linea.getCodigo(), linea.getUbicacionIngreso().getCodigo(),
+                                        noSePuede.getMessage()));
+            }
+            linea.setUbicacionIngreso(null);
+            devueltas++;
+        }
+        log.info("Compra {}: se devolvieron {} lineas al revertir el ingreso",
+                compra.getNumeroFactura(), devueltas);
     }
 
     @Transactional(readOnly = true)
