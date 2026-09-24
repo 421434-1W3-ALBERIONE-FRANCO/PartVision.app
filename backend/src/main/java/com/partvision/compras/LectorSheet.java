@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -16,6 +17,13 @@ import java.util.regex.Pattern;
  * configurada la accion que lee la tabla.
  */
 final class LectorSheet {
+
+    /**
+     * Lo que la planilla escribe en la columna Codigo cuando la pieza no tiene codigo de
+     * catalogo. Se comparan normalizados (sin tildes, en mayusculas). Ningun producto del
+     * catalogo tiene un SKU que empiece con "import", asi que no se pisa nada real.
+     */
+    private static final Set<String> SIN_CODIGO_PROPIO = Set.of("IMPORTADO", "IMPORTADOS");
 
     /** Codigo que se asigna a las lineas sin codigo: pedidos puntuales de clientes. */
     static final String CODIGO_IMPORTADO = "IMPORTADOS";
@@ -97,8 +105,20 @@ final class LectorSheet {
         return estatus != null && normalizar(estatus).contains("INGRESAD");
     }
 
+    /**
+     * El codigo de catalogo de la linea, o {@link #CODIGO_IMPORTADO} si no tiene uno propio.
+     *
+     * <p>La celda vacia no es la unica forma de decirlo: en el primer envio real de la planilla
+     * (2026-09-24), 76 de 228 lineas traian escrita la palabra "Importado" en la columna Codigo.
+     * Tomada al pie de la letra es un codigo que no existe en el catalogo, asi que esas lineas
+     * quedaban sin producto y fuera del boton Importados, que es justo donde tienen que estar.
+     */
     static String codigo(String valor) {
-        return (valor == null || valor.isBlank()) ? CODIGO_IMPORTADO : valor.trim();
+        if (valor == null || valor.isBlank()) {
+            return CODIGO_IMPORTADO;
+        }
+        String limpio = valor.trim();
+        return SIN_CODIGO_PROPIO.contains(normalizar(limpio)) ? CODIGO_IMPORTADO : limpio;
     }
 
     /** Texto recortado, o null si no hay nada. */

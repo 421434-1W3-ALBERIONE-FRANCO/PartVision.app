@@ -135,6 +135,24 @@ class LectorSheetTest {
         assertThat(LectorSheet.codigo(" 272005 ")).isEqualTo("272005");
     }
 
+    /**
+     * La planilla no deja la celda vacia: escribe la palabra. En el primer envio real fueron
+     * 76 de 228 lineas, que quedaban con un codigo inexistente y fuera del boton Importados.
+     */
+    @Test
+    void codigo_conLaPalabraImportado_tambienEsImportado() {
+        assertThat(LectorSheet.codigo("Importado")).isEqualTo("IMPORTADOS");
+        assertThat(LectorSheet.codigo("IMPORTADO")).isEqualTo("IMPORTADOS");
+        assertThat(LectorSheet.codigo(" importados ")).isEqualTo("IMPORTADOS");
+    }
+
+    /** Un codigo real que empiece con esa palabra no se toca: solo cuenta la palabra sola. */
+    @Test
+    void codigo_queEmpiezaConImportado_seRespeta() {
+        assertThat(LectorSheet.codigo("IMPORTADO-4512")).isEqualTo("IMPORTADO-4512");
+        assertThat(LectorSheet.codigo("IMPORTADO ESPECIAL")).isEqualTo("IMPORTADO ESPECIAL");
+    }
+
     @Test
     void limpio_recortaYDescartaVacios() {
         assertThat(LectorSheet.limpio(null)).isNull();
