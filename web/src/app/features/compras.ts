@@ -121,13 +121,9 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           Tránsito
                         </span>
                       } @else if (c.estado === 'POR_UBICAR') {
-                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-cyan"
-                          [title]="c.lineasEnStock > 0 ? 'Ingresada a medias: ' + c.lineasEnStock + ' línea(s) en stock, faltan ' + c.lineasPorUbicar : ''">
+                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-cyan">
                           <span class="w-2 h-2 rounded-full bg-neon-cyan"></span>
                           Por ubicar
-                          @if (c.lineasEnStock > 0) {
-                            <span class="font-mono font-normal">· {{ c.lineasEnStock }}/{{ c.lineasEnStock + c.lineasPorUbicar }}</span>
-                          }
                         </span>
                       } @else {
                         <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-green">
@@ -137,15 +133,8 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                       }
                     </td>
                     <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{{ c.totalLineas }}</td>
-                    <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">
-                      @if (c.estado !== 'INGRESADA' && c.unidadesEnStock > 0) {
-                        <span class="font-mono" [title]="c.unidadesEnStock + ' en stock de ' + c.totalUnidades">
-                          <span class="text-neon-cyan">{{ c.unidadesEnStock }}</span>/{{ c.totalUnidades }}
-                        </span>
-                      } @else {
-                        {{ c.totalUnidades }}
-                      }
-                    </td>
+                    <!-- El avance de un ingreso a medias se ve en el detalle, no en el listado. -->
+                    <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{{ c.totalUnidades }}</td>
                     <td class="px-4 py-3 text-center hidden md:table-cell">
                       <span class="text-xs font-mono" [class]="c.lineasMatcheadas === c.totalLineas ? 'text-neon-green' : 'text-amber-400'">
                         {{ c.lineasMatcheadas }}/{{ c.totalLineas }}
