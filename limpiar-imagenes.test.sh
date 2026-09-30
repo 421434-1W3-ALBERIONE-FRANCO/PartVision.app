@@ -12,6 +12,7 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
 VIEJA=aaaa11112222
+MEDIA=cccc55556666
 NUEVA=bbbb33334444
 
 mkdir -p "$T/bin"
@@ -20,10 +21,11 @@ cat > "$T/bin/docker" <<'EOF'
 echo "$*" >> "$FAKE_DOCKER_CALLS"
 [ "${FAKE_DOCKER_RC:-0}" != "0" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
 case "$1 $2" in
-  "images -f")   printf '%s\n%s\n' "$FAKE_VIEJA" "$FAKE_NUEVA" ;;
+  "images -f")   printf '%s\n%s\n%s\n' "$FAKE_VIEJA" "$FAKE_MEDIA" "$FAKE_NUEVA" ;;
   "inspect -f")  # $4 es el id
                  case "$4" in
                    "$FAKE_VIEJA") date -u -d '-10 days' +%Y-%m-%dT%H:%M:%S.000000000Z ;;
+                   "$FAKE_MEDIA") date -u -d '-30 hours' +%Y-%m-%dT%H:%M:%S.000000000Z ;;
                    "$FAKE_NUEVA") date -u -d '-2 hours'  +%Y-%m-%dT%H:%M:%S.000000000Z ;;
                  esac ;;
   "rmi "*)       [ "${FAKE_RMI_RC:-0}" = "0" ] || exit 1 ;;
@@ -37,7 +39,7 @@ mal(){ printf '  FALLA %s\n' "$1"; fallas=$((fallas + 1)); }
 
 correr(){
   rm -f "$T/llamadas"; touch "$T/llamadas"
-  PATH="$T/bin:$PATH" FAKE_DOCKER_CALLS="$T/llamadas" FAKE_VIEJA="$VIEJA" FAKE_NUEVA="$NUEVA" \
+  PATH="$T/bin:$PATH" FAKE_DOCKER_CALLS="$T/llamadas" FAKE_VIEJA="$VIEJA" FAKE_MEDIA="$MEDIA" FAKE_NUEVA="$NUEVA" \
     "$@" bash "$DIR/limpiar-imagenes.sh" 2>&1
 }
 
@@ -48,7 +50,9 @@ grep -q "^rmi $VIEJA$" "$T/llamadas" \
   && ok "borra la huerfana de 10 dias" || mal "borra la huerfana de 10 dias"
 grep -q "^rmi $NUEVA$" "$T/llamadas" \
   && mal "conserva la de hace 2h (vuelta atras)" || ok "conserva la de hace 2h (vuelta atras)"
-echo "$salida" | grep -q '1 borradas, 1 conservadas' \
+grep -q "^rmi $MEDIA$" "$T/llamadas" \
+  && ok "retencion por defecto de 24h: borra la de 30h" || mal "retencion por defecto de 24h: borra la de 30h"
+echo "$salida" | grep -q '2 borradas, 1 conservadas (menos de 24h' \
   && ok "informa que hizo" || mal "informa que hizo ($salida)"
 
 grep -q 'dangling=true' "$T/llamadas" \
@@ -69,7 +73,7 @@ salida=$(correr env FAKE_DOCKER_RC=1); estado=$?
   && ok "si docker falla, no rompe el deploy" || mal "si docker falla, no rompe el deploy ($estado)"
 
 salida=$(correr env FAKE_RMI_RC=1); estado=$?
-[ "$estado" -eq 0 ] && echo "$salida" | grep -q '0 borradas, 2 conservadas' \
+[ "$estado" -eq 0 ] && echo "$salida" | grep -q '0 borradas, 3 conservadas' \
   && ok "si una imagen no se puede borrar, sigue" || mal "si una imagen no se puede borrar, sigue ($salida)"
 
 echo

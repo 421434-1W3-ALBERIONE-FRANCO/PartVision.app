@@ -2,7 +2,7 @@
 # limpiar-imagenes.sh — Borra las imagenes de docker que quedaron huerfanas.
 #
 # Uso:
-#   ./limpiar-imagenes.sh              # borra las huerfanas de mas de 72h
+#   ./limpiar-imagenes.sh              # borra las huerfanas de mas de 24h
 #   RETENCION_HORAS=24 ./limpiar-imagenes.sh
 #   LIMPIAR_IMAGENES=0 ./limpiar-imagenes.sh   # no hace nada (para saltearlo en un deploy)
 #
@@ -21,10 +21,12 @@
 #     ellas cada deploy tendria que volver a bajarlas. Nunca se usa `prune -a`, que ademas se
 #     llevaria imagenes de cualquier otro proyecto que algun dia use docker en este host.
 #   - Se conservan las de las ultimas RETENCION_HORAS: la imagen del deploy anterior es la
-#     vuelta atras rapida si el nuevo sale mal.
+#     vuelta atras rapida si el nuevo sale mal. Eran 72h; el 2026-09-30 se bajo a 24h porque
+#     con varios deploys en el dia se juntaban imagenes de ~1 GB y el disco llego al 81%. Un
+#     dia alcanza para notar que un deploy salio mal; para volver mas atras esta el repo.
 set -uo pipefail
 
-RETENCION_HORAS="${RETENCION_HORAS:-72}"
+RETENCION_HORAS="${RETENCION_HORAS:-24}"
 
 if [ "${LIMPIAR_IMAGENES:-1}" != "1" ]; then
   echo "Limpieza de imagenes salteada (LIMPIAR_IMAGENES=${LIMPIAR_IMAGENES:-1})"
