@@ -121,9 +121,13 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           Tránsito
                         </span>
                       } @else if (c.estado === 'POR_UBICAR') {
-                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-cyan">
+                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-cyan"
+                          [title]="c.lineasEnStock > 0 ? 'Ingresada a medias: ' + c.lineasEnStock + ' línea(s) en stock, faltan ' + c.lineasPorUbicar : ''">
                           <span class="w-2 h-2 rounded-full bg-neon-cyan"></span>
                           Por ubicar
+                          @if (c.lineasEnStock > 0) {
+                            <span class="font-mono font-normal">· {{ c.lineasEnStock }}/{{ c.lineasEnStock + c.lineasPorUbicar }}</span>
+                          }
                         </span>
                       } @else {
                         <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-neon-green">
@@ -133,7 +137,15 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                       }
                     </td>
                     <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{{ c.totalLineas }}</td>
-                    <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{{ c.totalUnidades }}</td>
+                    <td class="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">
+                      @if (c.estado !== 'INGRESADA' && c.unidadesEnStock > 0) {
+                        <span class="font-mono" [title]="c.unidadesEnStock + ' en stock de ' + c.totalUnidades">
+                          <span class="text-neon-cyan">{{ c.unidadesEnStock }}</span>/{{ c.totalUnidades }}
+                        </span>
+                      } @else {
+                        {{ c.totalUnidades }}
+                      }
+                    </td>
                     <td class="px-4 py-3 text-center hidden md:table-cell">
                       <span class="text-xs font-mono" [class]="c.lineasMatcheadas === c.totalLineas ? 'text-neon-green' : 'text-amber-400'">
                         {{ c.lineasMatcheadas }}/{{ c.totalLineas }}
@@ -236,6 +248,9 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   {{ detalleCompra()!.fechaFactura | date:'dd/MM/yyyy' }}
                   @if (detalleCompra()!.proveedor) { · {{ detalleCompra()!.proveedor }} }
                   · {{ detalleCompra()!.totalLineas }} líneas · {{ detalleCompra()!.totalUnidades }} unidades
+                  @if (detalleCompra()!.unidadesEnStock > 0 && detalleCompra()!.unidadesEnStock !== detalleCompra()!.totalUnidades) {
+                    · <span class="text-neon-cyan font-semibold">{{ detalleCompra()!.unidadesEnStock }} en stock</span>
+                  }
                 </p>
               </div>
               <button (click)="cerrarDetalle()" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-dark-surface transition-colors cursor-pointer">
@@ -253,6 +268,19 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Stock cargado — ubicación asignada por línea</span>
+                </div>
+              }
+
+              @if (detalleCompra()!.estado !== 'INGRESADA' && detalleCompra()!.lineasEnStock > 0) {
+                <div class="mb-4 flex items-center gap-2 text-xs text-neon-cyan bg-neon-cyan/5 border border-neon-cyan/20 rounded-xl px-4 py-2.5">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>
+                    Ingresada a medias: {{ detalleCompra()!.lineasEnStock }} línea(s) ya en stock
+                    ({{ detalleCompra()!.unidadesEnStock }} unidades). Faltan {{ detalleCompra()!.lineasPorUbicar }}:
+                    asignales ubicación para terminar de ingresarla.
+                  </span>
                 </div>
               }
 
@@ -334,7 +362,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           }
                         </td>
                         <td class="px-3 py-2">
-                          @if (puedeUbicar() && l.revision !== 'DESCARTADA') {
+                          @if (puedeUbicar() && faltaUbicar(l)) {
                             <select [value]="ubicacionPorLinea[l.id] || ''"
                               (change)="setUbicacionLinea(l.id, $event)"
                               class="w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border rounded-lg text-xs focus:outline-none focus:border-neon-cyan"
@@ -354,6 +382,13 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           } @else {
                             @if (l.ubicacionIngresoCodigo) {
                               <span class="text-xs text-neon-green font-mono">{{ l.ubicacionIngresoCodigo }}</span>
+                              @if (detalleCompra()!.estado !== 'INGRESADA') {
+                                <span class="block text-[10px] text-neon-green">ya en stock</span>
+                              }
+                            } @else if (!l.productoId && l.revision !== 'DESCARTADA') {
+                              <span class="text-[10px] text-gray-500" title="No tiene artículo del catálogo: no carga stock hasta resolverla en Importados">
+                                sin artículo · resolvela en Importados
+                              </span>
                             } @else if (detalleCompra()!.ubicacionIngresoCodigo) {
                               <span class="text-xs text-gray-400 font-mono">{{ detalleCompra()!.ubicacionIngresoCodigo }}</span>
                             } @else {
@@ -393,7 +428,11 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   </button>
                 } @else {
                   <div class="text-xs text-gray-400">
-                    {{ lineasAsignadas() }}/{{ lineasUbicables() }} líneas con ubicación
+                    @if (detalleCompra()!.lineasPorUbicar > 0) {
+                      {{ lineasAsignadas() }} de {{ detalleCompra()!.lineasPorUbicar }} línea(s) que faltan, con ubicación
+                    } @else {
+                      No queda ninguna línea por ubicar.
+                    }
                     @if (detalleCompra()!.lineasEnRevision.length > 0) {
                       <span class="block text-amber-400 font-semibold mt-0.5">
                         {{ detalleCompra()!.lineasEnRevision.length }} línea(s) con una cantidad fuera de lo normal: aceptalas o descartalas para poder ingresar.
@@ -408,13 +447,22 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                         Marcar como llegada
                       </button>
                     } @else {
+                      @if (detalleCompra()!.lineasEnStock > 0) {
+                        <button (click)="revertirLoUbicado()" [disabled]="cambiandoEstado()"
+                          class="px-4 py-2.5 rounded-xl font-medium text-sm text-red-400 border border-red-500/40 hover:bg-red-500/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap"
+                          title="Descuenta del stock lo que ya se ubicó de esta factura; sigue por ubicar">
+                          Revertir lo ubicado
+                        </button>
+                      }
                       <button (click)="cambiarEstado('EN_TRANSITO')" [disabled]="cambiandoEstado()"
                         class="px-4 py-2.5 rounded-xl font-medium text-sm text-gray-300 border border-dark-border hover:bg-dark-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap"
-                        title="Volverla a EN TRÁNSITO: no toca el stock, porque todavía no se cargó">
+                        [title]="detalleCompra()!.lineasEnStock > 0
+                          ? 'Volverla a EN TRÁNSITO: devuelve lo que ya se ubicó'
+                          : 'Volverla a EN TRÁNSITO: no toca el stock, porque todavía no se cargó'">
                         Volver a EN TRÁNSITO
                       </button>
                     }
-                    <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando() || detalleCompra()!.lineasEnRevision.length > 0"
+                    <button (click)="confirmarIngreso()" [disabled]="!puedeIngresar()"
                       class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-neon-green/20 text-neon-green border border-neon-green/40 hover:bg-neon-green/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
                       @if (ingresando()) {
                         <span class="inline-flex items-center gap-2">
@@ -425,7 +473,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           Cargando stock...
                         </span>
                       } @else {
-                        Ingresar al stock
+                        {{ textoIngreso() }}
                       }
                     </button>
                   </div>
@@ -780,8 +828,38 @@ export class Compras implements OnInit {
     );
   }
 
+  /**
+   * Puede sumar stock y todavia no entro: lo mismo que CompraLinea.faltaUbicar() del backend.
+   * Solo esas llevan selector de ubicacion. Las que ya entraron en una pasada anterior quedan
+   * fijas: mandarlas de nuevo las cargaria dos veces (el backend igual las ignora).
+   */
+  faltaUbicar(l: CompraLinea): boolean {
+    return l.productoId != null && l.revision !== 'DESCARTADA' && l.ubicacionIngresoId == null;
+  }
+
+  /** De las que faltan ubicar, cuantas tienen ubicacion elegida para esta pasada. */
   lineasAsignadas(): number {
-    return Object.keys(this.ubicacionPorLinea).length;
+    const compra = this.detalleCompra();
+    if (!compra) return 0;
+    return compra.lineas.filter(l => this.faltaUbicar(l) && this.ubicacionPorLinea[l.id]).length;
+  }
+
+  /**
+   * Se ingresa lo que tenga ubicacion, aunque falten lineas: la compra queda por ubicar hasta
+   * completarla. Sin ninguna nueva, solo si ya no queda nada que ubicar (para cerrarla).
+   */
+  puedeIngresar(): boolean {
+    const compra = this.detalleCompra();
+    if (!compra || this.ingresando() || compra.lineasEnRevision.length > 0) return false;
+    return this.lineasAsignadas() > 0 || compra.lineasPorUbicar === 0;
+  }
+
+  textoIngreso(): string {
+    const compra = this.detalleCompra();
+    if (!compra) return 'Ingresar al stock';
+    if (compra.lineasPorUbicar === 0) return 'Marcar como ingresada';
+    const n = this.lineasAsignadas();
+    return n > 0 && n < compra.lineasPorUbicar ? `Ingresar ${n} de ${compra.lineasPorUbicar} al stock` : 'Ingresar al stock';
   }
 
   setUbicacionLinea(lineaId: number, event: Event): void {
@@ -801,7 +879,7 @@ export class Compras implements OnInit {
     if (!compra) return;
     this.ubicacionPorLinea = {};
     for (const l of compra.lineas) {
-      if (l.revision === 'DESCARTADA') continue;   // no entra al stock
+      if (!this.faltaUbicar(l)) continue;   // ya en stock, descartada o sin articulo
       this.ubicacionPorLinea[l.id] = ubicId;
     }
   }
@@ -872,9 +950,14 @@ export class Compras implements OnInit {
    * Cambia el estado sin esperar a la planilla. El backend anota que salio del panel, asi que
    * el proximo envio del flujo no lo trata como una pelea con la planilla.
    */
-  cambiarEstado(destino: 'EN_TRANSITO' | 'POR_UBICAR'): void {
+  cambiarEstado(destino: 'EN_TRANSITO' | 'POR_UBICAR', yaConfirmado = false): void {
     const compra = this.detalleCompra();
     if (!compra || this.cambiandoEstado()) return;
+    if (!yaConfirmado && compra.lineasEnStock > 0 && !confirm(
+        `Esta factura ya tiene ${compra.unidadesEnStock} unidades en stock. Volverla a EN TRÁNSITO `
+        + 'las descuenta de las ubicaciones en las que entraron. ¿Seguir?')) {
+      return;
+    }
 
     this.cambiandoEstado.set(true);
     this.errorIngreso.set('');
@@ -899,23 +982,45 @@ export class Compras implements OnInit {
     const ok = confirm(
       `Revertir el ingreso de la factura ${compra.numeroFactura} descuenta de las ubicaciones `
       + 'todo lo que esta compra cargó. ¿Seguir?');
-    if (ok) this.cambiarEstado('POR_UBICAR');
+    if (ok) this.cambiarEstado('POR_UBICAR', true);
+  }
+
+  /** Deshace lo ya ubicado de una factura ingresada a medias. Sigue por ubicar. */
+  revertirLoUbicado(): void {
+    const compra = this.detalleCompra();
+    if (!compra) return;
+    const ok = confirm(
+      `Se descuentan del stock las ${compra.unidadesEnStock} unidades ya ubicadas de la factura `
+      + `${compra.numeroFactura}, de las mismas ubicaciones en las que entraron. ¿Seguir?`);
+    if (ok) this.cambiarEstado('POR_UBICAR', true);
   }
 
   confirmarIngreso(): void {
     const compra = this.detalleCompra();
     if (!compra) return;
 
-    const asignaciones: LineaUbicacionAsignacion[] = Object.entries(this.ubicacionPorLinea)
-      .map(([lineaId, ubicacionId]) => ({ lineaId: +lineaId, ubicacionId }));
+    const asignaciones: LineaUbicacionAsignacion[] = compra.lineas
+      .filter(l => this.faltaUbicar(l) && this.ubicacionPorLinea[l.id])
+      .map(l => ({ lineaId: l.id, ubicacionId: this.ubicacionPorLinea[l.id] }));
 
-    if (asignaciones.length === 0) return;
+    if (asignaciones.length === 0 && compra.lineasPorUbicar > 0) return;
 
     this.ingresando.set(true);
     this.errorIngreso.set('');
     this.compraService.marcarIngresada(compra.id, asignaciones).subscribe({
       next: (updated) => {
-        this.detalleCompra.set(updated);
+        // La respuesta no trae las ubicaciones sugeridas: se conservan las que ya habia, para
+        // que las lineas que faltan sigan mostrando su sugerencia.
+        const previas = new Map(compra.lineas.map(l => [l.id, l]));
+        this.detalleCompra.set({
+          ...updated,
+          lineas: updated.lineas.map(l => ({
+            ...l,
+            ubicacionSugeridaId: previas.get(l.id)?.ubicacionSugeridaId ?? l.ubicacionSugeridaId,
+            ubicacionSugeridaCodigo: previas.get(l.id)?.ubicacionSugeridaCodigo ?? l.ubicacionSugeridaCodigo,
+          })),
+        });
+        for (const a of asignaciones) delete this.ubicacionPorLinea[a.lineaId];
         this.ingresando.set(false);
         this.cargar();
       },
@@ -1085,7 +1190,8 @@ export class Compras implements OnInit {
     if (compra.estado !== 'POR_UBICAR') return;
     this.ubicacionPorLinea = {};
     for (const l of compra.lineas) {
-      if (l.ubicacionSugeridaId) {
+      // Solo las que faltan: precargar la sugerida en una que ya entro la volveria a mandar.
+      if (this.faltaUbicar(l) && l.ubicacionSugeridaId) {
         this.ubicacionPorLinea[l.id] = l.ubicacionSugeridaId;
       }
     }

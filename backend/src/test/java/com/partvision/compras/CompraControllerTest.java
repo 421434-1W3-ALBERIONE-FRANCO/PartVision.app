@@ -52,7 +52,7 @@ class CompraControllerTest {
 
     private static CompraResponse respuesta() {
         return new CompraResponse(1L, "A-0001-00012345", LocalDate.of(2026, 9, 11), "EGSA",
-                "PENDIENTE", "EN_TRANSITO", null, null, 1, 4, 0, Instant.now(), List.of(), List.of());
+                "PENDIENTE", "EN_TRANSITO", null, null, 1, 4, 0, Instant.now(), List.of(), List.of(), 0, 1, 0);
     }
 
     @Test

@@ -59,4 +59,22 @@ public class CompraLinea extends Auditable {
     public boolean pendienteDeRevision() {
         return revision == RevisionLinea.PENDIENTE;
     }
+
+    /**
+     * Puede sumar stock: tiene articulo del catalogo y no se descarto. Una sin articulo (un
+     * importado sin resolver) queda registrada pero no tiene a que producto cargarle nada.
+     */
+    public boolean cargaStock() {
+        return producto != null && !descartada();
+    }
+
+    /** Ya entro al stock: se le asigno ubicacion al ingresarla. */
+    public boolean enStock() {
+        return cargaStock() && ubicacionIngreso != null;
+    }
+
+    /** Puede sumar stock y todavia no entro. Mientras quede alguna, la compra no esta ingresada. */
+    public boolean faltaUbicar() {
+        return cargaStock() && ubicacionIngreso == null;
+    }
 }

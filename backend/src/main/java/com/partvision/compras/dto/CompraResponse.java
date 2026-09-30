@@ -27,7 +27,16 @@ public record CompraResponse(
          * tambien en el listado: el panel las muestra en la misma fila de la factura, para
          * aceptarlas o descartarlas sin abrir la compra.
          */
-        List<LineaEnRevision> lineasEnRevision
+        List<LineaEnRevision> lineasEnRevision,
+        /** Lineas que ya entraron al stock. */
+        int lineasEnStock,
+        /**
+         * Lineas con articulo que todavia no entraron. Mientras sea mayor que cero, la compra no
+         * esta ingresada aunque tenga stock cargado: se ingresa por partes.
+         */
+        int lineasPorUbicar,
+        /** Lo que de verdad esta en el stock. Puede ser menos que totalUnidades. */
+        int unidadesEnStock
 ) {
     public record LineaEnRevision(Long id, String codigo, String descripcion, int cantidad) {
         static LineaEnRevision from(CompraLinea l) {
@@ -76,7 +85,10 @@ public record CompraResponse(
                 matcheadas,
                 c.getCreatedAt(),
                 lineasDto,
-                enRevision
+                enRevision,
+                (int) c.getLineas().stream().filter(CompraLinea::enStock).count(),
+                (int) c.lineasPorUbicar(),
+                c.getLineas().stream().filter(CompraLinea::enStock).mapToInt(CompraLinea::getCantidad).sum()
         );
     }
 

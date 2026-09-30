@@ -56,4 +56,18 @@ public class Compra extends Auditable {
         lineas.add(linea);
         linea.setCompra(this);
     }
+
+    /**
+     * Alguna linea ya entro al stock. No es lo mismo que estar INGRESADA: una compra se ingresa
+     * por partes, y mientras le falte ubicar alguna linea sigue POR_UBICAR con stock cargado.
+     * Todo lo que tiene que proteger el stock (la planilla que vuelve atras, volver a EN
+     * TRANSITO a mano) mira esto y no el estado.
+     */
+    public boolean tieneStockCargado() {
+        return lineas.stream().anyMatch(CompraLinea::enStock);
+    }
+
+    public long lineasPorUbicar() {
+        return lineas.stream().filter(CompraLinea::faltaUbicar).count();
+    }
 }

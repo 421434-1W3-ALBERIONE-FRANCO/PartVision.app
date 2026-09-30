@@ -412,7 +412,7 @@ class CompraServiceTest {
 
         assertThatThrownBy(() -> service.marcarIngresada(1L, request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("ya fue marcada como ingresada");
+                .hasMessageContaining("ya esta ingresada completa");
     }
 
     @Test
@@ -426,8 +426,12 @@ class CompraServiceTest {
                 .hasMessageContaining("Compra no encontrada");
     }
 
+    /**
+     * Un ingreso que no ubica ninguna de las lineas que faltan no hace nada, y se rechaza: antes
+     * pasaba en silencio y la compra quedaba INGRESADA sin stock.
+     */
     @Test
-    void marcarIngresada_lineaSinAsignacion_skip() {
+    void marcarIngresada_sinUbicarNingunaDeLasQueFaltan_seRechaza() {
         Compra compra = buildCompraConLineas(CompraEstado.POR_UBICAR);
         CompraLinea linea = compra.getLineas().getFirst();
         linea.setId(100L);
@@ -437,13 +441,14 @@ class CompraServiceTest {
 
         when(compraRepo.findWithLineasById(1L)).thenReturn(Optional.of(compra));
         when(ubicacionService.getEntity(50L)).thenReturn(ub);
-        when(compraRepo.save(any(Compra.class))).thenReturn(compra);
 
         var request = new CambiarEstadoRequest(List.of(new CambiarEstadoRequest.LineaUbicacion(999L, 50L)));
 
-        service.marcarIngresada(1L, request);
-
+        assertThatThrownBy(() -> service.marcarIngresada(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("faltan ingresar");
         verify(stockService, never()).registrarEntrada(any());
+        assertThat(compra.getEstado()).isEqualTo(CompraEstado.POR_UBICAR);
     }
 
     // --- listar ---

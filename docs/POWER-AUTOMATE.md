@@ -88,7 +88,7 @@ planilla no sabe: en qué ubicación queda cada cosa.
 | Planilla | PartVision | Qué se puede hacer en el panel |
 |---|---|---|
 | `EN TRÁNSITO` | **En tránsito** | ubicar e ingresar igual, si la mercadería ya está |
-| `INGRESADA` | **Por ubicar** | asignar una ubicación a cada línea e ingresar al stock |
+| `INGRESADA` | **Por ubicar** | asignar ubicación e ingresar al stock, todo junto o por partes |
 | — | **Ingresada** | revertir el ingreso, que devuelve el stock |
 
 - La ubicación la elige una persona: el panel precarga la sugerida cuando el producto ya
@@ -122,6 +122,30 @@ misma factura mil veces no la carga dos veces.
 
 En el panel, una compra cuyo estado no coincide con la planilla muestra **"estado puesto a
 mano"**, y el título dice qué dice la planilla.
+
+### Ingresar por partes
+
+Una factura no tiene que ubicarse entera de una vez. Se ingresa **lo que tenga ubicación**, y
+el resto queda pendiente:
+
+- La factura sigue **Por ubicar** mientras le falte ubicar alguna línea con artículo. En el
+  listado se ve el avance (`Por ubicar · 1/5`) y las unidades reales (`12/25`); en el detalle,
+  "Ingresada a medias: 1 línea ya en stock (12 unidades). Faltan 4".
+- Pasa a **Ingresada** recién cuando no le falta ninguna.
+- Lo que ya entró queda **fijo**, con su ubicación y la marca "ya en stock": en la pasada
+  siguiente no se vuelve a cargar, aunque se mande de nuevo.
+- Una línea **sin artículo** (un importado sin resolver) no carga stock y no impide cerrar la
+  factura. Si es lo único que queda, el botón pasa a "Marcar como ingresada".
+
+Hasta el 2026-09-30 bastaba ubicar **una** línea para marcar la factura entera como ingresada:
+las demás quedaban fuera del stock sin forma de ingresarlas después. Dos facturas estaban así
+(0018-00006900 con 12 de 25 unidades en stock, 900004165 con 13 de 18) y volvieron a *Por
+ubicar* con lo ya ubicado intacto, para terminarlas.
+
+Todo lo que protege el stock mira si la factura **tiene stock cargado**, no si está Ingresada:
+la planilla que vuelve a EN TRÁNSITO da conflicto también con una factura a medias, y volverla
+a EN TRÁNSITO a mano devuelve lo ya ubicado. **Revertir lo ubicado** deshace una factura a
+medias sin cambiarle el estado.
 
 ### Cambiar el estado a mano
 

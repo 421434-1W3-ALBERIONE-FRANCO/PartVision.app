@@ -93,12 +93,13 @@ public class CompraService {
                     "La factura " + factura.numero() + " ya esta registrada con otro contenido");
         }
         boolean laPlanillaCambio = compra.getEstadoPlanilla() != factura.estado();
+        // Ingresada entera, o a medias: en los dos casos hay stock que proteger.
+        boolean ingresoEmpezado = compra.getEstado() == CompraEstado.INGRESADA || compra.tieneStockCargado();
 
         // La planilla se contradice y el stock ya esta cargado: alguien la edito hacia atras
         // despues de que entrara la mercaderia. No se toca nada y se avisa en cada envio, a
         // proposito: queda sin resolver hasta que se arregle la planilla o se revierta aca.
-        if (compra.getEstado() == CompraEstado.INGRESADA
-                && factura.estado() == CompraEstado.EN_TRANSITO && laPlanillaCambio) {
+        if (ingresoEmpezado && factura.estado() == CompraEstado.EN_TRANSITO && laPlanillaCambio) {
             return resultado(Tipo.CONFLICTO, compra,
                     "La planilla la volvio a EN TRANSITO pero su stock ya se cargo en PartVision");
         }
@@ -121,8 +122,7 @@ public class CompraService {
         // La planilla pisa el estado solo cuando la planilla CAMBIA. Si no cambio y igual
         // diferimos, es porque alguien lo movio desde el panel: eso se respeta, o el cambio
         // hecho a mano se desharia solo en el siguiente envio, quince minutos despues.
-        if (laPlanillaCambio && compra.getEstado() != CompraEstado.INGRESADA
-                && compra.getEstado() != factura.estado()) {
+        if (laPlanillaCambio && !ingresoEmpezado && compra.getEstado() != factura.estado()) {
             compra.setEstado(factura.estado());
             cambios.add(factura.estado() == CompraEstado.POR_UBICAR
                     ? "llego: queda por ubicar"
@@ -157,7 +157,7 @@ public class CompraService {
                 .orElseThrow(() -> new BusinessException("Compra no encontrada"));
 
         if (compra.getEstado() == CompraEstado.INGRESADA) {
-            throw new BusinessException("La compra ya fue marcada como ingresada");
+            throw new BusinessException("La compra ya esta ingresada completa");
         }
         long sinRevisar = compra.getLineas().stream().filter(CompraLinea::pendienteDeRevision).count();
         if (sinRevisar > 0) {
@@ -179,32 +179,43 @@ public class CompraService {
         Map<Long, Ubicacion> ubicacionesCache = ubicacionIds.stream()
                 .collect(Collectors.toMap(Function.identity(), ubicacionService::getEntity));
 
-        compra.setEstado(CompraEstado.INGRESADA);
-
-        int cargados = 0;
+        int cargadas = 0;
         for (CompraLinea linea : compra.getLineas()) {
             Long ubicacionId = ubicacionPorLinea.get(linea.getId());
             if (ubicacionId == null) continue;
 
-            if (linea.descartada()) continue;   // error de la planilla: no entra al stock
+            // Solo las que faltan: una que ya entro en una pasada anterior no se vuelve a cargar,
+            // una descartada es un error de la planilla, y una sin articulo no tiene a que
+            // producto sumarle stock (se resuelve en Importados y despues se ubica).
+            if (!linea.faltaUbicar()) continue;
 
-            Ubicacion ubicacion = ubicacionesCache.get(ubicacionId);
-            linea.setUbicacionIngreso(ubicacion);
-
-            if (linea.getProducto() == null) continue;
-
+            linea.setUbicacionIngreso(ubicacionesCache.get(ubicacionId));
             stockService.registrarEntrada(new EntradaRequest(
                     linea.getProducto().getId(),
                     ubicacionId,
                     linea.getCantidad(),
                     "Compra factura #" + compra.getNumeroFactura()
             ));
-            cargados++;
+            cargadas++;
+        }
+
+        // La compra se ingresa por partes: esta INGRESADA recien cuando no le falta ubicar
+        // ninguna linea que cargue stock. Antes se marcaba entera con que se ubicara una sola, y
+        // el panel mostraba "Ingresada, 25 unidades" con 12 en el stock.
+        long faltan = compra.lineasPorUbicar();
+        if (cargadas == 0 && faltan > 0) {
+            throw new BusinessException("Asigna una ubicacion a al menos una de las " + faltan
+                    + " linea(s) que faltan ingresar");
+        }
+        if (faltan == 0) {
+            compra.setEstado(CompraEstado.INGRESADA);
+        } else if (compra.getEstado() == CompraEstado.EN_TRANSITO) {
+            compra.setEstado(CompraEstado.POR_UBICAR);   // llego, al menos una parte
         }
 
         compraRepo.save(compra);
-        log.info("Compra {} marcada INGRESADA: {} líneas con stock cargado (por ubicación individual)",
-                compra.getNumeroFactura(), cargados);
+        log.info("Compra {}: {} linea(s) ingresadas al stock en esta pasada, faltan {} -> {}",
+                compra.getNumeroFactura(), cargadas, faltan, compra.getEstado());
 
         return CompraResponse.from(compra, true);
     }
@@ -231,11 +242,13 @@ public class CompraService {
         Compra compra = compraRepo.findWithLineasById(compraId)
                 .orElseThrow(() -> new BusinessException("Compra no encontrada"));
 
-        if (compra.getEstado() == destino) {
+        // Con stock cargado, "ir" al mismo estado tiene sentido: es revertir lo ya ubicado de una
+        // compra ingresada a medias (sigue POR_UBICAR, pero sin nada en el stock).
+        boolean revertido = compra.tieneStockCargado();
+        if (compra.getEstado() == destino && !revertido) {
             throw new BusinessException("La compra ya esta en ese estado");
         }
 
-        boolean revertido = compra.getEstado() == CompraEstado.INGRESADA;
         if (revertido) {
             devolverStock(compra);
         }
@@ -273,6 +286,10 @@ public class CompraService {
                 .orElseThrow(() -> new BusinessException("La linea no es de esta compra"));
         if (linea.getRevision() == null) {
             throw new BusinessException("Esa linea tiene una cantidad normal: no hay nada que revisar");
+        }
+        if (linea.enStock()) {
+            throw new BusinessException("Esa linea ya entro al stock con esa decision: para cambiarla,"
+                    + " primero hay que revertir lo ubicado");
         }
 
         linea.setRevision(decision);

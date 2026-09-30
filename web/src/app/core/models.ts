@@ -348,4 +348,10 @@ export interface Compra {
   lineas: CompraLinea[];
   /** Viene tambien en el listado: el panel las muestra en la misma fila de la factura. */
   lineasEnRevision: LineaEnRevision[];
+  /** Lineas que ya entraron al stock. Una compra se ingresa por partes. */
+  lineasEnStock: number;
+  /** Lineas con articulo que todavia no entraron. Mientras sea > 0 no esta ingresada. */
+  lineasPorUbicar: number;
+  /** Lo que de verdad esta en el stock; puede ser menos que totalUnidades. */
+  unidadesEnStock: number;
 }
