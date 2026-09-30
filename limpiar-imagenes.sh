@@ -43,22 +43,36 @@ limite=$(( $(date +%s) - RETENCION_HORAS * 3600 ))
 borradas=0
 conservadas=0
 
-for id in $huerfanas; do
-  creada_iso=$(docker inspect -f '{{.Created}}' "$id" 2>/dev/null)
-  creada=$(date -d "$creada_iso" +%s 2>/dev/null)
-  if [ -z "$creada" ]; then
-    # Sin fecha legible no se arriesga: la proxima vuelta se vuelve a mirar.
-    conservadas=$((conservadas + 1))
-    continue
-  fi
-  if [ "$creada" -ge "$limite" ]; then
-    conservadas=$((conservadas + 1))   # todavia sirve para volver atras
-  elif docker rmi "$id" >/dev/null 2>&1; then
-    borradas=$((borradas + 1))
-  else
-    # Puede ser padre de otra imagen: no es un problema, se borra cuando deje de serlo.
-    conservadas=$((conservadas + 1))
-  fi
+# Varias pasadas, no una. El builder de docker deja las imagenes en cadena: borrar la de arriba
+# recien deja a la vista a su padre como huerfana, y ese padre es el que tiene los bytes. El
+# 2026-09-30 una sola pasada borro 8 imagenes sin liberar nada; la segunda borro los 5 padres
+# que habian quedado a la vista y libero 1,5 GB. Con una sola pasada los padres esperaban al
+# deploy siguiente, que sumaba su propia cadena, y el disco bajaba aunque la limpieza decia
+# que borraba. Se repite mientras alguna pasada borre algo, con tope por las dudas.
+for _pasada in 1 2 3 4 5 6 7 8 9 10; do
+  borradas_pasada=0
+  conservadas=0
+  for id in $huerfanas; do
+    creada_iso=$(docker inspect -f '{{.Created}}' "$id" 2>/dev/null)
+    creada=$(date -d "$creada_iso" +%s 2>/dev/null)
+    if [ -z "$creada" ]; then
+      # Sin fecha legible no se arriesga: la proxima vuelta se vuelve a mirar.
+      conservadas=$((conservadas + 1))
+      continue
+    fi
+    if [ "$creada" -ge "$limite" ]; then
+      conservadas=$((conservadas + 1))   # todavia sirve para volver atras
+    elif docker rmi "$id" >/dev/null 2>&1; then
+      borradas_pasada=$((borradas_pasada + 1))
+    else
+      # Puede ser padre de otra imagen: no es un problema, se borra cuando deje de serlo.
+      conservadas=$((conservadas + 1))
+    fi
+  done
+  borradas=$((borradas + borradas_pasada))
+  [ "$borradas_pasada" -eq 0 ] && break
+  huerfanas=$(docker images -f dangling=true -q 2>/dev/null)
+  [ -z "$huerfanas" ] && break
 done
 
 echo "Imagenes huerfanas: ${borradas} borradas, ${conservadas} conservadas (menos de ${RETENCION_HORAS}h o en uso)"
