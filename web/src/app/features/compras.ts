@@ -23,7 +23,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
           </svg>
           <span>Compras</span>
           <span class="text-xs font-mono bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 px-2 py-0.5 rounded-full uppercase">
-            ADMIN
+            ADMINISTRADOR
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">
@@ -97,8 +97,8 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Proveedor</th>
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Líneas</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Uds.</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Match</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Unidades</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">En catálogo</th>
                   <th class="px-4 py-3 text-center"></th>
                 </tr>
               </thead>
@@ -255,8 +255,8 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                     <tr class="border-b border-dark-border">
                       <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Código</th>
                       <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Descripción</th>
-                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cant.</th>
-                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Match</th>
+                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cantidad</th>
+                      <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">En catálogo</th>
                       <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Ubicación</th>
                     </tr>
                   </thead>
@@ -417,7 +417,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                         <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Factura</th>
                         <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase hidden sm:table-cell">Fecha</th>
                         <th class="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase">Descripción</th>
-                        <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cant.</th>
+                        <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Cantidad</th>
                         <th class="px-3 py-2 text-center text-xs font-semibold text-gray-400 uppercase">Compra</th>
                         <th class="px-3 py-2"></th>
                       </tr>

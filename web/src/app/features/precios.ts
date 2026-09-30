@@ -19,7 +19,7 @@ import { ProductoService } from '../core/producto.service';
           </svg>
           <span>Precios</span>
           <span class="text-xs font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase">
-            ADMIN
+            ADMINISTRADOR
           </span>
         </h2>
         <p class="text-sm text-gray-400 mt-1">

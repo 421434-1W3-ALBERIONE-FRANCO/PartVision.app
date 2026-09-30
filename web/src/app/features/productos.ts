@@ -23,7 +23,7 @@ import { UbicacionService } from '../core/ubicacion.service';
           <h2 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
             <span>Catálogo de Productos</span>
             <span class="text-xs font-mono bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 px-2 py-0.5 rounded-full uppercase">
-              CATALOGO MASTER
+              CATÁLOGO GENERAL
             </span>
           </h2>
           <p class="text-sm text-gray-400 mt-1">

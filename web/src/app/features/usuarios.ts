@@ -17,7 +17,7 @@ import { UsuarioService } from '../core/usuario.service';
           <h2 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
             <span>Gestión de Usuarios</span>
             <span class="text-xs font-mono bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-2 py-0.5 rounded-full uppercase">
-              ADMIN CONTROL
+              ADMINISTRACIÓN
             </span>
           </h2>
           <p class="text-sm text-gray-400 mt-1">

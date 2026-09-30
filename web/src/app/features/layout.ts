@@ -30,7 +30,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
                 PartVision
               </h1>
               <span class="text-[10px] font-mono text-neon-cyan/80 tracking-widest uppercase">
-                Enterprise Core
+                Gestión de repuestos
               </span>
             </div>
           </div>
@@ -143,7 +143,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
                 </svg>
                 <span>Carga por IA</span>
                 <span class="ml-auto text-[10px] font-mono uppercase bg-neon-pink/20 text-neon-pink border border-neon-pink/30 px-1.5 py-0.5 rounded-md">
-                  AI
+                  IA
                 </span>
               </a>
               <a
@@ -156,7 +156,7 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
                 </svg>
                 <span>Extracciones IA</span>
                 <span class="ml-auto text-[10px] font-mono uppercase bg-neon-purple/20 text-neon-purple border border-neon-purple/30 px-1.5 py-0.5 rounded-md">
-                  AI
+                  IA
                 </span>
               </a>
             </div>
