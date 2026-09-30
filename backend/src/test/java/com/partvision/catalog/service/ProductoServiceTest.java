@@ -16,6 +16,7 @@ import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoCodigoRepository;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.inventory.repository.StockRepository;
@@ -33,6 +34,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,6 +106,88 @@ class ProductoServiceTest {
         assertThat(response.detallesExtra()).containsEntry("origen", "Argentina");
         assertThat(response.codigos()).extracting(c -> c.codigo()).containsExactly("7791234567890");
         assertThat(response.proveedor()).isEqualTo("Autopartes SA");
+    }
+
+    // --- el prefijo IMP- esta reservado para los importados ---
+
+    private static ProductoRequest conSku(String sku) {
+        return new ProductoRequest(sku, null, null, null, "BIELA OM651", null, null, null, null);
+    }
+
+    /**
+     * Si se pudiera crear un IMP- a mano, despues chocaria con el que asigne la secuencia. Vale
+     * para todos los caminos que pasan por aca: el panel, la carga por IA y la importacion CSV.
+     */
+    @Test
+    void create_conPrefijoDeImportado_seRechaza() {
+        assertThatThrownBy(() -> service().create(conSku("IMP-00001")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("IMP-")
+                .hasMessageContaining("asigna el sistema");
+        assertThatThrownBy(() -> service().create(conSku("  imp-00007")))
+                .isInstanceOf(BusinessException.class);
+        verify(productoRepository, never()).save(any());
+    }
+
+    @Test
+    void crearImportado_conSuCodigo_creaElProducto() {
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> {
+            Producto p = inv.getArgument(0);
+            p.setId(900L);
+            return p;
+        });
+
+        ProductoResponse r = service().crearImportado(conSku("IMP-00001"));
+
+        assertThat(r.id()).isEqualTo(900L);
+        assertThat(r.sku()).isEqualTo("IMP-00001");
+    }
+
+    /** El camino de los importados no sirve para crear otra cosa. */
+    @Test
+    void crearImportado_sinPrefijo_seRechaza() {
+        assertThatThrownBy(() -> service().crearImportado(conSku("272005")))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(productoRepository, never()).save(any());
+    }
+
+    @Test
+    void update_cambiarElCodigoDeUnImportado_seRechaza() {
+        Producto importado = Producto.builder().id(4L).sku("IMP-00003").descripcion("biela")
+                .estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.findWithDetallesById(4L)).thenReturn(Optional.of(importado));
+
+        assertThatThrownBy(() -> service().update(4L, conSku("272005")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("IMP-00003");
+        assertThatThrownBy(() -> service().update(4L, conSku(null)))
+                .isInstanceOf(BusinessException.class);
+        assertThat(importado.getSku()).isEqualTo("IMP-00003");
+    }
+
+    /** Editar lo demas de un importado se puede: el codigo queda, igual o con otras mayusculas. */
+    @Test
+    void update_deUnImportadoSinTocarElCodigo_seGuarda() {
+        Producto importado = Producto.builder().id(4L).sku("IMP-00003").descripcion("biela")
+                .estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.findWithDetallesById(4L)).thenReturn(Optional.of(importado));
+        when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoResponse r = service().update(4L, conSku(" imp-00003 "));
+
+        assertThat(r.descripcion()).isEqualTo("BIELA OM651");
+    }
+
+    @Test
+    void update_ponerleUnCodigoDeImportadoAOtroProducto_seRechaza() {
+        Producto comun = Producto.builder().id(4L).sku("272005").descripcion("junta")
+                .estado(ProductoEstado.ACTIVO).build();
+        when(productoRepository.findWithDetallesById(4L)).thenReturn(Optional.of(comun));
+
+        assertThatThrownBy(() -> service().update(4L, conSku("IMP-00099")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("asigna el sistema");
+        assertThat(comun.getSku()).isEqualTo("272005");
     }
 
     @Test

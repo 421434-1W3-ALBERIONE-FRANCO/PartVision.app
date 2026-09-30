@@ -8,6 +8,7 @@ import com.partvision.compras.dto.ImportadoPendienteResponse;
 import com.partvision.compras.dto.ImportadoResueltoResponse;
 import com.partvision.compras.dto.VincularImportadoRequest;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -77,22 +79,42 @@ class ImportadosControllerTest {
     }
 
     @Test
-    void alta_devuelve201() throws Exception {
+    void alta_devuelve201ConElCodigoAsignado() throws Exception {
         when(importadosService.darDeAlta(eq(40L), any(AltaImportadoRequest.class))).thenReturn(resuelto(true));
 
         mvc.perform(post(URL + "/40/alta")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sku\":\"IMP-00001\",\"descripcion\":\"BIELA OM651\",\"ubicacionId\":50}"))
+                        .content("{\"descripcion\":\"BIELA OM651\",\"ubicacionId\":50}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sku").value("IMP-00001"))
                 .andExpect(jsonPath("$.stockCargado").value(true));
     }
 
+    /**
+     * Un SKU mandado desde el navegador —editando el pedido, por ejemplo— no llega a ningun
+     * lado: el alta no tiene ese campo, y el codigo lo asigna el sistema.
+     */
     @Test
-    void alta_sinSku_devuelve400() throws Exception {
+    void alta_conUnSkuEnElPedido_loIgnora() throws Exception {
+        when(importadosService.darDeAlta(eq(40L), any(AltaImportadoRequest.class))).thenReturn(resuelto(false));
+
         mvc.perform(post(URL + "/40/alta")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"descripcion\":\"BIELA OM651\"}"))
+                        .content("{\"sku\":\"272005\",\"descripcion\":\"BIELA OM651\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sku").value("IMP-00001"));
+
+        ArgumentCaptor<AltaImportadoRequest> pedido = ArgumentCaptor.forClass(AltaImportadoRequest.class);
+        verify(importadosService).darDeAlta(eq(40L), pedido.capture());
+        assertThat(pedido.getValue().descripcion()).isEqualTo("BIELA OM651");
+        assertThat(pedido.getValue().toString()).doesNotContain("272005");
+    }
+
+    @Test
+    void alta_sinDescripcion_devuelve400() throws Exception {
+        mvc.perform(post(URL + "/40/alta")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ubicacionId\":50}"))
                 .andExpect(status().isBadRequest());
 
         verify(importadosService, never()).darDeAlta(any(), any());

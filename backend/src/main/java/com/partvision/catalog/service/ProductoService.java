@@ -13,6 +13,8 @@ import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoCodigoRepository;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.catalog.domain.SkuImportado;
+import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.inventory.domain.Stock;
@@ -47,8 +49,33 @@ public class ProductoService {
     /** Cuantos candidatos parecidos traer/mostrar como maximo. */
     private static final int MAX_CANDIDATOS = 8;
 
+    /**
+     * Alta de un producto desde el panel, la carga por IA o la importacion CSV. Rechaza el
+     * prefijo de los importados: esos codigos los asigna el sistema ({@link #crearImportado}).
+     */
     @Transactional
     public ProductoResponse create(ProductoRequest request) {
+        if (SkuImportado.es(request.sku())) {
+            throw new BusinessException("Los codigos que empiezan con " + SkuImportado.PREFIJO
+                    + " los asigna el sistema a los importados; no se pueden escribir a mano");
+        }
+        return crear(request);
+    }
+
+    /**
+     * Alta de una pieza importada, con el codigo que ya le asigno la secuencia. Es el unico
+     * camino que puede usar el prefijo reservado.
+     */
+    @Transactional
+    public ProductoResponse crearImportado(ProductoRequest request) {
+        if (!SkuImportado.es(request.sku())) {
+            throw new IllegalArgumentException("Un importado tiene que llevar un codigo "
+                    + SkuImportado.PREFIJO + ": " + request.sku());
+        }
+        return crear(request);
+    }
+
+    private ProductoResponse crear(ProductoRequest request) {
         Marca marca = resolverMarca(request);
         Categoria categoria = request.categoriaId() == null ? null : categoriaService.getEntity(request.categoriaId());
 
@@ -72,6 +99,23 @@ public class ProductoService {
         return ProductoResponse.from(productoRepository.save(producto));
     }
 
+    /**
+     * El codigo de un importado no se cambia, y ningun otro producto puede pasar a tener uno.
+     * Si se pudiera editar, un importado podria quedar con el codigo de otro, o con uno que
+     * la secuencia todavia no repartio y que despues chocaria con el que asigne.
+     */
+    private void exigirSkuImportadoIntacto(Producto producto, String skuNuevo) {
+        boolean eraImportado = SkuImportado.es(producto.getSku());
+        if (eraImportado && !producto.getSku().trim().equalsIgnoreCase(skuNuevo == null ? "" : skuNuevo.trim())) {
+            throw new BusinessException("El codigo " + producto.getSku()
+                    + " lo asigno el sistema a un importado y no se puede cambiar");
+        }
+        if (!eraImportado && SkuImportado.es(skuNuevo)) {
+            throw new BusinessException("Los codigos que empiezan con " + SkuImportado.PREFIJO
+                    + " los asigna el sistema a los importados; no se pueden escribir a mano");
+        }
+    }
+
     @Transactional(readOnly = true)
     public ProductoResponse findById(Long id) {
         return ProductoResponse.from(getEntity(id));
@@ -84,6 +128,7 @@ public class ProductoService {
     @Transactional
     public ProductoResponse update(Long id, ProductoRequest request) {
         Producto producto = getEntity(id);
+        exigirSkuImportadoIntacto(producto, request.sku());
         Marca marca = resolverMarca(request);
         Categoria categoria = request.categoriaId() == null ? null : categoriaService.getEntity(request.categoriaId());
         if (request.sku() != null && marca != null

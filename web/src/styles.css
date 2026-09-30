@@ -316,10 +316,12 @@ textarea {
   opacity: 0.15;
 }
 
-/* Light: blur ambient lights */
-[data-theme="light"] .bg-neon-purple\/20,
-[data-theme="light"] .bg-neon-cyan\/20,
-[data-theme="light"] .bg-neon-purple\/10 {
+/* Light: blur ambient lights.
+   Solo las luces decorativas de fondo, marcadas con .luz-ambiente. Antes la regla apuntaba a
+   las clases de color (bg-neon-purple/10, /20, bg-neon-cyan/20), y como opacity arrastra a
+   los hijos, en el tema claro dejaba al 30% cualquier cosa que usara esos colores: el
+   formulario de Importados entero, y las insignias de cada pantalla. */
+[data-theme="light"] .luz-ambiente {
   opacity: 0.3;
 }
 

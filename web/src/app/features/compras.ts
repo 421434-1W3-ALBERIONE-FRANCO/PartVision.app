@@ -497,10 +497,12 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                                 @if (modoResolver() === 'CREAR') {
                                   <div class="grid gap-3 sm:grid-cols-[190px_1fr]">
                                     <label class="flex flex-col gap-1">
-                                      <span class="text-[11px] uppercase tracking-wider text-gray-400">SKU</span>
-                                      <input [(ngModel)]="skuNuevo" placeholder="IMP-00001"
-                                        class="px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white font-mono text-sm uppercase focus:outline-none focus:border-neon-purple" />
-                                      <span class="text-[10px] text-gray-500">Propuesto: no lo usa ningún otro producto.</span>
+                                      <span class="text-[11px] uppercase tracking-wider text-gray-400">Código</span>
+                                      <span class="px-3 py-2 bg-dark-surface/60 border border-dashed border-dark-border rounded-lg text-white font-mono text-sm select-all"
+                                        title="Lo asigna el sistema: no se puede escribir ni cambiar">
+                                        {{ skuPropuesto() || 'IMP-…' }}
+                                      </span>
+                                      <span class="text-[10px] text-gray-500">Lo asigna el sistema y no se repite. Si otra persona da de alta un importado antes, te toca el siguiente.</span>
                                     </label>
                                     <label class="flex flex-col gap-1">
                                       <span class="text-[11px] uppercase tracking-wider text-gray-400">Descripción</span>
@@ -572,7 +574,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                                     Cancelar
                                   </button>
                                   <button (click)="guardarImportado()" [disabled]="!puedeGuardarImportado() || guardandoImportado()"
-                                    class="px-5 py-2 rounded-lg text-xs font-semibold bg-neon-purple/25 text-neon-purple-light border border-neon-purple/50 hover:bg-neon-purple/35 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                                    class="px-5 py-2 rounded-lg text-xs font-semibold neon-button-primary cursor-pointer disabled:opacity-40 disabled:cursor-default">
                                     {{ guardandoImportado() ? 'Guardando...' : textoBotonImportado() }}
                                   </button>
                                 </div>
@@ -639,7 +641,8 @@ export class Compras implements OnInit {
   cargandoImportados = signal(false);
   resolviendo = signal<ImportadoPendiente | null>(null);
   modoResolver = signal<'CREAR' | 'VINCULAR'>('CREAR');
-  skuNuevo = '';
+  /** Solo para mostrar: el codigo real lo asigna el backend al crear el producto. */
+  skuPropuesto = signal('');
   descripcionNueva = '';
   ubicacionImportado: number | null = null;
   busquedaProducto = '';
@@ -840,7 +843,7 @@ export class Compras implements OnInit {
     this.resolviendo.set(importado);
     this.modoResolver.set('CREAR');
     this.descripcionNueva = importado.descripcion ?? '';
-    this.skuNuevo = '';
+    this.skuPropuesto.set('');
     this.ubicacionImportado = null;
     this.busquedaProducto = importado.descripcion ?? '';
     this.resultadosProducto.set([]);
@@ -848,12 +851,10 @@ export class Compras implements OnInit {
     this.productoElegido.set(null);
     this.errorImportado.set('');
     this.avisoImportado.set('');
-    // El SKU propuesto es el proximo IMP- libre; se puede cambiar, y el backend vuelve a
-    // controlar que no lo use ningun otro producto al guardar.
+    // Solo para mostrar cual le va a tocar. No se puede cambiar, y guardar no depende de
+    // que esta consulta responda: el codigo lo asigna el backend al crear.
     this.compraService.skuSugerido().subscribe({
-      next: (res) => {
-        if (!this.skuNuevo) this.skuNuevo = res.sku;
-      },
+      next: (res) => this.skuPropuesto.set(res.sku),
     });
   }
 
@@ -887,7 +888,7 @@ export class Compras implements OnInit {
     if (!importado) return false;
     if (importado.estadoCompra === 'INGRESADA' && this.ubicacionImportado == null) return false;
     return this.modoResolver() === 'CREAR'
-      ? this.skuNuevo.trim().length > 0 && this.descripcionNueva.trim().length > 0
+      ? this.descripcionNueva.trim().length > 0
       : this.productoElegido() != null;
   }
 
@@ -937,7 +938,7 @@ export class Compras implements OnInit {
     this.guardandoImportado.set(true);
     this.errorImportado.set('');
     const llamada = this.modoResolver() === 'CREAR'
-      ? this.compraService.darDeAltaImportado(importado.lineaId, this.skuNuevo.trim(),
+      ? this.compraService.darDeAltaImportado(importado.lineaId,
           this.descripcionNueva.trim(), this.ubicacionImportado)
       : this.compraService.vincularImportado(importado.lineaId, this.productoElegido()!.id,
           this.ubicacionImportado);

@@ -2,12 +2,12 @@ package com.partvision.compras;
 
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.domain.ProductoEstado;
+import com.partvision.catalog.domain.SkuImportado;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.catalog.service.ProductoService;
 import com.partvision.common.exception.BusinessException;
-import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
@@ -33,7 +33,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -47,9 +46,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ImportadosService {
 
-    /** Ningun SKU de proveedor empieza asi (verificado sobre el catalogo al crearlo). */
-    static final String PREFIJO_SKU = "IMP-";
-    private static final Pattern NUMERO = Pattern.compile("\\d{1,9}");
+    /**
+     * Cuantos numeros de la secuencia se prueban antes de rendirse. Solo se saltea uno si ya
+     * existe un producto con ese codigo, que solo puede haber llegado por la carga masiva
+     * (que escribe SQL directo); con el prefijo reservado en todos los demas caminos, en la
+     * practica el primero sirve siempre.
+     */
+    private static final int INTENTOS_SKU = 100;
 
     private final CompraLineaRepository lineaRepo;
     private final ProductoRepository productoRepo;
@@ -113,29 +116,37 @@ public class ImportadosService {
     }
 
     /**
-     * El siguiente {@code IMP-NNNNN} libre. Numera a partir del mayor que exista, y si aun asi
-     * el numero ya esta tomado (otra persona dando de alta al mismo tiempo) pasa al siguiente.
+     * El codigo que le va a tocar al proximo importado, para mostrarlo en el panel. No lo
+     * reserva: si otra persona da de alta uno antes, el que se asigne va a ser el siguiente, y
+     * la respuesta del alta dice cual fue.
      */
     @Transactional(readOnly = true)
     public String proponerSku() {
-        int mayor = productoRepo.findSkusConPrefijo(PREFIJO_SKU).stream()
-                .map(sku -> sku.substring(PREFIJO_SKU.length()))
-                .filter(numero -> NUMERO.matcher(numero).matches())
-                .mapToInt(Integer::parseInt)
-                .max()
-                .orElse(0);
-        int siguiente = mayor;
-        String sku;
-        do {
-            siguiente++;
-            sku = String.format("%s%05d", PREFIJO_SKU, siguiente);
-        } while (productoRepo.existsBySkuIgnoreCase(sku));
-        return sku;
+        return SkuImportado.formatear(productoRepo.proximoNumeroImportado());
     }
 
     /**
-     * Crea el producto y le asocia la linea. El SKU tiene que ser unico en todo el catalogo,
-     * no solo dentro de una marca: es un codigo inventado y no puede confundirse con ningun otro.
+     * Toma el codigo de la secuencia. Lo asigna el sistema y no la persona que da de alta: si
+     * viniera del panel, se podria escribir cualquier cosa, o cambiar en el pedido aunque el
+     * campo no fuera editable. La secuencia no reparte dos veces el mismo numero aunque dos
+     * altas ocurran a la vez, y el indice unico de la base frena cualquier duplicado igual.
+     */
+    private String asignarSku() {
+        for (int i = 0; i < INTENTOS_SKU; i++) {
+            String sku = SkuImportado.formatear(productoRepo.siguienteNumeroImportado());
+            if (!productoRepo.existsBySkuIgnoreCase(sku)) {
+                return sku;
+            }
+            log.warn("El codigo {} ya estaba tomado por fuera de la secuencia: se saltea", sku);
+        }
+        throw new IllegalStateException("No se encontro un codigo " + SkuImportado.PREFIJO
+                + " libre en " + INTENTOS_SKU + " intentos");
+    }
+
+    /**
+     * Crea el producto y le asocia la linea. El codigo lo asigna el sistema ({@link #asignarSku}):
+     * es unico en todo el catalogo, no solo dentro de una marca, porque es un codigo inventado y
+     * no puede confundirse con ningun otro.
      */
     @Transactional
     public ImportadoResueltoResponse darDeAlta(Long lineaId, AltaImportadoRequest request) {
@@ -143,13 +154,8 @@ public class ImportadosService {
         Compra compra = linea.getCompra();
         exigirUbicacionSiYaIngreso(compra, request.ubicacionId());
 
-        String sku = request.sku().trim().toUpperCase(Locale.ROOT);
-        if (productoRepo.existsBySkuIgnoreCase(sku)) {
-            throw new DuplicateResourceException(
-                    "El SKU " + sku + " ya existe en el catalogo. Libre: " + proponerSku());
-        }
-
-        ProductoResponse creado = productoService.create(new ProductoRequest(
+        String sku = asignarSku();
+        ProductoResponse creado = productoService.crearImportado(new ProductoRequest(
                 sku, null, null, null, request.descripcion().trim(), ProductoEstado.ACTIVO,
                 null, null, compra.getProveedor()));
         Producto producto = productoService.getEntity(creado.id());

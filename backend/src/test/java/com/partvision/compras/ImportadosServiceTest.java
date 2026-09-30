@@ -7,7 +7,6 @@ import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.catalog.service.ProductoService;
 import com.partvision.common.exception.BusinessException;
-import com.partvision.common.exception.DuplicateResourceException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
@@ -103,7 +102,7 @@ class ImportadosServiceTest {
     private void productoSeCrea(Long id, String sku) {
         ProductoResponse creado = new ProductoResponse(id, sku, null, null, null, null, "BIELA OM651",
                 ProductoEstado.ACTIVO, Map.of(), List.of(), "EGSA", null, null, null, null);
-        when(productoService.create(any(ProductoRequest.class))).thenReturn(creado);
+        when(productoService.crearImportado(any(ProductoRequest.class))).thenReturn(creado);
         when(productoService.getEntity(id)).thenReturn(producto(id, sku));
     }
 
@@ -204,31 +203,15 @@ class ImportadosServiceTest {
         return p;
     }
 
-    // --- SKU propuesto ---
+    // --- codigo IMP: lo asigna el sistema ---
 
+    /** Lo que se muestra en el panel antes de crear: el proximo de la secuencia, sin tomarlo. */
     @Test
-    void proponerSku_elPrimeroEsImp00001() {
-        when(productoRepo.findSkusConPrefijo("IMP-")).thenReturn(List.of());
-
-        assertThat(service.proponerSku()).isEqualTo("IMP-00001");
-    }
-
-    /** Sigue al mayor, e ignora lo que no tenga numero despues del prefijo. */
-    @Test
-    void proponerSku_sigueAlMayorExistente() {
-        when(productoRepo.findSkusConPrefijo("IMP-"))
-                .thenReturn(List.of("IMP-00007", "imp-00012", "IMP-ESPECIAL", "IMP-"));
+    void proponerSku_muestraElProximoSinConsumirlo() {
+        when(productoRepo.proximoNumeroImportado()).thenReturn(13L);
 
         assertThat(service.proponerSku()).isEqualTo("IMP-00013");
-    }
-
-    /** Si justo lo tomo otra persona, pasa al siguiente. */
-    @Test
-    void proponerSku_siElNumeroYaEstaTomado_pasaAlSiguiente() {
-        when(productoRepo.findSkusConPrefijo("IMP-")).thenReturn(List.of());
-        when(productoRepo.existsBySkuIgnoreCase("IMP-00001")).thenReturn(true);
-
-        assertThat(service.proponerSku()).isEqualTo("IMP-00002");
+        verify(productoRepo, never()).siguienteNumeroImportado();
     }
 
     // --- dar de alta ---
@@ -237,10 +220,11 @@ class ImportadosServiceTest {
     void darDeAlta_enCompraSinIngresar_creaYAsociaSinCargarStock() {
         CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
         when(lineaRepo.findById(40L)).thenReturn(Optional.of(linea));
+        when(productoRepo.siguienteNumeroImportado()).thenReturn(1L);
         productoSeCrea(900L, "IMP-00001");
 
         ImportadoResueltoResponse r = service.darDeAlta(40L,
-                new AltaImportadoRequest(" imp-00001 ", " BIELA OM651 ", null));
+                new AltaImportadoRequest(" BIELA OM651 ", null));
 
         assertThat(r.sku()).isEqualTo("IMP-00001");
         assertThat(r.stockCargado()).isFalse();
@@ -249,10 +233,55 @@ class ImportadosServiceTest {
         verify(stockService, never()).registrarEntrada(any());
 
         ArgumentCaptor<ProductoRequest> alta = ArgumentCaptor.forClass(ProductoRequest.class);
-        verify(productoService).create(alta.capture());
+        verify(productoService).crearImportado(alta.capture());
         assertThat(alta.getValue().sku()).isEqualTo("IMP-00001");
         assertThat(alta.getValue().descripcion()).isEqualTo("BIELA OM651");
         assertThat(alta.getValue().proveedor()).isEqualTo("EGSA");
+    }
+
+    /**
+     * El codigo sale de la secuencia, no del pedido: el alta ni siquiera tiene un campo SKU. Lo
+     * que se muestra en pantalla es solo una vista previa y puede no ser el que toque.
+     */
+    @Test
+    void darDeAlta_usaElNumeroDeLaSecuencia() {
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(importado(CompraEstado.EN_TRANSITO)));
+        when(productoRepo.siguienteNumeroImportado()).thenReturn(42L);
+        productoSeCrea(900L, "IMP-00042");
+
+        ImportadoResueltoResponse r = service.darDeAlta(40L, new AltaImportadoRequest("BIELA", null));
+
+        assertThat(r.sku()).isEqualTo("IMP-00042");
+        assertThat(r.mensaje()).contains("IMP-00042");
+    }
+
+    /**
+     * Un codigo que ya existe por fuera de la secuencia (solo la carga masiva escribe SQL
+     * directo) se saltea: el importado nunca queda con el codigo de otro producto.
+     */
+    @Test
+    void darDeAlta_siElNumeroYaEstaTomado_pasaAlSiguiente() {
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(importado(CompraEstado.EN_TRANSITO)));
+        when(productoRepo.siguienteNumeroImportado()).thenReturn(1L, 2L);
+        when(productoRepo.existsBySkuIgnoreCase("IMP-00001")).thenReturn(true);
+        productoSeCrea(900L, "IMP-00002");
+
+        ImportadoResueltoResponse r = service.darDeAlta(40L, new AltaImportadoRequest("BIELA", null));
+
+        assertThat(r.sku()).isEqualTo("IMP-00002");
+    }
+
+    /** Si la secuencia no encuentra lugar no se inventa un codigo: el alta falla entera. */
+    @Test
+    void darDeAlta_sinCodigoLibre_falla() {
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(importado(CompraEstado.EN_TRANSITO)));
+        when(productoRepo.siguienteNumeroImportado()).thenReturn(1L);
+        when(productoRepo.existsBySkuIgnoreCase(anyString())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.darDeAlta(40L, new AltaImportadoRequest("BIELA", null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("IMP-");
+        verify(productoService, never()).crearImportado(any());
     }
 
     /** La compra ya ingreso sin esta linea: su stock se carga ahora, en la ubicacion elegida. */
@@ -261,10 +290,11 @@ class ImportadosServiceTest {
         CompraLinea linea = importado(CompraEstado.INGRESADA);
         when(lineaRepo.findById(40L)).thenReturn(Optional.of(linea));
         when(ubicacionService.getEntity(50L)).thenReturn(ubicacion());
+        when(productoRepo.siguienteNumeroImportado()).thenReturn(1L);
         productoSeCrea(900L, "IMP-00001");
 
         ImportadoResueltoResponse r = service.darDeAlta(40L,
-                new AltaImportadoRequest("IMP-00001", "BIELA OM651", 50L));
+                new AltaImportadoRequest("BIELA OM651", 50L));
 
         assertThat(r.stockCargado()).isTrue();
         assertThat(r.ubicacionCodigo()).isEqualTo("A-01");
@@ -278,29 +308,16 @@ class ImportadosServiceTest {
         assertThat(entrada.getValue().motivo()).contains("900000482");
     }
 
+    /** Sin ubicacion no se toma ningun numero: la validacion va antes que la secuencia. */
     @Test
     void darDeAlta_compraYaIngresadaSinUbicacion_seRechaza() {
         when(lineaRepo.findById(40L)).thenReturn(Optional.of(importado(CompraEstado.INGRESADA)));
 
-        assertThatThrownBy(() -> service.darDeAlta(40L, new AltaImportadoRequest("IMP-00001", "BIELA", null)))
+        assertThatThrownBy(() -> service.darDeAlta(40L, new AltaImportadoRequest("BIELA", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("ubicacion");
-        verify(productoService, never()).create(any());
-    }
-
-    /** El SKU no puede chocar con ninguno del catalogo, de ninguna marca ni proveedor. */
-    @Test
-    void darDeAlta_skuQueYaExiste_seRechazaYSugiereOtro() {
-        when(lineaRepo.findById(40L)).thenReturn(Optional.of(importado(CompraEstado.EN_TRANSITO)));
-        when(productoRepo.existsBySkuIgnoreCase(anyString()))
-                .thenAnswer(inv -> "272005".equals(inv.getArgument(0)));
-        when(productoRepo.findSkusConPrefijo("IMP-")).thenReturn(List.of("IMP-00004"));
-
-        assertThatThrownBy(() -> service.darDeAlta(40L, new AltaImportadoRequest("272005", "BIELA", null)))
-                .isInstanceOf(DuplicateResourceException.class)
-                .hasMessageContaining("272005")
-                .hasMessageContaining("IMP-00005");
-        verify(productoService, never()).create(any());
+        verify(productoService, never()).crearImportado(any());
+        verify(productoRepo, never()).siguienteNumeroImportado();
     }
 
     // --- vincular ---

@@ -44,14 +44,19 @@ export class CompraService {
     return this.http.get<Page<ImportadoPendiente>>(`${this.base}/importados`, { params });
   }
 
+  /** Solo para mostrar: el codigo real lo asigna el backend al crear, y puede ser otro. */
   skuSugerido(): Observable<{ sku: string }> {
     return this.http.get<{ sku: string }>(`${this.base}/importados/sku-sugerido`);
   }
 
-  darDeAltaImportado(lineaId: number, sku: string, descripcion: string, ubicacionId: number | null):
+  /**
+   * No manda SKU a proposito: el codigo IMP- lo asigna el backend. Un campo que viaja desde el
+   * navegador se puede cambiar aunque la pantalla no lo deje editar.
+   */
+  darDeAltaImportado(lineaId: number, descripcion: string, ubicacionId: number | null):
       Observable<ImportadoResuelto> {
     return this.http.post<ImportadoResuelto>(`${this.base}/importados/${lineaId}/alta`,
-      { sku, descripcion, ubicacionId });
+      { descripcion, ubicacionId });
   }
 
   vincularImportado(lineaId: number, productoId: number, ubicacionId: number | null):

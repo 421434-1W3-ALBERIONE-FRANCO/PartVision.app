@@ -26,9 +26,20 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
      */
     boolean existsBySkuIgnoreCase(String sku);
 
-    /** SKU que empiezan con un prefijo, sin distinguir mayusculas: para numerar los IMP-. */
-    @Query("select p.sku from Producto p where upper(p.sku) like concat(upper(:prefijo), '%')")
-    List<String> findSkusConPrefijo(@Param("prefijo") String prefijo);
+    /**
+     * Toma el siguiente numero para un codigo IMP-. Cada llamada devuelve uno distinto aunque
+     * dos altas ocurran a la vez; uno que se pide y no se usa queda salteado (ver V29).
+     */
+    @Query(value = "select nextval('seq_sku_importado')", nativeQuery = true)
+    long siguienteNumeroImportado();
+
+    /**
+     * El numero que va a tocar en la proxima alta, sin consumirlo: solo para mostrarlo. Si otra
+     * persona da de alta un importado antes, el que se asigne de verdad va a ser otro.
+     */
+    @Query(value = "select case when is_called then last_value + 1 else last_value end from seq_sku_importado",
+            nativeQuery = true)
+    long proximoNumeroImportado();
 
     @EntityGraph(attributePaths = {"marca", "categoria", "codigos"})
     Optional<Producto> findWithDetallesById(Long id);
