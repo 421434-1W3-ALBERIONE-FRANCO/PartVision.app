@@ -1,6 +1,7 @@
 package com.partvision.compras.dto;
 
 import com.partvision.compras.domain.Compra;
+import com.partvision.compras.domain.CompraLinea;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,8 +21,20 @@ public record CompraResponse(
         int totalUnidades,
         int lineasMatcheadas,
         Instant createdAt,
-        List<CompraLineaResponse> lineas
+        List<CompraLineaResponse> lineas,
+        /**
+         * Las lineas con una cantidad fuera de lo normal que nadie reviso todavia. Van siempre,
+         * tambien en el listado: el panel las muestra en la misma fila de la factura, para
+         * aceptarlas o descartarlas sin abrir la compra.
+         */
+        List<LineaEnRevision> lineasEnRevision
 ) {
+    public record LineaEnRevision(Long id, String codigo, String descripcion, int cantidad) {
+        static LineaEnRevision from(CompraLinea l) {
+            return new LineaEnRevision(l.getId(), l.getCodigo(), l.getDescripcion(), l.getCantidad());
+        }
+    }
+
     public static CompraResponse from(Compra c, boolean incluirLineas) {
         return from(c, incluirLineas, Map.of());
     }
@@ -39,7 +52,15 @@ public record CompraResponse(
                 : List.of();
 
         int matcheadas = (int) c.getLineas().stream().filter(l -> l.getProducto() != null).count();
-        int unidades = c.getLineas().stream().mapToInt(l -> l.getCantidad()).sum();
+        // Una linea descartada es un error de la planilla: no cuenta en los totales.
+        int unidades = c.getLineas().stream()
+                .filter(l -> !l.descartada())
+                .mapToInt(CompraLinea::getCantidad)
+                .sum();
+        List<LineaEnRevision> enRevision = c.getLineas().stream()
+                .filter(CompraLinea::pendienteDeRevision)
+                .map(LineaEnRevision::from)
+                .toList();
 
         return new CompraResponse(
                 c.getId(),
@@ -54,7 +75,8 @@ public record CompraResponse(
                 unidades,
                 matcheadas,
                 c.getCreatedAt(),
-                lineasDto
+                lineasDto,
+                enRevision
         );
     }
 

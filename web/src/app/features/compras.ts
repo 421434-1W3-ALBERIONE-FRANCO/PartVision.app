@@ -76,6 +76,12 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
         </button>
       </div>
 
+      @if (errorRevision()) {
+        <div class="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+          {{ errorRevision() }}
+        </div>
+      }
+
       <!-- Tabla -->
       @if (cargando()) {
         <div class="py-12 text-center text-gray-400 font-mono">Cargando compras...</div>
@@ -144,6 +150,36 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                       </button>
                     </td>
                   </tr>
+                  <!-- Cantidades fuera de lo normal: el aviso va en la misma fila de la factura -->
+                  @for (r of c.lineasEnRevision; track r.id) {
+                    <tr class="border-b border-amber-500/30 bg-amber-500/10">
+                      <td colspan="8" class="px-4 py-2.5">
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+                          <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span class="font-semibold text-amber-400">Cantidad fuera de lo normal</span>
+                          <span class="text-gray-300 min-w-0">
+                            <span class="font-mono">{{ r.codigo }}</span> · {{ r.descripcion || 'sin descripción' }}
+                          </span>
+                          <span class="font-mono font-bold text-amber-400">{{ miles(r.cantidad) }} u.</span>
+                          <span class="text-gray-500">(el tope es {{ miles(topeRevision) }})</span>
+                          <span class="ml-auto flex items-center gap-2">
+                            <button (click)="revisarLinea(c.id, r, 'ACEPTADA')" [disabled]="revisandoLinea() !== null"
+                              class="px-3 py-1 rounded-lg font-semibold text-neon-green border border-neon-green/40 hover:bg-neon-green/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                              title="La cantidad es real: entra al stock cuando se ingrese la compra">
+                              Aceptar así
+                            </button>
+                            <button (click)="revisarLinea(c.id, r, 'DESCARTADA')" [disabled]="revisandoLinea() !== null"
+                              class="px-3 py-1 rounded-lg font-semibold text-red-400 border border-red-500/40 hover:bg-red-500/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                              title="Es un error de la planilla: queda registrada, pero no entra al stock ni a los totales">
+                              Descartar
+                            </button>
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -265,7 +301,27 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                       <tr class="border-b border-dark-border/30">
                         <td class="px-3 py-2 font-mono text-white text-xs">{{ l.codigo }}</td>
                         <td class="px-3 py-2 text-gray-300 text-xs whitespace-normal break-words max-w-xs">{{ l.descripcion }}</td>
-                        <td class="px-3 py-2 text-center text-white font-semibold">{{ l.cantidad }}</td>
+                        <td class="px-3 py-2 text-center font-semibold"
+                          [class]="l.revision === 'DESCARTADA' ? 'text-gray-500 line-through' : 'text-white'">
+                          {{ l.cantidad }}
+                          @if (l.revision === 'PENDIENTE') {
+                            <span class="block text-[10px] font-semibold text-amber-400 no-underline">revisar</span>
+                          } @else if (l.revision === 'ACEPTADA') {
+                            <span class="block text-[10px] font-normal text-neon-green">aceptada</span>
+                          } @else if (l.revision === 'DESCARTADA') {
+                            <span class="block text-[10px] font-normal text-red-400" style="text-decoration: none">descartada</span>
+                          }
+                          @if (l.revision && detalleCompra()!.estado !== 'INGRESADA') {
+                            <span class="mt-1 flex justify-center gap-1">
+                              <button (click)="revisarLinea(detalleCompra()!.id, l, 'ACEPTADA')" [disabled]="revisandoLinea() !== null || l.revision === 'ACEPTADA'"
+                                class="px-1.5 py-0.5 rounded text-[10px] text-neon-green border border-neon-green/40 hover:bg-neon-green/15 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                                title="La cantidad es real">Aceptar</button>
+                              <button (click)="revisarLinea(detalleCompra()!.id, l, 'DESCARTADA')" [disabled]="revisandoLinea() !== null || l.revision === 'DESCARTADA'"
+                                class="px-1.5 py-0.5 rounded text-[10px] text-red-400 border border-red-500/40 hover:bg-red-500/15 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                                title="Es un error de la planilla">Descartar</button>
+                            </span>
+                          }
+                        </td>
                         <td class="px-3 py-2 text-center">
                           @if (l.productoId) {
                             <span class="text-neon-green text-xs" [title]="(l.productoMarca ? l.productoMarca + ' — ' : '') + (l.productoDescripcion || '')">
@@ -278,7 +334,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                           }
                         </td>
                         <td class="px-3 py-2">
-                          @if (puedeUbicar()) {
+                          @if (puedeUbicar() && l.revision !== 'DESCARTADA') {
                             <select [value]="ubicacionPorLinea[l.id] || ''"
                               (change)="setUbicacionLinea(l.id, $event)"
                               class="w-full min-w-[140px] px-2 py-1.5 bg-dark-surface border rounded-lg text-xs focus:outline-none focus:border-neon-cyan"
@@ -337,7 +393,12 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                   </button>
                 } @else {
                   <div class="text-xs text-gray-400">
-                    {{ lineasAsignadas() }}/{{ detalleCompra()!.lineas.length }} líneas con ubicación
+                    {{ lineasAsignadas() }}/{{ lineasUbicables() }} líneas con ubicación
+                    @if (detalleCompra()!.lineasEnRevision.length > 0) {
+                      <span class="block text-amber-400 font-semibold mt-0.5">
+                        {{ detalleCompra()!.lineasEnRevision.length }} línea(s) con una cantidad fuera de lo normal: aceptalas o descartalas para poder ingresar.
+                      </span>
+                    }
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     @if (detalleCompra()!.estado === 'EN_TRANSITO') {
@@ -353,7 +414,7 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                         Volver a EN TRÁNSITO
                       </button>
                     }
-                    <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando()"
+                    <button (click)="confirmarIngreso()" [disabled]="lineasAsignadas() === 0 || ingresando() || detalleCompra()!.lineasEnRevision.length > 0"
                       class="px-6 py-2.5 rounded-xl font-semibold text-sm bg-neon-green/20 text-neon-green border border-neon-green/40 hover:bg-neon-green/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default whitespace-nowrap">
                       @if (ingresando()) {
                         <span class="inline-flex items-center gap-2">
@@ -630,6 +691,11 @@ export class Compras implements OnInit {
   ubicacionPorLinea: Record<number, number> = {};
   ingresando = signal(false);
   cambiandoEstado = signal(false);
+  /** Id de la linea que se esta aceptando o descartando, para no mandar dos a la vez. */
+  revisandoLinea = signal<number | null>(null);
+  errorRevision = signal('');
+  /** El mismo tope que el backend (CompraLinea.CANTIDAD_PARA_REVISAR). Solo para mostrarlo. */
+  readonly topeRevision = 300;
   errorIngreso = signal('');
 
   // --- Importados: lineas que llegaron sin codigo (pedidos puntuales) ---
@@ -735,8 +801,65 @@ export class Compras implements OnInit {
     if (!compra) return;
     this.ubicacionPorLinea = {};
     for (const l of compra.lineas) {
+      if (l.revision === 'DESCARTADA') continue;   // no entra al stock
       this.ubicacionPorLinea[l.id] = ubicId;
     }
+  }
+
+  /** Las lineas que pueden recibir ubicacion: todas menos las descartadas. */
+  lineasUbicables(): number {
+    return this.detalleCompra()?.lineas.filter(l => l.revision !== 'DESCARTADA').length ?? 0;
+  }
+
+  /** 1197421 -> "1.197.421", como se lee una cantidad en castellano. */
+  miles(n: number): string {
+    return n.toLocaleString('es-AR');
+  }
+
+  /**
+   * Acepta o descarta una linea con una cantidad fuera de lo normal. Aceptar se pregunta,
+   * porque esa cantidad va a entrar al stock; descartar no, porque se puede deshacer mientras
+   * la compra no se ingrese. En el detalle se actualiza solo la marca de la linea: recargarlo
+   * entero borraria las ubicaciones que la persona ya habia elegido.
+   */
+  revisarLinea(compraId: number, linea: { id: number; codigo: string; cantidad: number },
+               decision: 'ACEPTADA' | 'DESCARTADA'): void {
+    if (this.revisandoLinea() !== null) return;
+    if (decision === 'ACEPTADA' && !confirm(
+        `¿Aceptar ${this.miles(linea.cantidad)} unidades de ${linea.codigo}? `
+        + 'Cuando se ingrese la compra, esa cantidad entra al stock.')) {
+      return;
+    }
+
+    this.revisandoLinea.set(linea.id);
+    this.errorRevision.set('');
+    this.errorIngreso.set('');
+    this.compraService.revisarLinea(compraId, linea.id, decision).subscribe({
+      next: (actualizada) => {
+        this.revisandoLinea.set(null);
+        const abierta = this.detalleCompra();
+        if (abierta && abierta.id === compraId) {
+          const revisiones = new Map(actualizada.lineas.map(l => [l.id, l.revision]));
+          this.detalleCompra.set({
+            ...abierta,
+            totalUnidades: actualizada.totalUnidades,
+            lineasEnRevision: actualizada.lineasEnRevision,
+            lineas: abierta.lineas.map(l => ({ ...l, revision: revisiones.get(l.id) ?? l.revision })),
+          });
+          if (decision === 'DESCARTADA') delete this.ubicacionPorLinea[linea.id];
+        }
+        this.cargar();
+      },
+      error: (err) => {
+        this.revisandoLinea.set(null);
+        const mensaje = err.error?.message || err.error?.error || 'No se pudo guardar la decisión';
+        if (this.detalleCompra()?.id === compraId) {
+          this.errorIngreso.set(mensaje);
+        } else {
+          this.errorRevision.set(mensaje);
+        }
+      },
+    });
   }
 
   /** Se puede asignar ubicacion mientras el stock no este cargado, diga lo que diga la planilla. */

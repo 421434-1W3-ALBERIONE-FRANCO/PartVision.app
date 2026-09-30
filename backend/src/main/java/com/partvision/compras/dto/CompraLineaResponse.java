@@ -13,7 +13,9 @@ public record CompraLineaResponse(
         Long ubicacionSugeridaId,
         String ubicacionSugeridaCodigo,
         Long ubicacionIngresoId,
-        String ubicacionIngresoCodigo
+        String ubicacionIngresoCodigo,
+        /** Null si la cantidad es normal; si no, PENDIENTE, ACEPTADA o DESCARTADA. */
+        String revision
 ) {
     public static CompraLineaResponse from(CompraLinea l) {
         return from(l, null, null);
@@ -32,7 +34,8 @@ public record CompraLineaResponse(
                 ubicSugeridaId,
                 ubicSugeridaCodigo,
                 l.getUbicacionIngreso() != null ? l.getUbicacionIngreso().getId() : null,
-                l.getUbicacionIngreso() != null ? l.getUbicacionIngreso().getCodigo() : null
+                l.getUbicacionIngreso() != null ? l.getUbicacionIngreso().getCodigo() : null,
+                l.getRevision() != null ? l.getRevision().name() : null
         );
     }
 }

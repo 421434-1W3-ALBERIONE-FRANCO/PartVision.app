@@ -274,6 +274,19 @@ export interface CompraLinea {
   ubicacionSugeridaCodigo: string | null;
   ubicacionIngresoId: number | null;
   ubicacionIngresoCodigo: string | null;
+  /**
+   * Null si la cantidad es normal. Si supera el tope (300): PENDIENTE hasta que alguien la
+   * acepte o la descarte. Una DESCARTADA queda registrada pero no entra al stock ni a los totales.
+   */
+  revision: 'PENDIENTE' | 'ACEPTADA' | 'DESCARTADA' | null;
+}
+
+/** Una linea con una cantidad fuera de lo normal que nadie reviso todavia. */
+export interface LineaEnRevision {
+  id: number;
+  codigo: string;
+  descripcion: string | null;
+  cantidad: number;
 }
 
 /** Linea que llego sin codigo en la planilla (pedido puntual) y todavia no tiene producto. */
@@ -333,4 +346,6 @@ export interface Compra {
   lineasMatcheadas: number;
   createdAt: string;
   lineas: CompraLinea[];
+  /** Viene tambien en el listado: el panel las muestra en la misma fila de la factura. */
+  lineasEnRevision: LineaEnRevision[];
 }

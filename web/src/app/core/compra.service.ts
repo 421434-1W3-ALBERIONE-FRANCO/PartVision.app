@@ -37,6 +37,11 @@ export class CompraService {
     return this.http.patch<Compra>(`${this.base}/${id}/estado`, { estado });
   }
 
+  /** Acepta o descarta una linea con una cantidad fuera de lo normal. No la borra. */
+  revisarLinea(compraId: number, lineaId: number, decision: 'ACEPTADA' | 'DESCARTADA'): Observable<Compra> {
+    return this.http.patch<Compra>(`${this.base}/${compraId}/lineas/${lineaId}/revision`, { decision });
+  }
+
   // --- importados: lineas que llegaron sin codigo ---
 
   importados(page = 0, size = 20): Observable<Page<ImportadoPendiente>> {

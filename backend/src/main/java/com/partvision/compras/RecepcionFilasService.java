@@ -51,14 +51,6 @@ public class RecepcionFilasService {
                 // Anotaciones intercaladas entre los productos, como "CONTROLO:".
                 ignoradas.add(new FilaIgnorada(i + 1, numero, descripcion,
                         "sin cantidad (o no es un entero positivo)"));
-            } else if (cantidad > LectorSheet.CANTIDAD_MAXIMA) {
-                // La fila de la planilla esta mal armada: se le colo el valor de otra columna.
-                // Entra al catalogo como una compra normal y despues carga ese disparate al
-                // stock, asi que no se acepta a medias.
-                log.warn("Fila {} de la factura {} con cantidad inverosimil: {}", i + 1, numero, cantidad);
-                ignoradas.add(new FilaIgnorada(i + 1, numero, descripcion,
-                        "cantidad inverosimil (" + cantidad + ", el maximo es "
-                                + LectorSheet.CANTIDAD_MAXIMA + "): revisar esa fila de la planilla"));
             } else {
                 porFactura.computeIfAbsent(numero, k -> new ArrayList<>()).add(fila);
             }

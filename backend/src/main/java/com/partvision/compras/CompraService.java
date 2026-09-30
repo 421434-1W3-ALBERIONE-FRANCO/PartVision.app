@@ -8,6 +8,7 @@ import com.partvision.compras.ResultadoSincronizacion.Tipo;
 import com.partvision.compras.domain.Compra;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.domain.CompraLinea;
+import com.partvision.compras.domain.RevisionLinea;
 import com.partvision.compras.dto.*;
 import com.partvision.compras.repository.CompraRepository;
 import com.partvision.inventory.domain.Stock;
@@ -79,7 +80,10 @@ public class CompraService {
             Compra compra = crear(factura);
             log.info("Factura {} registrada: {} lineas, estado {}",
                     compra.getNumeroFactura(), compra.getLineas().size(), compra.getEstado());
-            return resultado(Tipo.CREADA, compra, "registrada");
+            long paraRevisar = compra.getLineas().stream().filter(CompraLinea::pendienteDeRevision).count();
+            return resultado(Tipo.CREADA, compra, paraRevisar == 0 ? "registrada"
+                    : "registrada; " + paraRevisar + " linea(s) con una cantidad fuera de lo normal,"
+                            + " para revisar en el panel antes de ingresarla");
         }
 
         Compra compra = existente.get();
@@ -155,6 +159,11 @@ public class CompraService {
         if (compra.getEstado() == CompraEstado.INGRESADA) {
             throw new BusinessException("La compra ya fue marcada como ingresada");
         }
+        long sinRevisar = compra.getLineas().stream().filter(CompraLinea::pendienteDeRevision).count();
+        if (sinRevisar > 0) {
+            throw new BusinessException(("Hay %d linea(s) con una cantidad fuera de lo normal: hay que"
+                    + " aceptarlas o descartarlas antes de ingresar la compra").formatted(sinRevisar));
+        }
         if (compra.getEstado() == CompraEstado.EN_TRANSITO) {
             log.info("Compra {} se ingresa desde el panel aunque la planilla dice EN TRANSITO",
                     compra.getNumeroFactura());
@@ -176,6 +185,8 @@ public class CompraService {
         for (CompraLinea linea : compra.getLineas()) {
             Long ubicacionId = ubicacionPorLinea.get(linea.getId());
             if (ubicacionId == null) continue;
+
+            if (linea.descartada()) continue;   // error de la planilla: no entra al stock
 
             Ubicacion ubicacion = ubicacionesCache.get(ubicacionId);
             linea.setUbicacionIngreso(ubicacion);
@@ -237,6 +248,40 @@ public class CompraService {
         return CompraResponse.from(compra, true);
     }
 
+    /**
+     * Acepta o descarta una linea con una cantidad fuera de lo normal. Se puede cambiar de
+     * opinion mientras la compra no este ingresada; despues no, porque el stock ya se cargo con
+     * esa decision (para cambiarla hay que revertir el ingreso primero).
+     *
+     * <p>Descartar no borra la linea: la planilla sigue teniendo esa fila, y si desapareciera
+     * de aca la factura dejaria de coincidir con la planilla y daria conflicto en cada corrida.
+     */
+    @Transactional
+    public CompraResponse revisarLinea(Long compraId, Long lineaId, RevisionLinea decision) {
+        if (decision != RevisionLinea.ACEPTADA && decision != RevisionLinea.DESCARTADA) {
+            throw new BusinessException("La decision tiene que ser aceptar o descartar");
+        }
+        Compra compra = compraRepo.findWithLineasById(compraId)
+                .orElseThrow(() -> new BusinessException("Compra no encontrada"));
+        if (compra.getEstado() == CompraEstado.INGRESADA) {
+            throw new BusinessException("La compra ya se ingreso con esa decision: para cambiarla,"
+                    + " primero hay que revertir el ingreso");
+        }
+        CompraLinea linea = compra.getLineas().stream()
+                .filter(l -> l.getId().equals(lineaId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("La linea no es de esta compra"));
+        if (linea.getRevision() == null) {
+            throw new BusinessException("Esa linea tiene una cantidad normal: no hay nada que revisar");
+        }
+
+        linea.setRevision(decision);
+        compraRepo.save(compra);
+        log.info("Compra {}: linea {} ({} unidades) {}", compra.getNumeroFactura(), linea.getCodigo(),
+                linea.getCantidad(), decision == RevisionLinea.ACEPTADA ? "aceptada" : "descartada");
+        return CompraResponse.from(compra, true);
+    }
+
     /** Saca de cada ubicacion lo que la compra habia cargado al ingresarse. */
     private void devolverStock(Compra compra) {
         int devueltas = 0;
@@ -294,6 +339,9 @@ public class CompraService {
             linea.setCodigo(l.codigo());
             linea.setDescripcion(l.descripcion());
             linea.setCantidad(l.cantidad());
+            if (l.cantidad() > CompraLinea.CANTIDAD_PARA_REVISAR) {
+                linea.setRevision(RevisionLinea.PENDIENTE);
+            }
             compra.addLinea(linea);
         }
         asignarProductos(compra.getLineas(), factura.proveedor());

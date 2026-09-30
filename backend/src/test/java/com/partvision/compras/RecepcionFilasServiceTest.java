@@ -120,30 +120,27 @@ class RecepcionFilasServiceTest {
     }
 
     /**
-     * El 2026-09-24 llego una fila con cantidad 1.197.421 y la descripcion partida en dos
-     * lineas: en la planilla se le habia colado el valor de otra columna. Entraria como una
-     * compra normal y, al resolverla e ingresarla, cargaria ese disparate al stock.
+     * Una cantidad fuera de lo normal ya no se rechaza al recibirla: entra, y la decision de
+     * aceptarla o descartarla la toma una persona en el panel (la marca la pone CompraService).
+     * El 2026-09-24 llego una fila con 1.197.421 unidades; hoy esa fila llega a la compra.
      */
     @Test
-    void filaConCantidadInverosimil_seIgnoraYSeExplica() {
+    void filaConCantidadFueraDeLoNormal_noSeIgnora() {
         RecepcionFilasResponse resp = service.recibir(List.of(
                 fila("900004152", "24/08/2026", "", "1197421", "1.00\n04178311 std jgo aros", TRANSITO)));
 
-        assertThat(resp.facturas()).isZero();
-        assertThat(resp.ignoradas()).hasSize(1);
-        assertThat(resp.ignoradas().get(0).motivo())
-                .contains("cantidad inverosimil")
-                .contains("1197421");
-        assertThat(resp.ignoradas().get(0).factura()).isEqualTo("900004152");
-        verify(compraService, never()).sincronizar(any());
+        assertThat(resp.ignoradas()).isEmpty();
+        assertThat(resp.facturas()).isEqualTo(1);
+        ArgumentCaptor<FacturaEntrante> factura = ArgumentCaptor.forClass(FacturaEntrante.class);
+        verify(compraService).sincronizar(factura.capture());
+        assertThat(factura.getValue().lineas().get(0).cantidad()).isEqualTo(1197421);
     }
 
-    /** El tope no puede dejar afuera una compra real: 240 retenes es una fila legitima. */
+    /** 240 retenes es la cantidad legitima mas alta vista en la planilla: entra como cualquiera. */
     @Test
     void cantidadGrandePeroPosible_entra() {
         RecepcionFilasResponse resp = service.recibir(List.of(
-                fila("900004151", "24/08/2026", "PKRV-043", "240", "RET GUIA DE VALVULA", TRANSITO),
-                fila("900004151", "24/08/2026", "TBI610", "10000", "TAPON TAZA", TRANSITO)));
+                fila("900004151", "24/08/2026", "PKRV-043", "240", "RET GUIA DE VALVULA", TRANSITO)));
 
         assertThat(resp.ignoradas()).isEmpty();
         assertThat(resp.facturas()).isEqualTo(1);

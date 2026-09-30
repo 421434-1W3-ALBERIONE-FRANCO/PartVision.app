@@ -41,7 +41,7 @@ Power Automate (`@odata.etag`, `ItemInternalId`):
 | `Factura` | agrupa las filas. Se toma tal cual; es único en PartVision |
 | `F. Factura` | acepta `24/08/2026`, `2026-08-24`, `2026-08-24T00:00:00Z` o el número de serie de Excel (`46258`). Power Automate manda este último por defecto |
 | `Codigo` | se busca en el catálogo. **Vacío → `IMPORTADOS`** (ver abajo) |
-| `Cantidad` | entero entre 1 y 10.000. **Una fila sin cantidad se saltea**: son anotaciones como "CONTROLO:" |
+| `Cantidad` | entero ≥ 1. **Más de 300 queda para revisar** (ver "Cantidades fuera de lo normal"). **Una fila sin cantidad se saltea**: son anotaciones como "CONTROLO:" |
 | `Descripcion` | informativa |
 | `Estatus stock` | `EN TRÁNSITO` o `INGRESADA` (ver "Estados") |
 | `Proveedor` | el nombre del catálogo (`EGSA`, `Autopartes del Sur`); ver "El proveedor" |
@@ -224,16 +224,33 @@ Guardá la clave como **variable de entorno de Power Platform**, no escrita en l
 - Si la planilla nunca se vacía, cada envío crece. El tope es **5.000 filas** por envío: borrar
   las filas de facturas ya ingresadas la mantiene chica.
 
-### Cantidades imposibles
+### Cantidades fuera de lo normal
 
-Una fila con **más de 10.000 unidades** se rechaza y se explica en `ignoradas`. No es un límite
-del negocio: es para detectar una fila mal armada en la planilla. El 2026-09-24 llegó una con
-cantidad **1.197.421** y la descripción partida en dos líneas (`1.00⏎04178311 std jgo aros`):
-se le había colado el valor de otra columna. Lo más alto legítimo visto son 240 unidades, así
-que el tope deja pasar cualquier compra real.
+Una línea con **más de 300 unidades** entra igual, pero **queda esperando que alguien la
+revise**: la compra no se puede ingresar al stock hasta decidir qué hacer con ella. No es un
+límite del negocio, es un aviso. El 2026-09-24 llegó una fila con **1.197.421** unidades y la
+descripción partida en dos líneas (`1.00⏎04178311 std jgo aros`): se le había colado el valor
+de otra columna. Lo más alto legítimo visto hasta entonces eran 240 retenes.
 
-La fila rechazada **no frena a las demás**, y si es la única de su factura, esa factura no se
-registra. El motivo aparece en la respuesta con el número, para poder arreglar la planilla.
+En la pantalla **Compras**, debajo de la fila de esa factura aparece una franja con el código,
+la descripción y la cantidad, y dos botones:
+
+- **Aceptar así**: la cantidad es real y entra al stock cuando se ingrese la compra. Se pide
+  confirmación, porque es justo la cantidad que llamó la atención.
+- **Descartar**: es un error de la planilla. La línea **queda registrada, tachada**, pero no
+  entra al stock ni a los totales. No se borra a propósito: la planilla sigue teniendo esa fila,
+  y si la línea desapareciera de PartVision, la factura dejaría de coincidir con la planilla y
+  cada corrida del flujo la reportaría como conflicto.
+
+Se puede cambiar de opinión mientras la compra no esté ingresada. Después no: el stock ya se
+cargó con esa decisión, y para cambiarla primero hay que revertir el ingreso.
+
+La respuesta del flujo lo avisa al registrar la factura (`registrada; 1 línea(s) con una
+cantidad fuera de lo normal, para revisar en el panel antes de ingresarla`), pero **no cuenta
+como error ni como conflicto**: se resuelve en el panel, no en la planilla.
+
+Mientras una línea espera revisión **no aparece en el botón Importados**: primero se decide si
+la cantidad es real, y recién aceptada se puede dar de alta o asociar.
 
 ### Límites
 
@@ -326,10 +343,17 @@ En la pantalla **Compras**, el botón **Importados** muestra cuántas líneas `I
 están sin producto y las lista, las facturas más nuevas primero. Para cada una hay dos
 opciones:
 
-- **Crear producto nuevo.** Propone un SKU `IMP-00001`, `IMP-00002`… (el siguiente libre).
-  Se puede cambiar, pero tiene que ser **único en todo el catálogo**, de cualquier marca y
-  proveedor: si ya existe, rebota y sugiere el siguiente libre. El producto queda con la
-  descripción de la línea (editable) y el proveedor de la compra.
+- **Crear producto nuevo.** El código `IMP-00001`, `IMP-00002`… **lo asigna el sistema y no
+  se puede escribir ni cambiar**: sale de una secuencia de la base, que no reparte dos veces el
+  mismo número aunque dos personas den de alta un importado a la vez, y un índice único frena
+  cualquier duplicado venga de donde venga. El panel muestra el que va a tocar, pero es una
+  vista previa: si otra persona da de alta uno antes, te toca el siguiente, y el mensaje final
+  dice cuál quedó. Un número que se pide y no se usa (un alta que falla) queda salteado; lo que
+  importa es que no se repitan, no que sean correlativos. El producto queda con la descripción
+  de la línea (editable) y el proveedor de la compra.
+
+  El prefijo `IMP-` está **reservado**: el alta manual, la carga por IA y la importación CSV lo
+  rechazan, y el código de un importado no se puede editar después.
 - **Ya está en el catálogo.** Busca un producto y asocia la línea. Es lo que corresponde
   cuando **la misma pieza se vuelve a pedir**: como llega otra vez sin código, entra otra vez
   como `IMPORTADOS`, y crearla de nuevo la duplicaría con otro SKU.

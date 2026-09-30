@@ -7,6 +7,7 @@ import com.partvision.compras.dto.CompraResponse;
 import com.partvision.compras.dto.RecepcionCompraRequest;
 import com.partvision.compras.dto.RecepcionFilasRequest;
 import com.partvision.compras.dto.RecepcionFilasResponse;
+import com.partvision.compras.dto.RevisionLineaRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,6 +91,19 @@ public class CompraController {
             @PathVariable Long id,
             @Valid @RequestBody CambiarEstadoManualRequest request) {
         return compraService.cambiarEstado(id, request.estado());
+    }
+
+    /**
+     * Acepta o descarta una linea con una cantidad fuera de lo normal. Descartar no la borra:
+     * queda registrada, fuera del stock y de los totales.
+     */
+    @PatchMapping("/{id}/lineas/{lineaId}/revision")
+    @PreAuthorize("hasRole('ADMIN')")
+    public CompraResponse revisarLinea(
+            @PathVariable Long id,
+            @PathVariable Long lineaId,
+            @Valid @RequestBody RevisionLineaRequest request) {
+        return compraService.revisarLinea(id, lineaId, request.decision());
     }
 
     /**

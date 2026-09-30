@@ -4,6 +4,7 @@ import com.partvision.auth.security.JwtService;
 import com.partvision.auth.security.TokenRevocationService;
 import com.partvision.common.exception.GlobalExceptionHandler;
 import com.partvision.compras.domain.CompraEstado;
+import com.partvision.compras.domain.RevisionLinea;
 import com.partvision.compras.dto.CompraResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +52,7 @@ class CompraControllerTest {
 
     private static CompraResponse respuesta() {
         return new CompraResponse(1L, "A-0001-00012345", LocalDate.of(2026, 9, 11), "EGSA",
-                "PENDIENTE", "EN_TRANSITO", null, null, 1, 4, 0, Instant.now(), List.of());
+                "PENDIENTE", "EN_TRANSITO", null, null, 1, 4, 0, Instant.now(), List.of(), List.of());
     }
 
     @Test
@@ -94,6 +95,26 @@ class CompraControllerTest {
                 .andExpect(jsonPath("$.estadoPlanilla").value("EN_TRANSITO"));
 
         verify(compraService).cambiarEstado(7L, CompraEstado.EN_TRANSITO);
+    }
+
+    @Test
+    void revisarLinea_pasaLaDecisionAlServicio() throws Exception {
+        when(compraService.revisarLinea(any(), any(), any())).thenReturn(respuesta());
+
+        mvc.perform(patch("/api/v1/compras/7/lineas/190/revision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"DESCARTADA\"}"))
+                .andExpect(status().isOk());
+
+        verify(compraService).revisarLinea(7L, 190L, RevisionLinea.DESCARTADA);
+    }
+
+    @Test
+    void revisarLinea_sinDecision_devuelve400() throws Exception {
+        mvc.perform(patch("/api/v1/compras/7/lineas/190/revision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
