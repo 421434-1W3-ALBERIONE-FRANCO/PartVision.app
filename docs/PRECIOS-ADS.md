@@ -63,7 +63,7 @@ Otras variables (opcionales):
 
 | Variable | Default | Para qué |
 |---|---|---|
-| `ADS_CRON` | `0 0 7,13 * * *` | Cuándo corre sola (hora de Buenos Aires). `-` la apaga y deja solo el botón. |
+| `ADS_CRON` | `0 0 7,13 * * *` | Cuándo corre sola (hora de Buenos Aires). `-` la apaga y deja solo el botón. Para reactivarla hay que **escribir el horario**, no alcanza con borrar la línea: `redeploy.sh` conserva las `ADS_` del contenedor anterior. |
 | `PARTVISION_PRECIOS_ADS_URL` | `https://catalogo.autopartesdelsur.com.ar/` | Solo para pruebas. |
 
 ## Qué hace cada corrida
