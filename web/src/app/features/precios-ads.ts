@@ -33,7 +33,7 @@ type Resultado = SincronizacionPrecios['resultado'];
             }
           </h3>
           <p class="text-xs text-gray-500 mt-1">
-            Baja sola la lista de precios del portal de ADS (el mismo Excel del botón «Lista de precios») todos los días a las 7 y a las 13 h.
+            Baja sola la lista de precios del portal de ADS (el mismo Excel del botón «Lista de precios») todos los días a las 6:30 y a las 13 h.
             La importación manual de abajo sigue funcionando igual, por si el portal no responde.
           </p>
         </div>

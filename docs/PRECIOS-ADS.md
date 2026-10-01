@@ -3,7 +3,7 @@
 PartVision baja sola la **lista de precios del portal de ADS**
 (`catalogo.autopartesdelsur.com.ar`) y la aplica. Es el mismo Excel del botón **"Lista de
 precios"** del portal ("Catalogo Autopartes del Sur - DD-MM-YYYY.xlsx", con Código,
-Descripción y Precio de Lista). Corre **todos los días a las 7 y a las 13 h** (hora de Buenos
+Descripción y Precio de Lista). Corre **todos los días a las 6:30 y a las 13 h** (hora de Buenos
 Aires) y cuando alguien toca **«Actualizar ahora»** en la pantalla Precios.
 
 La cuenta es la misma que la de la importación manual:
@@ -63,7 +63,7 @@ Otras variables (opcionales):
 
 | Variable | Default | Para qué |
 |---|---|---|
-| `ADS_CRON` | `0 0 7,13 * * *` | Cuándo corre sola (hora de Buenos Aires). `-` la apaga y deja solo el botón. Para reactivarla hay que **escribir el horario**, no alcanza con borrar la línea: `redeploy.sh` conserva las `ADS_` del contenedor anterior. |
+| `ADS_CRON` | `0 30 6,13 * * *` | Cuándo corre sola (hora de Buenos Aires; 6:30 para no cruzarse con el robot de EGSA de las 7). `-` la apaga y deja solo el botón. Para reactivarla hay que **escribir el horario**, no alcanza con borrar la línea: `redeploy.sh` conserva las `ADS_` del contenedor anterior. |
 | `PARTVISION_PRECIOS_ADS_URL` | `https://catalogo.autopartesdelsur.com.ar/` | Solo para pruebas. |
 
 ## Qué hace cada corrida
@@ -145,3 +145,14 @@ Si el servidor se reinicia a mitad de una corrida, al volver la marca como corta
   portal lo saca todos los días a las 7 o a las 13, avisar: se puede bajar a una corrida por día
   o reusar el token por más tiempo.
 - Cuánto dura el token. Da igual: si lo rechaza, se pide otro.
+
+## Limpieza semanal del historial (todas las listas, no solo ADS)
+
+Los **domingos a las 4:00** el backend borra del historial de precios las filas en las que **no
+cambió nada** (precio anterior = precio nuevo) y compacta la tabla. Las escribe la importación
+manual, que guarda una fila por producto aunque el precio sea el mismo: al 01/10/2026 eran 2,1
+de los 2,4 millones de filas (unos 300 MB). Los **cambios reales se conservan siempre**: con
+ellos se revierte un batch y los va a usar el módulo de Informes.
+
+No corre a la vez que una importación (si hay una, reintenta cada 10 minutos durante una hora).
+`PRECIOS_LIMPIEZA_CRON` cambia el horario; `-` la apaga.

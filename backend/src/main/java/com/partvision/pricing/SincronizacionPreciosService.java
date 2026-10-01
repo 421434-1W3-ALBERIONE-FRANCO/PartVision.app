@@ -98,7 +98,7 @@ public class SincronizacionPreciosService {
         if (cerradas != null && cerradas > 0) log.warn("{} actualizacion(es) de precios quedaron cortadas por un reinicio", cerradas);
     }
 
-    @Scheduled(cron = "${partvision.precios.ads.cron:0 0 7,13 * * *}", zone = "America/Argentina/Buenos_Aires")
+    @Scheduled(cron = "${partvision.precios.ads.cron:0 30 6,13 * * *}", zone = "America/Argentina/Buenos_Aires")
     public void programada() {
         if (!props.habilitada()) {
             log.debug("Actualizacion automatica de ADS apagada: faltan las credenciales del portal");

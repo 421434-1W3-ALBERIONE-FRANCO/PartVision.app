@@ -70,7 +70,11 @@ partvision:
       usuario: ${ADS_USUARIO:}
       password: ${ADS_PASSWORD:}
       # Hora de Buenos Aires. "-" la apaga sin tocar las credenciales (queda el boton).
-      cron: ${ADS_CRON:0 0 7,13 * * *}
+      # 6:30 y no 7: a las 7 arranca el robot de EGSA del cliente, y comparten el candado.
+      cron: ${ADS_CRON:0 30 6,13 * * *}
+    limpieza:
+      # Borra del historial las filas sin cambio de precio y compacta la tabla. "-" la apaga.
+      cron: ${PRECIOS_LIMPIEZA_CRON:0 0 4 * * SUN}
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME:noreply@partvision.com}}
     base-url: ${APP_BASE_URL:http://localhost:4200}
