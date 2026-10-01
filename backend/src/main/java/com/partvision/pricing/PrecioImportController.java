@@ -53,7 +53,7 @@ public class PrecioImportController {
         importService.validarAplicar(uploadId, proveedor);
         if (!importService.iniciarImport()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("message", "Ya hay una importación en curso"));
+                    .body(Map.of("message", "Ya hay una importación o una actualización automática de precios en curso"));
         }
         importService.ejecutarImportAsync(uploadId, colSku, colPrecio, proveedor, excluidos, archivo);
         return ResponseEntity.accepted()

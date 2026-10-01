@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 
 import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, PrecioPreviewFila } from '../core/models';
 import { ProductoService } from '../core/producto.service';
+import { PreciosAds } from './precios-ads';
 
 @Component({
   selector: 'app-precios',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, DatePipe],
+  imports: [FormsModule, DecimalPipe, DatePipe, PreciosAds],
   template: `
     <div class="space-y-8 animate-fade-in max-w-5xl mx-auto">
       <!-- Header -->
@@ -26,6 +27,9 @@ import { ProductoService } from '../core/producto.service';
           Configuración de márgenes, importación de listas y rollback de precios.
         </p>
       </div>
+
+      <!-- === Actualización automática de ADS (la importación manual de abajo queda de respaldo) === -->
+      <app-precios-ads (actualizado)="cargarBatches()" />
 
       <!-- === SECCIÓN 1: Márgenes por proveedor === -->
       <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card">
@@ -50,7 +54,7 @@ import { ProductoService } from '../core/producto.service';
                     Venta: x{{ (1 + c.margen / 100) | number:'1.5-5' }}
                   </p>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3">
                   <div class="flex items-center gap-1.5">
                     <label class="text-xs text-gray-400 font-semibold whitespace-nowrap"
                       title="Recargo que el proveedor aplica sobre el precio de lista del archivo para llegar a lo que realmente pagás. 0 si el archivo ya trae ese precio.">Ajuste lista %</label>
@@ -133,10 +137,10 @@ import { ProductoService } from '../core/producto.service';
         <!-- Paso 1: Subir archivo -->
         @if (impPaso() === 1) {
           <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div>
+            <div class="max-w-full min-w-0">
               <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">Archivo (CSV / Excel)</label>
               <input type="file" accept=".csv,.xls,.xlsx" (change)="onArchivoSeleccionado($event)"
-                class="text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
+                class="max-w-full text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neon-purple/20 file:text-neon-purple file:cursor-pointer hover:file:bg-neon-purple/30" />
             </div>
             <button [disabled]="!impArchivo() || impSubiendo()" (click)="subirArchivo()"
               class="px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 min-w-[160px]">

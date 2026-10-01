@@ -80,6 +80,14 @@ public class PrecioImportService {
         return importando.compareAndSet(false, true);
     }
 
+    /**
+     * Libera el candado que tomo {@link #iniciarImport()}. Lo usa la actualizacion automatica
+     * de precios, que comparte el candado para no pisarse con una importacion manual.
+     */
+    void terminarImport() {
+        importando.set(false);
+    }
+
     public PrecioImportProgresoResponse getProgresoImport() {
         return new PrecioImportProgresoResponse(
                 importando.get(), progresoActual.get(), progresoTotal.get(),
@@ -437,7 +445,7 @@ public class PrecioImportService {
      * su producto. Si el proveedor no desempata, se devuelven los candidatos como estaban
      * y la fila queda marcada como conflicto.
      */
-    private List<Producto> desambiguarPorProveedor(List<Producto> matches, String proveedor) {
+    List<Producto> desambiguarPorProveedor(List<Producto> matches, String proveedor) {
         if (matches.size() <= 1 || proveedor == null) return matches;
         List<Producto> delProveedor = matches.stream()
                 .filter(p -> p.getProveedor() != null
@@ -446,7 +454,7 @@ public class PrecioImportService {
         return delProveedor.size() == 1 ? delProveedor : matches;
     }
 
-    private Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {
+    Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {
         if (skus.size() <= SKU_BATCH_SIZE) {
             return productoRepository.findBySkuIn(skus)
                     .stream().collect(Collectors.groupingBy(Producto::getSku));
@@ -465,7 +473,7 @@ public class PrecioImportService {
      * El archivo del proveedor no siempre trae el precio que se paga: algunos exportan
      * su precio de lista y aplican un recargo aparte. 'ajusteLista' salva esa diferencia.
      */
-    private record Tarifa(BigDecimal margen, BigDecimal ajusteLista) {
+    record Tarifa(BigDecimal margen, BigDecimal ajusteLista) {
         BigDecimal costoDesde(BigDecimal precioArchivo) {
             return precioArchivo
                     .multiply(BigDecimal.ONE.add(ajusteLista.divide(BigDecimal.valueOf(100))))
@@ -479,7 +487,7 @@ public class PrecioImportService {
         }
     }
 
-    private Tarifa obtenerTarifa(String proveedor) {
+    Tarifa obtenerTarifa(String proveedor) {
         return configuracionRepo.findByProveedorIgnoreCase(proveedor)
                 .map(c -> new Tarifa(c.getMargen(),
                         c.getAjusteLista() != null ? c.getAjusteLista() : BigDecimal.ZERO))
@@ -492,7 +500,7 @@ public class PrecioImportService {
      * no todos los archivos las incluyen. El matcheo de precios nunca las mira: sirven para
      * poder mostrar y dar de alta los SKU que no existen en el catalogo.
      */
-    private record FilaArchivo(String sku, String precio, String descripcion, String marca) {}
+    record FilaArchivo(String sku, String precio, String descripcion, String marca) {}
 
     private List<FilaArchivo> parsearFilas(UploadInfo info, String colSku, String colPrecio) {
         if (info.esExcel()) {
@@ -533,7 +541,7 @@ public class PrecioImportService {
         }
     }
 
-    private List<FilaArchivo> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
+    List<FilaArchivo> parsearFilasExcel(byte[] contenido, String colSku, String colPrecio) {
         try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(contenido))) {
             Sheet sheet = wb.getSheetAt(0);
             int headerIdx = detectarFilaHeader(sheet);
@@ -634,7 +642,7 @@ public class PrecioImportService {
         }
     }
 
-    private BigDecimal parsearPrecio(String valor) {
+    BigDecimal parsearPrecio(String valor) {
         if (valor == null) return null;
         try {
             String limpio = valor.replace("$", "").replace(",", ".").replaceAll("\\s", "").trim();

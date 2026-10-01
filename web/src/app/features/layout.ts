@@ -1,7 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 
 import { AuthService } from '../core/auth.service';
+import { AlertaPrecios } from '../core/models';
+import { PrecioSyncService } from '../core/precio-sync.service';
 import { ThreeLogoComponent } from '../core/three-logo.component';
 
 @Component({
@@ -222,6 +226,22 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
         <main class="flex-1 overflow-y-auto bg-dark p-4 md:p-8 relative">
           <!-- Ambient top light -->
           <div class="luz-ambiente absolute top-0 right-1/4 w-96 h-32 bg-neon-purple/10 rounded-full blur-[90px] pointer-events-none"></div>
+          <!-- Aviso de la actualizacion automatica de precios: que no dependa de entrar a Precios para enterarse -->
+          @if (alertaPrecios(); as a) {
+            @if (!enPrecios()) {
+            <a routerLink="/precios"
+               class="relative mb-5 flex items-start gap-3 px-4 py-3 rounded-xl border text-sm cursor-pointer transition-colors"
+               [class]="a.nivel === 'ERROR'
+                 ? 'bg-red-500/10 border-red-500/40 text-red-300 hover:bg-red-500/15'
+                 : 'bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/15'">
+              <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+              </svg>
+              <span class="flex-1">{{ a.mensaje }}</span>
+              <span class="shrink-0 text-xs font-semibold underline hidden sm:inline">Ver en Precios</span>
+            </a>
+            }
+          }
           <router-outlet />
         </main>
       </div>
@@ -250,12 +270,35 @@ import { ThreeLogoComponent } from '../core/three-logo.component';
     }
   `,
 })
-export class Layout {
+export class Layout implements OnInit {
   private auth = inject(AuthService);
   private router = inject(Router);
+  private precioSync = inject(PrecioSyncService);
+  private destroyRef = inject(DestroyRef);
 
   sidebarOpen = signal(false);
   confirmandoSalir = signal(false);
+  alertaPrecios = signal<AlertaPrecios | null>(null);
+  /** En Precios el mismo aviso ya esta en el panel: no se repite arriba. */
+  enPrecios = signal(false);
+
+  /** Solo los administradores ven precios; se revisa al entrar y en cada cambio de pantalla. */
+  ngOnInit(): void {
+    if (!this.esAdmin) return;
+    this.revisarPrecios();
+    this.router.events
+      .pipe(filter(e => e instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.revisarPrecios());
+  }
+
+  private revisarPrecios(): void {
+    this.enPrecios.set(this.router.url.startsWith('/precios'));
+    this.precioSync.alerta().subscribe({
+      next: (a) => this.alertaPrecios.set(a),
+      // Un aviso que no se pudo consultar no puede tapar la pantalla con otro error.
+      error: () => this.alertaPrecios.set(null),
+    });
+  }
 
   get esAdmin(): boolean {
     return this.auth.esAdmin;

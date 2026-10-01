@@ -234,6 +234,60 @@ export interface PrecioBatch {
   createdAt: string;
 }
 
+/** Una corrida de la actualizacion automatica de precios (la constancia de lo que paso). */
+export interface SincronizacionPrecios {
+  id: number;
+  proveedor: string;
+  origen: 'AUTOMATICA' | 'MANUAL';
+  forzada: boolean;
+  iniciadaEn: string;
+  terminadaEn: string | null;
+  resultado: 'EN_CURSO' | 'ACTUALIZADA' | 'SIN_CAMBIOS' | 'RETENIDA' | 'ERROR';
+  mensaje: string | null;
+  problemas: string[];
+  batchId: number | null;
+  filasLista: number;
+  actualizados: number;
+  sinCambio: number;
+  noEncontrados: number;
+  filasInvalidas: number;
+  enRevision: number;
+  conPrecioPropio: number | null;
+}
+
+export interface AlertaPrecios {
+  nivel: 'ERROR' | 'AVISO';
+  mensaje: string;
+}
+
+export interface SincronizacionEstado {
+  habilitada: boolean;
+  proveedor: string;
+  enCurso: boolean;
+  ultima: SincronizacionPrecios | null;
+  ultimaBuenaEn: string | null;
+  pendientesRevision: number;
+  alerta: AlertaPrecios | null;
+  historial: SincronizacionPrecios[];
+}
+
+/** Un precio que cambio demasiado de golpe y espera que alguien lo apruebe o lo descarte. */
+export interface PrecioRevision {
+  id: number;
+  productoId: number;
+  sku: string;
+  descripcion: string;
+  costoActual: number | null;
+  costoNuevo: number;
+  variacionPct: number | null;
+}
+
+export interface RevisionPreciosResultado {
+  resueltas: number;
+  batchId: number | null;
+  mensaje: string;
+}
+
 export interface ImportResult {
   totalFilas: number;
   importados: number;

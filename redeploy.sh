@@ -63,7 +63,9 @@ deploy_backend(){
   # COMPRAS_API_KEY va incluida a proposito: es lo unico que protege
   # POST /api/v1/compras/recepcion (endpoint publico, sin JWT). Si se pierde en un
   # redeploy el endpoint se apaga (503) y Power Automate deja de poder mandar facturas.
-  reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|COMPRAS_|MAIL_|APP_|PORT|MANAGEMENT_)' "$envf"
+  # ADS_ (usuario y contraseña del portal de Autopartes del Sur) por la misma razon: sin
+  # ellos la actualizacion automatica de precios se apaga sola.
+  reuse_env partvision-backend '^(SPRING_|DB_|JWT_|CORS_|AI_|GEMINI_|COMPRAS_|ADS_|MAIL_|APP_|PORT|MANAGEMENT_)' "$envf"
   # Overlay opcional para AGREGAR o ROTAR secretos sin recrear el contenedor a mano:
   # un VAR=valor por linea en ~/.partvision-backend.env (chmod 600). Va despues del
   # env reusado, asi pisa lo que ya estaba. Si no existe, no pasa nada.
