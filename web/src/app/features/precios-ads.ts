@@ -33,7 +33,7 @@ type Resultado = SincronizacionPrecios['resultado'];
             }
           </h3>
           <p class="text-xs text-gray-500 mt-1">
-            Baja sola la lista de precios de tu cuenta en el portal de ADS todos los días a las 7 y a las 13 h.
+            Baja sola la lista de precios del portal de ADS (el mismo Excel del botón «Lista de precios») todos los días a las 7 y a las 13 h.
             La importación manual de abajo sigue funcionando igual, por si el portal no responde.
           </p>
         </div>
@@ -83,15 +83,12 @@ type Resultado = SincronizacionPrecios['resultado'];
               <p class="mt-2 text-sm text-white">{{ u.mensaje }}</p>
             }
             @if (u.resultado !== 'EN_CURSO' && u.resultado !== 'ERROR') {
-              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 <div class="rounded-lg bg-dark/40 px-3 py-2"><p class="text-[10px] uppercase text-gray-500">Actualizados</p><p class="font-mono text-neon-green">{{ u.actualizados | number }}</p></div>
                 <div class="rounded-lg bg-dark/40 px-3 py-2"><p class="text-[10px] uppercase text-gray-500">Sin cambio</p><p class="font-mono text-gray-300">{{ u.sinCambio | number }}</p></div>
                 <div class="rounded-lg bg-dark/40 px-3 py-2"><p class="text-[10px] uppercase text-gray-500">Para revisar</p><p class="font-mono" [class]="u.enRevision ? 'text-amber-400' : 'text-gray-300'">{{ u.enRevision | number }}</p></div>
                 <div class="rounded-lg bg-dark/40 px-3 py-2"><p class="text-[10px] uppercase text-gray-500">No están en catálogo</p><p class="font-mono text-gray-300">{{ u.noEncontrados | number }}</p></div>
                 <div class="rounded-lg bg-dark/40 px-3 py-2"><p class="text-[10px] uppercase text-gray-500">Precio en cero</p><p class="font-mono text-gray-300">{{ u.filasInvalidas | number }}</p></div>
-                <div class="rounded-lg bg-dark/40 px-3 py-2" title="Productos con un precio distinto al de la lista pública de ADS: los descuentos de tu cuenta.">
-                  <p class="text-[10px] uppercase text-gray-500">Precio de tu cuenta</p><p class="font-mono text-neon-cyan">{{ u.conPrecioPropio === null ? '—' : (u.conPrecioPropio | number) }}</p>
-                </div>
               </div>
             }
             @if (u.problemas.length) {

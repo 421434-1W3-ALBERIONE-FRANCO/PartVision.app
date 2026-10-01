@@ -40,12 +40,12 @@ class AnalizadorListaPreciosTest {
         return new FilaArchivo(sku, precio, null, null);
     }
 
-    private Analisis analizar(List<FilaArchivo> filas, Map<String, BigDecimal> publica, Umbrales u, Referencia ref) {
-        return AnalizadorListaPrecios.analizar(filas, publica, catalogo, TARIFA, ADS, u, ref, parser::parsearPrecio);
+    private Analisis analizar(List<FilaArchivo> filas, Umbrales u, Referencia ref) {
+        return AnalizadorListaPrecios.analizar(filas, catalogo, TARIFA, ADS, u, ref, parser::parsearPrecio);
     }
 
     private Analisis analizar(List<FilaArchivo> filas) {
-        return analizar(filas, null, U, Referencia.NINGUNA);
+        return analizar(filas, U, Referencia.NINGUNA);
     }
 
     @Test
@@ -60,6 +60,7 @@ class AnalizadorListaPreciosTest {
         assertThat(a.cambios().getFirst().venta()).isEqualByComparingTo("121.00");
         assertThat(a.saltos()).isEmpty();
         assertThat(a.hayQueFrenar()).isFalse();
+        assertThat(a.problemas()).isEmpty();
     }
 
     @Test
@@ -128,7 +129,7 @@ class AnalizadorListaPreciosTest {
         producto("A4", ADS, "100.00");
 
         Analisis a = analizar(List.of(fila("A1", "0"), fila("A2", "abc"), fila("A3", null),
-                fila("A4", "1000000000"), fila(" ", "10"), fila(null, "10")), null,
+                fila("A4", "1000000000"), fila(" ", "10"), fila(null, "10")),
                 new Umbrales(60, 35, 10, 80, 0, 100, 0), Referencia.NINGUNA);
 
         assertThat(a.invalidas()).isEqualTo(4);
@@ -157,7 +158,7 @@ class AnalizadorListaPreciosTest {
         Producto deEgsa = producto("A3", "EGSA", "100.00");
         producto("A3", " autopartes del sur ", "100.00");
 
-        Analisis a = analizar(List.of(fila("A1", "110"), fila("A2", "110"), fila("A3", "110")), null,
+        Analisis a = analizar(List.of(fila("A1", "110"), fila("A2", "110"), fila("A3", "110")),
                 new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
 
         assertThat(a.cambios()).hasSize(1);
@@ -172,78 +173,24 @@ class AnalizadorListaPreciosTest {
         List<FilaArchivo> filas = new ArrayList<>();
         for (int i = 1; i <= 7; i++) filas.add(fila("X" + i, "10"));
 
-        Analisis a = analizar(filas, null, new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
+        Analisis a = analizar(filas, new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
 
         assertThat(a.problemas().getFirst()).contains("(ej: X1, X2, X3, X4, X5…)");
     }
 
     @Test
     void ejemplos_largosSeRecortan() {
-        Analisis a = analizar(List.of(fila("PISTONES FIAT - 600 - 750CC (+0.80MM)(62.80MM)", "10")), null,
+        Analisis a = analizar(List.of(fila("PISTONES FIAT - 600 - 750CC (+0.80MM)(62.80MM)", "10")),
                 new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
 
         assertThat(a.problemas().getFirst()).contains("(ej: PISTONES FIAT - 600 - 750CC (+…)");
     }
 
     @Test
-    void precioPropio_cuentaLosQueDifierenDeLaPublica() {
-        producto("A1", ADS, "85.00");
-        producto("A2", ADS, "100.00");
-
-        Map<String, BigDecimal> publica = Map.of("A1", new BigDecimal("100"), "A2", new BigDecimal("100.004"));
-        Analisis a = analizar(List.of(fila("A1", "85"), fila("A2", "100"), fila("A3", "5")), publica, U, Referencia.NINGUNA);
-
-        assertThat(a.conPrecioPropio()).isEqualTo(1);
-        assertThat(a.hayQueFrenar()).isFalse();
-    }
-
-    @Test
-    void sinListaPublica_noSeCompara_yQuedaAnotado() {
-        producto("A1", ADS, "100.00");
-
-        Analisis a = analizar(List.of(fila("A1", "100")));
-
-        assertThat(a.conPrecioPropio()).isNull();
-        assertThat(a.problemas()).anyMatch(p -> p.contains("lista pública"));
-    }
-
-    // --- Frenos ---
-
-    @Test
-    void frena_listaIgualALaPublica_enLaPrimeraCorrida() {
-        producto("A1", ADS, "100.00");
-
-        Analisis a = analizar(List.of(fila("A1", "100")), Map.of("A1", new BigDecimal("100")), U, Referencia.NINGUNA);
-
-        assertThat(a.motivosParaFrenar()).singleElement().asString()
-                .contains("sin los precios especiales de tu cuenta").doesNotContain("la vez anterior");
-    }
-
-    @Test
-    void frena_listaIgualALaPublica_siAntesHabiaPreciosPropios() {
-        producto("A1", ADS, "100.00");
-
-        Analisis a = analizar(List.of(fila("A1", "100")), Map.of("A1", new BigDecimal("100")), U,
-                new Referencia(null, 2090));
-
-        assertThat(a.motivosParaFrenar()).singleElement().asString().contains("la vez anterior había 2.090");
-    }
-
-    @Test
-    void noFrena_listaIgualALaPublica_siYaNoHabiaPreciosPropios() {
-        producto("A1", ADS, "100.00");
-
-        assertThat(analizar(List.of(fila("A1", "100")), Map.of("A1", new BigDecimal("100")), U,
-                new Referencia(null, 0)).hayQueFrenar()).isFalse();
-        assertThat(analizar(List.of(fila("A1", "100")), Map.of("A1", new BigDecimal("100")), U,
-                new Referencia(null, 49)).hayQueFrenar()).isFalse();
-    }
-
-    @Test
     void frena_pocasFilas() {
         producto("A1", ADS, "100.00");
 
-        Analisis a = analizar(List.of(fila("A1", "100")), null, new Umbrales(60, 35, 10, 80, 1000, 5, 50),
+        Analisis a = analizar(List.of(fila("A1", "100")), new Umbrales(60, 35, 10, 80, 1000, 5, 50),
                 Referencia.NINGUNA);
 
         assertThat(a.motivosParaFrenar()).singleElement().asString().contains("solo 1 productos con precio");
@@ -253,7 +200,7 @@ class AnalizadorListaPreciosTest {
     void frena_muchasMenosFilasQueLaUltima() {
         producto("A1", ADS, "100.00");
 
-        Analisis a = analizar(List.of(fila("A1", "100")), null, U, new Referencia(67_280, null));
+        Analisis a = analizar(List.of(fila("A1", "100")), U, new Referencia(67_280));
 
         assertThat(a.motivosParaFrenar()).singleElement().asString().contains("la última traía 67.280");
     }
@@ -266,7 +213,7 @@ class AnalizadorListaPreciosTest {
         producto("A4", ADS, "100.00");
 
         Analisis a = analizar(List.of(fila("A1", "100"), fila("A2", "100"), fila("A3", "100"), fila("A4", "100")),
-                null, U, new Referencia(5, null));
+                U, new Referencia(5));
 
         assertThat(a.hayQueFrenar()).isFalse();
     }
@@ -275,7 +222,7 @@ class AnalizadorListaPreciosTest {
     void frena_muchasFilasIlegibles() {
         producto("A1", ADS, "100.00");
 
-        Analisis a = analizar(List.of(fila("A1", "100"), fila("A2", "x")), null,
+        Analisis a = analizar(List.of(fila("A1", "100"), fila("A2", "x")),
                 new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
 
         assertThat(a.motivosParaFrenar()).singleElement().asString().contains("1 de 2 filas");
@@ -335,7 +282,7 @@ class AnalizadorListaPreciosTest {
 
     @Test
     void listaVacia_noRompe() {
-        Analisis a = analizar(List.of(), Map.of(), new Umbrales(60, 35, 10, 80, 0, 5, 50), Referencia.NINGUNA);
+        Analisis a = analizar(List.of(), new Umbrales(60, 35, 10, 80, 0, 5, 50), Referencia.NINGUNA);
 
         assertThat(a.filasLista()).isZero();
         assertThat(a.hayQueFrenar()).isFalse();

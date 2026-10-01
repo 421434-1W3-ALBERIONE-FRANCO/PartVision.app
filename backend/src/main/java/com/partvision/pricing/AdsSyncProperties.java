@@ -7,9 +7,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * Actualizacion automatica de precios de Autopartes del Sur desde su portal.
  *
  * <p>Queda apagada mientras no esten el usuario y la contraseña del portal (ADS_USUARIO /
- * ADS_PASSWORD en el entorno del servidor): sin ellos no hay forma de bajar la lista con los
- * precios de la cuenta del cliente, y la lista publica NO sirve de reemplazo porque no trae
- * sus descuentos (al 2026-09-30, ~2.090 productos con 2%, 10%, 15% o 20% menos).
+ * ADS_PASSWORD en el entorno del servidor). La base es el "Precio de Lista" del Excel del
+ * portal: costo = lista x (1 + ajuste), venta = costo x (1 + margen), como la importacion
+ * manual (decision del usuario, 2026-10-01).
  *
  * <p>Los umbrales son los frenos de una corrida que nadie mira: si la lista viene rara, no se
  * aplica y se avisa. Ver {@link SincronizacionPreciosService}.

@@ -160,8 +160,6 @@ class SincronizacionPreciosServiceTest {
         Producto salta = producto(3, "A3", "100.00");
         when(portal.descargarListaDelCliente()).thenReturn(excel(
                 new Object[]{"A1", 110}, new Object[]{"A2", 200}, new Object[]{"A3", 500}));
-        when(portal.descargarListaPublica()).thenReturn(excel(
-                new Object[]{"A1", 130}, new Object[]{"A2", 200}, new Object[]{"A3", 500}));
 
         service.programada();
 
@@ -171,7 +169,6 @@ class SincronizacionPreciosServiceTest {
         assertThat(s.getActualizados()).isEqualTo(1);
         assertThat(s.getSinCambio()).isEqualTo(1);
         assertThat(s.getEnRevision()).isEqualTo(1);
-        assertThat(s.getConPrecioPropio()).isEqualTo(1);
         assertThat(s.getBatchId()).isEqualTo(99L);
         assertThat(s.getTerminadaEn()).isNotNull();
         assertThat(s.getMensaje()).isEqualTo("Se actualizaron 1 precio(s) de Autopartes del Sur. 1 esperan tu revisión.");
@@ -215,7 +212,6 @@ class SincronizacionPreciosServiceTest {
     void sinCambios_noCreaBatchNiHistorial() throws Exception {
         producto(1, "A1", "100.00");
         when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 100}));
-        when(portal.descargarListaPublica()).thenReturn(excel(new Object[]{"A1", 120}));
 
         service.programada();
 
@@ -227,19 +223,17 @@ class SincronizacionPreciosServiceTest {
     }
 
     @Test
-    void listaIgualALaPublica_quedaRetenida_sinTocarNada() throws Exception {
+    void listaRara_quedaRetenida_sinTocarNada() throws Exception {
         Producto p = producto(1, "A1", "100.00");
-        byte[] lista = excel(new Object[]{"A1", 110});
-        when(portal.descargarListaDelCliente()).thenReturn(lista);
-        when(portal.descargarListaPublica()).thenReturn(lista);
+        when(portal.descargarListaDelCliente()).thenReturn(excel(
+                new Object[]{"A1", 110}, new Object[]{"Filtro de aceite", 5}, new Object[]{"Correa", 7}));
 
         service.programada();
 
         SincronizacionPrecio s = ultima();
         assertThat(s.getResultado()).isEqualTo(ResultadoSincronizacion.RETENIDA);
         assertThat(s.getMensaje()).contains("Aplicar igual");
-        assertThat(s.getProblemas()).contains("sin los precios especiales de tu cuenta");
-        assertThat(s.getConPrecioPropio()).isZero();
+        assertThat(s.getProblemas()).contains("Solo 1 de 3 códigos coinciden");
         assertThat(p.getPrecioCosto()).isEqualByComparingTo("100.00");
         verifyNoInteractions(batchRepo, historialRepo);
         verify(revisionRepo, never()).vencerPendientes(any(), any(), any(), any());
@@ -253,7 +247,6 @@ class SincronizacionPreciosServiceTest {
         anterior.setFilasLista(67_280);
         when(syncRepo.findFirstByProveedorAndResultadoInOrderByIniciadaEnDesc(eq(ADS), any())).thenReturn(Optional.of(anterior));
         when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 110}));
-        when(portal.descargarListaPublica()).thenReturn(excel(new Object[]{"A1", 120}));
 
         service.programada();
 
@@ -264,9 +257,8 @@ class SincronizacionPreciosServiceTest {
     @Test
     void forzada_aplicaAunqueLaListaHayaLlegadoRara() throws Exception {
         Producto p = producto(1, "A1", "100.00");
-        byte[] lista = excel(new Object[]{"A1", 110});
-        when(portal.descargarListaDelCliente()).thenReturn(lista);
-        when(portal.descargarListaPublica()).thenReturn(lista);
+        when(portal.descargarListaDelCliente()).thenReturn(excel(
+                new Object[]{"A1", 110}, new Object[]{"Filtro de aceite", 5}, new Object[]{"Correa", 7}));
 
         SincronizacionResponse r = service.iniciarManual(true);
 
@@ -275,41 +267,11 @@ class SincronizacionPreciosServiceTest {
         SincronizacionPrecio s = ultima();
         assertThat(s.getResultado()).isEqualTo(ResultadoSincronizacion.ACTUALIZADA);
         assertThat(s.getMensaje()).endsWith("Se aplicó a pedido tuyo, aunque la lista llegó con datos raros.");
-        assertThat(s.getProblemas()).contains("sin los precios especiales");
+        assertThat(s.getProblemas()).contains("coinciden con tu catálogo");
         assertThat(p.getPrecioCosto()).isEqualByComparingTo("110.00");
         ArgumentCaptor<ImportPrecioBatch> batch = ArgumentCaptor.forClass(ImportPrecioBatch.class);
         verify(batchRepo, atLeastOnce()).save(batch.capture());
         assertThat(batch.getValue().getArchivo()).isEqualTo("Actualización de ADS (botón)");
-    }
-
-    @Test
-    void sinListaPublica_aplicaIgual_yLoAnota() throws Exception {
-        producto(1, "A1", "100.00");
-        when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 110}));
-        when(portal.descargarListaPublica()).thenThrow(new AdsPortalException("caido"));
-
-        service.programada();
-
-        assertThat(ultima().getResultado()).isEqualTo(ResultadoSincronizacion.ACTUALIZADA);
-        assertThat(ultima().getConPrecioPropio()).isNull();
-        assertThat(ultima().getProblemas()).contains("No se pudo bajar la lista pública");
-    }
-
-    @Test
-    void listaPublicaIlegible_tambienSeToleraYSeIgnoranSusFilasMalas() throws Exception {
-        producto(1, "A1", "100.00");
-        when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 110}));
-        when(portal.descargarListaPublica()).thenReturn(excel(new Object[]{"A1", "sin precio"}));
-
-        service.programada();
-
-        assertThat(ultima().getResultado()).isEqualTo(ResultadoSincronizacion.RETENIDA);
-        assertThat(ultima().getConPrecioPropio()).isZero();
-
-        when(portal.descargarListaPublica()).thenReturn("no es un excel".getBytes());
-        service.programada();
-        assertThat(ultima().getResultado()).isEqualTo(ResultadoSincronizacion.ACTUALIZADA);
-        assertThat(ultima().getConPrecioPropio()).isNull();
     }
 
     @Test
@@ -341,14 +303,12 @@ class SincronizacionPreciosServiceTest {
         assertThat(ultima().getResultado()).isEqualTo(ResultadoSincronizacion.ERROR);
         assertThat(ultima().getMensaje()).startsWith("La lista de ADS no tiene el formato de siempre: ")
                 .contains("Precio de Lista");
-        verify(portal, never()).descargarListaPublica();
     }
 
     @Test
     void sinConfiguracionDeMargenes_loDiceTalCual() throws Exception {
         when(configuracionRepo.findByProveedorIgnoreCase(ADS)).thenReturn(Optional.empty());
         when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 110}));
-        when(portal.descargarListaPublica()).thenReturn(excel(new Object[]{"A1", 120}));
 
         service.programada();
 
@@ -358,7 +318,6 @@ class SincronizacionPreciosServiceTest {
     @Test
     void errorInesperado_noExponeElDetalle_yLiberaElCandado() throws Exception {
         when(portal.descargarListaDelCliente()).thenReturn(excel(new Object[]{"A1", 110}));
-        when(portal.descargarListaPublica()).thenReturn(excel(new Object[]{"A1", 120}));
         when(productoRepository.findBySkuIn(anyCollection())).thenThrow(new IllegalStateException("se cayo la base"));
 
         service.programada();

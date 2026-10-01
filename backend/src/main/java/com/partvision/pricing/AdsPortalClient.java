@@ -24,8 +24,9 @@ import java.util.Map;
  *   <li>{@code POST auth/login/} con {@code {username, password}} responde
  *       {@code {meta: {allowed}, data: {token}}} o el motivo en {@code errors.error} / {@code detail}.</li>
  *   <li>{@code GET api/catalogo/generarXLS/} con {@code Authorization: Token <token>} devuelve el
- *       Excel de la lista de precios ("Lista de precios" en el portal). Sin token tambien
- *       responde, pero con la lista publica: sin los descuentos de la cuenta.</li>
+ *       Excel "Catalogo Autopartes del Sur - DD-MM-YYYY.xlsx" del boton "Lista de precios":
+ *       Codigo, Descripcion y Precio de Lista. Al 2026-10-01 llega igual con o sin sesion; se
+ *       pide con sesion por si ADS algun dia lo personaliza por cuenta.</li>
  * </ul>
  * Nunca llama a {@code auth/logoff/}: el portal guarda ahi el carrito del cliente.
  */
@@ -69,7 +70,7 @@ public class AdsPortalClient {
         }
     }
 
-    /** La lista con los precios de la cuenta del cliente. */
+    /** El Excel de la lista de precios, pedido con la sesion del cliente. */
     public byte[] descargarListaDelCliente() throws AdsPortalException {
         if (!props.habilitada()) {
             throw new AdsPortalException("Falta configurar el usuario y la contraseña del portal de ADS en el servidor.");
@@ -89,14 +90,6 @@ public class AdsPortalClient {
             }
         }
         return leerExcel(resp);
-    }
-
-    /**
-     * La lista que ve cualquiera sin iniciar sesion. Solo sirve para comparar: si la del cliente
-     * llega identica, es que el portal no aplico su cuenta (y sus descuentos).
-     */
-    public byte[] descargarListaPublica() throws AdsPortalException {
-        return leerExcel(pedirLista(null));
     }
 
     private String iniciarSesion() throws AdsPortalException {

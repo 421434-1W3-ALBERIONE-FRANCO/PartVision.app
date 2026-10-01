@@ -36,8 +36,8 @@ import java.util.stream.Collectors;
 import static com.partvision.pricing.AnalizadorListaPrecios.n;
 
 /**
- * Actualiza solos los precios de Autopartes del Sur bajando la lista de su portal, con los
- * precios de la cuenta del cliente. La importacion manual de Excel sigue igual: es el
+ * Actualiza solos los precios de Autopartes del Sur bajando el Excel de su portal (el mismo
+ * "Catalogo Autopartes del Sur" del boton "Lista de precios"). La importacion manual sigue igual: es el
  * respaldo para cuando el portal no responde.
  *
  * <p>Cada corrida deja una {@link SincronizacionPrecio} como constancia. Se aplica solo lo que
@@ -167,8 +167,7 @@ public class SincronizacionPreciosService {
                 terminarConError(s, "La lista de ADS no tiene el formato de siempre: " + e.getMessage());
                 return;
             }
-            Map<String, BigDecimal> publica = listaPublica();
-            tx.executeWithoutResult(st -> analizarYAplicar(s, filas, publica, forzar));
+            tx.executeWithoutResult(st -> analizarYAplicar(s, filas, forzar));
         } catch (AdsPortalException e) {
             terminarConError(s, e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -182,39 +181,22 @@ public class SincronizacionPreciosService {
         }
     }
 
-    private Map<String, BigDecimal> listaPublica() {
-        try {
-            byte[] publica = portal.descargarListaPublica();
-            Map<String, BigDecimal> precios = new HashMap<>();
-            for (FilaArchivo f : importService.parsearFilasExcel(publica, props.columnaCodigo(), props.columnaPrecio())) {
-                BigDecimal precio = importService.parsearPrecio(f.precio());
-                if (f.sku() != null && precio != null) precios.putIfAbsent(f.sku().trim(), precio);
-            }
-            return precios;
-        } catch (AdsPortalException | IllegalArgumentException e) {
-            log.warn("No se pudo bajar la lista publica de ADS para comparar: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private void analizarYAplicar(SincronizacionPrecio s, List<FilaArchivo> filas,
-                                  Map<String, BigDecimal> publica, boolean forzar) {
+    private void analizarYAplicar(SincronizacionPrecio s, List<FilaArchivo> filas, boolean forzar) {
         Tarifa tarifa = importService.obtenerTarifa(props.proveedor());
         Referencia ref = syncRepo.findFirstByProveedorAndResultadoInOrderByIniciadaEnDesc(props.proveedor(), BUENAS)
-                .map(r -> new Referencia(r.getFilasLista(), r.getConPrecioPropio()))
+                .map(r -> new Referencia(r.getFilasLista()))
                 .orElse(Referencia.NINGUNA);
         Set<String> skus = filas.stream().map(FilaArchivo::sku).filter(Objects::nonNull).map(String::trim)
                 .filter(x -> !x.isEmpty()).collect(Collectors.toSet());
         Map<String, List<Producto>> productos = importService.buscarProductosPorSkuEnLotes(skus);
 
-        Analisis a = AnalizadorListaPrecios.analizar(filas, publica, productos, tarifa, props.proveedor(),
+        Analisis a = AnalizadorListaPrecios.analizar(filas, productos, tarifa, props.proveedor(),
                 Umbrales.de(props), ref, importService::parsearPrecio);
 
         s.setFilasLista(a.filasLista());
         s.setSinCambio(a.sinCambio());
         s.setNoEncontrados(a.noEncontrados());
         s.setFilasInvalidas(a.invalidas());
-        s.setConPrecioPropio(a.conPrecioPropio());
 
         List<String> problemas = new ArrayList<>(a.motivosParaFrenar());
         problemas.addAll(a.problemas());

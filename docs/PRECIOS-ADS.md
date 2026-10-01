@@ -1,27 +1,46 @@
 # Actualización automática de precios de Autopartes del Sur (ADS)
 
-PartVision baja sola la lista de precios **de la cuenta del cliente** en el portal de ADS
-(`catalogo.autopartesdelsur.com.ar`) y la aplica. Corre **todos los días a las 7 y a las 13 h**
-(hora de Buenos Aires) y cuando alguien toca **«Actualizar ahora»** en la pantalla Precios.
+PartVision baja sola la **lista de precios del portal de ADS**
+(`catalogo.autopartesdelsur.com.ar`) y la aplica. Es el mismo Excel del botón **"Lista de
+precios"** del portal ("Catalogo Autopartes del Sur - DD-MM-YYYY.xlsx", con Código,
+Descripción y Precio de Lista). Corre **todos los días a las 7 y a las 13 h** (hora de Buenos
+Aires) y cuando alguien toca **«Actualizar ahora»** en la pantalla Precios.
+
+La cuenta es la misma que la de la importación manual:
+**costo = Precio de Lista × (1 + ajuste lista)** y **venta = costo × (1 + margen)**, con los
+porcentajes de ADS cargados en Precios (hoy, ajuste 0 y margen 22,5%).
 
 La **importación manual de Excel sigue exactamente igual**: es el respaldo para cuando el portal
 no responde.
 
-## Por qué con el usuario del cliente y no con la lista pública
+## Lo que se probó con la cuenta del cliente (01/10/2026)
 
-El portal deja bajar la lista sin iniciar sesión, pero esa lista **no trae los precios de la
-cuenta**. Al 30/09/2026, 2.096 productos tenían un precio propio más bajo en la cuenta del cliente
-que en la lista pública: juntas −15%, bulones −10%, juntas de tapa de válvulas −20% y tapas de
-cilindro −2%. Con la lista pública, esos costos habrían subido entre 11% y 25%.
+- El Excel llega **idéntico con o sin sesión**: no trae precios propios de la cuenta. Igual se
+  pide con la sesión del cliente, por si ADS algún día lo personaliza.
+- Los precios de la cuenta están en la **búsqueda de artículos** del portal, no en el Excel. En el
+  producto 150010, por ejemplo:
 
-Por eso la lista pública se usa solo para **comparar**. Si la lista "del cliente" llega idéntica
-a la pública, es que el portal no tomó la cuenta, y la corrida se frena (ver abajo).
+  | Columna | Valor |
+  |---|---|
+  | Precio lista | $1.206,66 |
+  | Precio costo s/IVA | $690,21 |
+  | Precio costo c/IVA | $835,15 |
+  | Precio venta | $1.478,16 (lista + 22,5% del perfil) |
+
+  **Decisión del usuario:** la base es el **Precio de Lista** del Excel.
+- El archivo "Catálogo al DD-MM-YYYY.xlsx" que se importó a mano el 30/09 traía 2.096 productos
+  por debajo de la lista (juntas −15%, bulones −10%, juntas de tapa de válvulas −20%, tapas de
+  cilindro −2%). Con la lista como base, esos productos suben a precio de lista.
 
 ## Cómo se activa
 
 Hace falta el usuario (CUIT) y la contraseña del portal de ADS **del cliente**. Van solo en el
 entorno del servidor, en `~/.partvision-backend.env` (chmod 600), igual que la clave de compras.
 Nunca van en el repo ni en un chat.
+
+Lo más simple es correr en el servidor `bash ~/pv-cargar-ads.sh`, escrito a mano. El script pide
+el CUIT y la contraseña, limpia lo que mete el pegado desde Windows, controla que el CUIT tenga 11
+números y reinicia el backend. A mano es así:
 
 En el servidor (`ssh partvision`):
 
@@ -52,8 +71,7 @@ Otras variables (opcionales):
 1. Inicia sesión en el portal (`POST auth/login/`). El token se reusa entre corridas y se pide
    otro solo si el portal lo rechaza. **Nunca llama a `auth/logoff/`**, porque el portal guarda
    ahí el carrito del cliente.
-2. Baja la lista del cliente (`GET api/catalogo/generarXLS/`, el botón "Lista de precios" del
-   portal) y la lista pública para comparar.
+2. Baja la lista (`GET api/catalogo/generarXLS/`, el botón "Lista de precios" del portal).
 3. Compara cada precio con el catálogo y aplica **solo lo que cambió**. Si nada cambió, no
    escribe nada.
 4. Deja la **constancia** de la corrida: fecha, resultado, cuántos se actualizaron y los
@@ -93,7 +111,6 @@ aparece el botón **«Aplicar igual»** para cuando alguien la revisó:
 - Más del 5% de las filas tienen el precio en cero o ilegible (cambio de formato).
 - Menos del 50% de los códigos existen en el catálogo (columnas corridas).
 - Más del 10% de los precios saltan más de lo normal a la vez (y son 20 o más).
-- Llega igual a la lista pública, sin los precios propios de la cuenta.
 
 Con «Aplicar igual» se vuelve a bajar la lista y se aplica, pero los saltos individuales
 **igual** van a revisión.
@@ -115,8 +132,7 @@ Si el servidor se reinicia a mitad de una corrida, al volver la marca como corta
   servicio.
 - De punta a punta con la app real, PostgreSQL 16, los **68.437 productos y precios reales** de
   producción y un portal falso que servía la lista real del 30/09 en distintos escenarios:
-  - Lista pública en vez de la del cliente: **frenada** sin tocar nada.
-  - Lista real del cliente: 67.202 sin cambios y 2.096 precios propios detectados, en 7 s.
+  - Lista real: 67.202 sin cambios en 7 s.
   - Suba del 8%: 67.199 precios aplicados en 61 s con 768 MB de heap, el mismo tope del servidor.
   - Errores mezclados: 56 inválidos, 3 repetidos y 30 saltos a revisión. Aprobar, descartar y
     revertir funcionaron.

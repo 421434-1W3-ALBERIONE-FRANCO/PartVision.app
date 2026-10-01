@@ -220,22 +220,13 @@ class AdsPortalClientTest {
     }
 
     @Test
-    void listaPublica_sinToken() throws Exception {
-        byte[] lista = cliente().descargarListaPublica();
-
-        assertThat(lista).isEqualTo(EXCEL);
-        assertThat(authHeaders).containsExactly((String) null);
-        assertThat(logins.get()).isZero();
-    }
-
-    @Test
     void portalCaido() {
         AdsPortalClient cliente = new AdsPortalClient(new AdsSyncProperties("u", "p", "http://127.0.0.1:1/",
                 "Autopartes del Sur", "Código", "Precio de Lista", 60, 35, 10, 80, 1000, 5, 50, 3, 5, 5, 100), mapper);
 
-        assertThatThrownBy(cliente::descargarListaPublica)
+        assertThatThrownBy(cliente::descargarListaDelCliente)
                 .isInstanceOf(AdsPortalException.class)
-                .hasMessageContaining("No se pudo conectar con el portal de ADS para bajar la lista de precios");
+                .hasMessageContaining("No se pudo conectar con el portal de ADS para iniciar sesión");
     }
 
     @Test
@@ -258,7 +249,7 @@ class AdsPortalClientTest {
                 .thenThrow(new InterruptedException());
         AdsPortalClient cliente = new AdsPortalClient(props("u", "p", 100), mapper, http);
 
-        assertThatThrownBy(cliente::descargarListaPublica).hasMessage("Se interrumpió la conexión con ADS.");
+        assertThatThrownBy(cliente::descargarListaDelCliente).hasMessage("Se interrumpió la conexión con ADS.");
         assertThat(Thread.interrupted()).isTrue();
     }
 
@@ -274,10 +265,13 @@ class AdsPortalClientTest {
             }
         };
         when(resp.body()).thenReturn(roto);
-        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn((HttpResponse) resp);
+        HttpResponse<String> login = mock(HttpResponse.class);
+        when(login.body()).thenReturn("{\"meta\":{\"allowed\":true},\"data\":{\"token\":\"t\"}}");
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn((HttpResponse) login, (HttpResponse) resp);
         AdsPortalClient cliente = new AdsPortalClient(props("u", "p", 100), mapper, http);
 
-        assertThatThrownBy(cliente::descargarListaPublica).hasMessage("Se cortó la descarga de la lista de ADS.");
+        assertThatThrownBy(cliente::descargarListaDelCliente).hasMessage("Se cortó la descarga de la lista de ADS.");
     }
 
     @Test

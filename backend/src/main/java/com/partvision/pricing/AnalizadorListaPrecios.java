@@ -17,8 +17,8 @@ import java.util.function.Function;
  * <p>Una fila mala (precio en cero, ilegible, codigo repetido con dos precios) no frena la
  * lista: se saltea y queda anotada. Lo que si la frena entera son las señales de que el
  * archivo vino mal armado, porque aplicado a 67 mil productos el daño seria enorme:
- * pocas filas, muchas ilegibles, codigos que no coinciden con el catalogo, muchos precios
- * saltando de golpe, o la lista sin los precios propios de la cuenta.
+ * pocas filas, muchas ilegibles, codigos que no coinciden con el catalogo, o muchos precios
+ * saltando de golpe.
  */
 final class AnalizadorListaPrecios {
 
@@ -26,14 +26,13 @@ final class AnalizadorListaPrecios {
     static final BigDecimal PRECIO_MAXIMO = new BigDecimal("1000000000");
     private static final int EJEMPLOS = 5;
     private static final int MIN_SALTOS_PARA_FRENAR = 20;
-    private static final int MIN_PRECIO_PROPIO_REFERENCIA = 50;
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
 
     private AnalizadorListaPrecios() {}
 
     /** Lo que la corrida anterior dejo como referencia para comparar. */
-    record Referencia(Integer filasLista, Integer conPrecioPropio) {
-        static final Referencia NINGUNA = new Referencia(null, null);
+    record Referencia(Integer filasLista) {
+        static final Referencia NINGUNA = new Referencia(null);
     }
 
     record Umbrales(int maxSubaPct, int maxBajaPct, int maxSaltosPct, int minFilasPct,
@@ -57,7 +56,6 @@ final class AnalizadorListaPrecios {
             int noEncontrados,
             int invalidas,
             int repetidos,
-            Integer conPrecioPropio,
             /* Lo que se saltea o se informa, sin frenar la lista. */
             List<String> problemas,
             /* Por que no se deberia aplicar la lista. Vacio = se puede aplicar. */
@@ -69,12 +67,10 @@ final class AnalizadorListaPrecios {
     }
 
     /**
-     * @param filas            la lista con los precios de la cuenta del cliente
-     * @param publica          codigo -> precio de la lista publica; null si no se pudo bajar
+     * @param filas            la lista de precios del proveedor
      * @param productosPorSku  el catalogo para esos codigos
      */
-    static Analisis analizar(List<FilaArchivo> filas, Map<String, BigDecimal> publica,
-                             Map<String, List<Producto>> productosPorSku, Tarifa tarifa,
+    static Analisis analizar(List<FilaArchivo> filas, Map<String, List<Producto>> productosPorSku, Tarifa tarifa,
                              String proveedor, Umbrales u, Referencia ref,
                              Function<String, BigDecimal> parsearPrecio) {
 
@@ -135,18 +131,7 @@ final class AnalizadorListaPrecios {
             }
         }
 
-        // 3. Precios propios de la cuenta: lo que la distingue de la lista publica.
-        Integer conPrecioPropio = null;
-        if (publica != null) {
-            int distintos = 0;
-            for (Map.Entry<String, BigDecimal> e : precios.entrySet()) {
-                BigDecimal pub = publica.get(e.getKey());
-                if (pub != null && pub.setScale(2, RoundingMode.HALF_UP).compareTo(e.getValue()) != 0) distintos++;
-            }
-            conPrecioPropio = distintos;
-        }
-
-        // 4. Lo que se informa y lo que frena.
+        // 3. Lo que se informa y lo que frena.
         int filasLista = precios.size();
         List<String> problemas = new ArrayList<>();
         if (!invalidas.isEmpty()) {
@@ -164,9 +149,6 @@ final class AnalizadorListaPrecios {
         if (!saltos.isEmpty()) {
             problemas.add(n(saltos.size()) + " precio(s) cambian más de lo normal (suben más de " + u.maxSubaPct()
                     + "% o bajan más de " + u.maxBajaPct() + "%): no se aplicaron, quedaron para que los revises.");
-        }
-        if (publica == null) {
-            problemas.add("No se pudo bajar la lista pública de ADS para confirmar que llegaron los precios de tu cuenta.");
         }
 
         List<String> frenos = new ArrayList<>();
@@ -190,18 +172,9 @@ final class AnalizadorListaPrecios {
             frenos.add(n(saltos.size()) + " de " + n(comparables)
                     + " precios cambian más de lo normal a la vez: puede ser un error en la lista de ADS.");
         }
-        // Sin referencia (la primera corrida) tambien frena: al activarla, la cuenta del cliente
-        // tenia ~2.090 precios propios. Si de verdad los perdio, se aplica una vez con "Aplicar
-        // igual" y desde ahi la referencia pasa a ser cero.
-        if (conPrecioPropio != null && conPrecioPropio == 0 && filasLista > 0
-                && (ref.conPrecioPropio() == null || ref.conPrecioPropio() >= MIN_PRECIO_PROPIO_REFERENCIA)) {
-            frenos.add("La lista llegó igual a la pública, sin los precios especiales de tu cuenta"
-                    + (ref.conPrecioPropio() == null ? "" : " (la vez anterior había " + n(ref.conPrecioPropio()) + ")")
-                    + ". Puede que el portal no haya tomado tu usuario.");
-        }
 
         return new Analisis(cambios, saltos, filasLista, sinCambio, noEncontrados.size(), invalidas.size(),
-                repetidos.size(), conPrecioPropio, problemas, frenos);
+                repetidos.size(), problemas, frenos);
     }
 
     /**
