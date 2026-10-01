@@ -383,7 +383,13 @@ import { UbicacionService } from '../core/ubicacion.service';
                     </td>
                     <td class="py-3.5 px-4 text-right font-mono font-bold text-sm"
                         [class]="p.precioVenta ? 'text-amber-400' : 'text-gray-600'">
-                      {{ p.precioVenta ? '$' + (p.precioVenta | number:'1.2-2') : '—' }}
+                      @if (p.precioVenta) {
+                        {{ '$' + (p.precioVenta | number:'1.2-2') }}
+                      } @else {
+                        <!-- Sin precio (o en $0): que nadie lo tome como regalado -->
+                        <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-sans font-semibold whitespace-nowrap text-amber-400 bg-amber-500/10 border border-amber-500/30"
+                              title="El proveedor no publica precio para este producto: consultalo antes de venderlo.">Sin precio</span>
+                      }
                     </td>
                     <td class="py-3.5 px-2 text-center" [title]="p.estado">
                       <span class="inline-block w-2.5 h-2.5 rounded-full"

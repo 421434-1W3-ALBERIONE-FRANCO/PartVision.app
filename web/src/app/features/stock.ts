@@ -129,7 +129,13 @@ type OpTab = 'entrada' | 'salida' | 'transferencia' | 'ajuste';
                       </td>
                       <td class="py-3 px-4 font-mono font-bold text-right text-sm"
                           [class]="p.precioVenta ? 'text-amber-400' : 'text-gray-600'">
-                        {{ p.precioVenta ? '$' + (p.precioVenta | number:'1.2-2') : '—' }}
+                        @if (p.precioVenta) {
+                          {{ '$' + (p.precioVenta | number:'1.2-2') }}
+                        } @else {
+                          <!-- Sin precio (o en $0): que nadie lo tome como regalado -->
+                          <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-sans font-semibold whitespace-nowrap text-amber-400 bg-amber-500/10 border border-amber-500/30"
+                                title="El proveedor no publica precio para este producto: consultalo antes de venderlo.">Sin precio</span>
+                        }
                       </td>
                       <td class="py-3 px-4 text-xs text-gray-300">
                         @if (p.ubicaciones.length > 0) {
