@@ -495,4 +495,54 @@ class RecepcionListaServiceTest {
         assertThat(RecepcionListaService.limpiar("a\nb\u0007<c>")).isEqualTo("a?b??c?");
         assertThat(RecepcionListaService.limpiar("x".repeat(300))).hasSize(120);
     }
+
+    // --- Como lo manda Power Automate ---
+
+    @Test
+    void recibe_elArchivoEnBase64DentroDelObjetoDePowerAutomate() {
+        Producto p = producto("A1", "100.00", "BH");
+        String json = "{\"$content-type\":\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\","
+                + "\"$content\":\"" + Base64.getEncoder().encodeToString(excel(fila("BH", "A1", "Arbol", 110))) + "\"}";
+
+        service.recibir(json.getBytes(java.nio.charset.StandardCharsets.UTF_8), "lista.xlsx");
+
+        assertThat(ultima().getResultado()).isEqualTo(ResultadoSincronizacion.ACTUALIZADA);
+        assertThat(p.getPrecioCosto()).isEqualByComparingTo("110.00");
+    }
+
+    @Test
+    void recibe_elArchivoEnBase64Suelto_conSaltosDeLinea() {
+        Producto p = producto("A1", "100.00", "BH");
+        String base64 = Base64.getMimeEncoder().encodeToString(excel(fila("BH", "A1", "Arbol", 110)));
+
+        service.recibir(("  " + base64 + "\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+
+        assertThat(p.getPrecioCosto()).isEqualByComparingTo("110.00");
+    }
+
+    @Test
+    void lasFormasQueNoSeEntienden_sonUn400DeArchivoQueNoEsExcel() {
+        String[] cuerpos = {
+                "{\"otra\":\"cosa\"}",                 // JSON sin $content
+                "{\"$content\": 123}",                  // $content que no es texto
+                "{esto no es json",                     // JSON roto
+                "UEsD esto no es base64 !!!",           // empieza como base64 pero no lo es
+                "{\"$content\":\"aGVsbG8gbXVuZG8=\"}"  // base64 valido de algo que no es un Excel
+        };
+        for (String c : cuerpos) {
+            assertThatThrownBy(() -> service.recibir(c.getBytes(java.nio.charset.StandardCharsets.UTF_8), null))
+                    .as(c).isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        }
+        assertThat(guardadas).isEmpty();
+    }
+
+    @Test
+    void desenvolver_elExcelCrudoQuedaIgual_yLoQueNoSeReconoceTambien() {
+        byte[] excel = excel(fila("BH", "A1", "x", 1));
+        assertThat(RecepcionListaService.desenvolver(excel)).isSameAs(excel);
+        assertThat(RecepcionListaService.desenvolver(null)).isNull();
+        byte[] corto = {1, 2};
+        assertThat(RecepcionListaService.desenvolver(corto)).isSameAs(corto);
+    }
 }

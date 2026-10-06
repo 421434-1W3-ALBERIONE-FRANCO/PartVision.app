@@ -1,5 +1,7 @@
 package com.partvision.pricing;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.ResourceNotFoundException;
 import com.partvision.pricing.PrecioImportService.FilaArchivo;
@@ -15,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -33,6 +38,8 @@ import java.util.concurrent.Executor;
 @Slf4j
 @Service
 public class RecepcionListaService {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final EgsaRecepcionProperties props;
     private final PrecioImportService importService;
@@ -62,7 +69,8 @@ public class RecepcionListaService {
     }
 
     /** @param nombre nombre del archivo que dice el que lo manda; solo para el log */
-    public SincronizacionResponse recibir(byte[] contenido, String nombre) {
+    public SincronizacionResponse recibir(byte[] recibido, String nombre) {
+        byte[] contenido = desenvolver(recibido);
         if (contenido == null || contenido.length < 4 || contenido[0] != 'P' || contenido[1] != 'K') {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El archivo no es un Excel (.xlsx)");
         }
@@ -141,6 +149,45 @@ public class RecepcionListaService {
         } finally {
             importService.terminarImport();
         }
+    }
+
+    /**
+     * Power Automate, segun como se arme el paso, no manda los bytes del Excel sino el contenido
+     * en base64: suelto, o dentro del objeto {@code {"$content-type": ..., "$content": "UEsDB..."}}
+     * que es como representa un archivo. Se entienden las tres formas; lo que no se reconoce
+     * se devuelve igual y lo rechaza la validacion de Excel.
+     */
+    static byte[] desenvolver(byte[] cuerpo) {
+        if (cuerpo == null || cuerpo.length < 4 || (cuerpo[0] == 'P' && cuerpo[1] == 'K')) return cuerpo;
+        String texto = new String(cuerpo, StandardCharsets.UTF_8).trim();
+        String base64 = null;
+        if (texto.startsWith("{")) {
+            try {
+                JsonNode contenido = JSON.readTree(texto).get("$content");
+                if (contenido != null && contenido.isTextual()) base64 = contenido.asText();
+            } catch (IOException e) {
+                return cuerpo;
+            }
+        } else if (texto.startsWith("UEsD")) { // "PK" en base64
+            base64 = texto;
+        }
+        if (base64 == null || !pareceBase64(base64)) return cuerpo;
+        try {
+            return Base64.getMimeDecoder().decode(base64);
+        } catch (IllegalArgumentException e) {
+            return cuerpo;
+        }
+    }
+
+    /** El decodificador de MIME ignora en silencio lo que no es base64: aca se exige que lo sea. */
+    private static boolean pareceBase64(String texto) {
+        for (int i = 0; i < texto.length(); i++) {
+            char c = texto.charAt(i);
+            boolean valido = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                    || c == '+' || c == '/' || c == '=' || Character.isWhitespace(c);
+            if (!valido) return false;
+        }
+        return true;
     }
 
     /** El nombre lo manda quien llama: solo letras, numeros y signos comunes, y corto. */
