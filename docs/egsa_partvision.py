@@ -184,7 +184,7 @@ def enviar_a_partvision(archivo: Path) -> dict:
         if codigo == 202:
             constancia = cuerpo
             break
-        if codigo == 409:  # el servidor está con otra actualización: se espera y se reintenta
+        if codigo in (409, 429):  # el servidor está con otra actualización: se espera y se reintenta
             log.warning("PartVision está ocupado (intento %d de %d): reintento en %d s",
                         intento, REINTENTOS_OCUPADO, ESPERA_OCUPADO)
             time.sleep(ESPERA_OCUPADO)

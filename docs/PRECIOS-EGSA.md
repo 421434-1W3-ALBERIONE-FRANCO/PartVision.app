@@ -24,7 +24,7 @@ andando hasta que el cliente cambie su flujo: las dos vías conviven.
 | Robot por pantalla (hoy) | Mandando el archivo |
 |---|---|
 | Se rompe si cambia un botón o un texto de la pantalla, sin avisar | Una llamada HTTP: no depende de cómo se ve nada |
-| Se pisa con ADS: si el servidor está actualizando, el día de EGSA se pierde | Si está ocupado responde 409 y el script reintenta |
+| Se pisa con ADS: si el servidor está actualizando, el día de EGSA se pierde | Si está ocupado responde 429 (Power Automate lo reintenta solo) y el script también |
 | Aplica lo que venga, aunque la lista llegue cortada o corrida | Frenos: una lista rara **no se aplica** y avisa |
 | Reescribe 67 mil productos todos los días | Escribe solo lo que cambió |
 | Un código repetido de EGSA le deja el precio de **otra marca** | Toma el precio de la marca de cada producto |
@@ -105,7 +105,7 @@ if ($c.resultado -in 'RETENIDA', 'ERROR') { exit 1 }
 | 202 | Aceptada; se procesa en segundo plano. El cuerpo trae `id` |
 | 400 | No es un Excel (.xlsx) |
 | 401 | Clave incorrecta o ausente |
-| 409 | El servidor está con otra actualización (ADS, una importación): reintentar en un minuto |
+| 429 | El servidor está con otra actualización (ADS, una importación): reintentar en uno o dos minutos. Power Automate lo reintenta solo; el 409 **no**, por eso se usa 429 |
 | 413 | Pesa más de 25 MB |
 | 503 | La recepción no está activada en el servidor |
 
@@ -151,7 +151,7 @@ EGSA (67.671 filas, 170 códigos repetidos), con el mismo tope de memoria que el
 | Suba del 8% en 64 mil precios (peor caso) | 45 s, sin problemas de memoria |
 | Lista cortada (3.000 filas) | `RETENIDA`; «Aplicar igual» la aplicó con el archivo guardado |
 | Columnas corridas | `RETENIDA`; aun forzada, no crea productos (son más de 300) |
-| Dos envíos casi juntos | el segundo recibe 409 |
+| Dos envíos casi juntos | el segundo recibe 429 |
 | Sin clave, clave mala, no es un Excel | 401, 401, 400; sin clave configurada en el servidor, 503 |
 | Script de Python y PowerShell | los dos contra el servidor de pruebas; salida 0 en lo bueno y 1 con motivo en lo malo |
 

@@ -33,7 +33,8 @@ import java.util.concurrent.Executor;
  * portal para volver a bajarla: cuando una persona la revisa, "Aplicar igual" usa ese archivo.
  *
  * <p>Comparte el candado de {@link PrecioImportService}: si en ese momento corre ADS o una
- * importacion manual, el robot recibe un 409 y reintenta.
+ * importacion manual, el pedido recibe un 429 ("ocupado"): es el codigo que Power Automate reintenta
+ * solo (reintenta 408, 429 y 5xx, nunca un 409), asi un cruce con otra carga no pierde el dia.
  */
 @Slf4j
 @Service
@@ -75,7 +76,7 @@ public class RecepcionListaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El archivo no es un Excel (.xlsx)");
         }
         if (!importService.iniciarImport()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
                     "Hay otra actualización de precios en curso: reintentá en un par de minutos");
         }
         SincronizacionPrecio s;

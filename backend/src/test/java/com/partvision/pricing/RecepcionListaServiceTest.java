@@ -228,12 +228,12 @@ class RecepcionListaServiceTest {
     }
 
     @Test
-    void conOtraActualizacionEnCurso_devuelve409_yNoLeSacaElCandado() {
+    void conOtraActualizacionEnCurso_devuelve429_yNoLeSacaElCandado() {
         importService.iniciarImport();
 
         assertThatThrownBy(() -> service.recibir(excel(fila("BH", "A1", "x", 1)), null))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
-                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
         assertThat(guardadas).isEmpty();
         assertThat(importService.iniciarImport()).as("sigue tomado por quien lo tenia").isFalse();
     }

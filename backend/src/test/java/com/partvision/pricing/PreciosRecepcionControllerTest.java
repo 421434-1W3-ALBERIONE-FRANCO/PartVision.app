@@ -110,12 +110,12 @@ class PreciosRecepcionControllerTest {
     }
 
     @Test
-    void siElServicioDiceQueHayOtraActualizacion_devuelve409() throws Exception {
-        when(service.recibir(any(), any())).thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Hay otra actualización"));
+    void siElServicioDiceQueHayOtraActualizacion_devuelve429() throws Exception {
+        when(service.recibir(any(), any())).thenThrow(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Hay otra actualización"));
 
         mvc.perform(post(URL + "/egsa").header("X-API-Key", "clave-de-prueba")
                         .contentType(MediaType.APPLICATION_OCTET_STREAM).content(EXCEL))
-                .andExpect(status().isConflict());
+                .andExpect(status().isTooManyRequests());
     }
 
     @Test
