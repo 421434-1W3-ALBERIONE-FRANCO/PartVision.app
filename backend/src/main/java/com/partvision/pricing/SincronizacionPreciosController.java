@@ -21,16 +21,27 @@ import java.util.List;
 public class SincronizacionPreciosController {
 
     private final SincronizacionPreciosService service;
+    private final RecepcionListaService recepcion;
 
+    /** @param proveedor de que lista; sin decir, la de ADS */
     @GetMapping
-    public SincronizacionEstadoResponse estado() {
-        return service.estado();
+    public SincronizacionEstadoResponse estado(@RequestParam(required = false) String proveedor) {
+        return service.estado(proveedor);
     }
 
     /** "Actualizar ahora". Con {@code forzar} aplica una lista que habia quedado retenida. */
     @PostMapping
     public ResponseEntity<SincronizacionResponse> actualizarAhora(@RequestParam(defaultValue = "false") boolean forzar) {
         return ResponseEntity.accepted().body(service.iniciarManual(forzar));
+    }
+
+    /**
+     * "Aplicar igual" a la lista de EGSA que quedo retenida: usa el archivo guardado, porque a
+     * EGSA no se la puede volver a pedir.
+     */
+    @PostMapping("/retenida/aplicar")
+    public ResponseEntity<SincronizacionResponse> aplicarRetenida() {
+        return ResponseEntity.accepted().body(recepcion.aplicarRetenida());
     }
 
     /** El aviso de la barra superior: 204 si no hay nada que mirar. */
@@ -40,8 +51,8 @@ public class SincronizacionPreciosController {
     }
 
     @GetMapping("/revisiones")
-    public List<PrecioRevisionResponse> revisiones() {
-        return service.revisionesPendientes();
+    public List<PrecioRevisionResponse> revisiones(@RequestParam(required = false) String proveedor) {
+        return service.revisionesPendientes(proveedor);
     }
 
     @PostMapping("/revisiones/aplicar")

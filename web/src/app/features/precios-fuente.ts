@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, output, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 
 import { PrecioRevision, SincronizacionEstado, SincronizacionPrecios } from '../core/models';
@@ -7,12 +7,13 @@ import { PrecioSyncService } from '../core/precio-sync.service';
 type Resultado = SincronizacionPrecios['resultado'];
 
 /**
- * Panel de la actualizacion automatica de precios de ADS dentro de la pantalla Precios:
- * estado, boton "Actualizar ahora", la constancia de cada corrida y los precios que
- * esperan revision. La importacion manual de abajo queda intacta como respaldo.
+ * Panel de la actualizacion automatica de precios de UNA lista (ADS o EGSA) dentro de la
+ * pantalla Precios: estado, la constancia de cada corrida y los precios que esperan revision.
+ * ADS la baja el servidor (boton "Actualizar ahora"); EGSA la manda el robot del cliente y aca
+ * solo se ve lo que llego. La importacion manual de abajo queda intacta como respaldo.
  */
 @Component({
-  selector: 'app-precios-ads',
+  selector: 'app-precios-fuente',
   standalone: true,
   imports: [DatePipe, DecimalPipe],
   template: `
@@ -24,27 +25,36 @@ type Resultado = SincronizacionPrecios['resultado'];
             <svg class="w-5 h-5 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Actualización automática
-            <span class="text-sm font-semibold text-gray-400">· {{ estado()?.proveedor ?? 'Autopartes del Sur' }}</span>
+            {{ esEgsa() ? 'Lista recibida' : 'Actualización automática' }}
+            <span class="text-sm font-semibold text-gray-400">· {{ proveedor() }}</span>
             @if (estado(); as e) {
               <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full border" [class]="chip(e).clase">
                 <span class="w-2 h-2 rounded-full" [class]="chip(e).punto"></span>{{ chip(e).texto }}
               </span>
             }
           </h3>
-          <p class="text-xs text-gray-500 mt-1">
-            Baja sola la lista de precios del portal de ADS (el mismo Excel del botón «Lista de precios») todos los días a las 6:30 y a las 13 h.
-            La importación manual de abajo sigue funcionando igual, por si el portal no responde.
-          </p>
+          @if (esEgsa()) {
+            <p class="text-xs text-gray-500 mt-1">
+              El equipo del cliente que corre EGSA CAT manda la lista de precios todas las mañanas. Si un día no llega,
+              aparece un aviso arriba de todas las pantallas. La importación manual de abajo sigue funcionando igual.
+            </p>
+          } @else {
+            <p class="text-xs text-gray-500 mt-1">
+              Baja sola la lista de precios del portal de ADS (el mismo Excel del botón «Lista de precios») todos los días a las 6:30 y a las 13:30 h.
+              La importación manual de abajo sigue funcionando igual, por si el portal no responde.
+            </p>
+          }
         </div>
-        <button (click)="actualizarAhora(false)"
-                [disabled]="!estado()?.habilitada || estado()?.enCurso || pidiendo()"
-                class="shrink-0 px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-          <svg class="w-4 h-4" [class.animate-spin]="estado()?.enCurso" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          {{ estado()?.enCurso ? 'Actualizando...' : 'Actualizar ahora' }}
-        </button>
+        @if (!esEgsa()) {
+          <button (click)="actualizarAhora(false)"
+                  [disabled]="!estado()?.habilitada || estado()?.enCurso || pidiendo()"
+                  class="shrink-0 px-5 py-2.5 rounded-xl text-sm font-semibold neon-button-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+            <svg class="w-4 h-4" [class.animate-spin]="estado()?.enCurso" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {{ estado()?.enCurso ? 'Actualizando...' : 'Actualizar ahora' }}
+          </button>
+        }
       </div>
 
       @if (cargando()) {
@@ -54,8 +64,13 @@ type Resultado = SincronizacionPrecios['resultado'];
       } @else if (estado(); as e) {
         @if (!e.habilitada) {
           <div class="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm">
-            Todavía no está activada: falta cargar en el servidor el usuario y la contraseña del portal de ADS.
-            Mientras tanto, los precios se cargan a mano con la importación de abajo.
+            @if (esEgsa()) {
+              Todavía no está activada la recepción directa: falta cargar la clave en el servidor. Mientras tanto
+              el robot sigue cargando la lista por la pantalla, con la importación de abajo.
+            } @else {
+              Todavía no está activada: falta cargar en el servidor el usuario y la contraseña del portal de ADS.
+              Mientras tanto, los precios se cargan a mano con la importación de abajo.
+            }
           </div>
         }
 
@@ -72,9 +87,9 @@ type Resultado = SincronizacionPrecios['resultado'];
         @if (e.ultima; as u) {
           <div class="mt-5 rounded-xl bg-dark-surface/50 border border-dark-border p-4">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
-              <span class="font-semibold text-gray-300">Última corrida</span>
+              <span class="font-semibold text-gray-300">{{ esEgsa() ? 'Última lista recibida' : 'Última corrida' }}</span>
               <span class="font-mono">{{ u.iniciadaEn | date:'dd/MM/yy HH:mm' }}</span>
-              <span>· {{ u.origen === 'AUTOMATICA' ? 'automática' : 'con el botón' }}{{ u.forzada ? ' (aplicada igual)' : '' }}</span>
+              <span>· {{ origen(u.origen) }}{{ u.forzada ? ' (aplicada igual)' : '' }}</span>
               @if (e.ultimaBuenaEn) {
                 <span class="sm:ml-auto">Precios al día desde el <span class="font-mono text-gray-300">{{ e.ultimaBuenaEn | date:'dd/MM HH:mm' }}</span></span>
               }
@@ -98,7 +113,7 @@ type Resultado = SincronizacionPrecios['resultado'];
                 }
               </ul>
             }
-            @if (u.resultado === 'RETENIDA' && !e.enCurso) {
+            @if (u.resultado === 'RETENIDA' && !e.enCurso && (!e.recibeArchivo || e.hayListaRetenida)) {
               <div class="mt-4 flex flex-wrap items-center gap-3">
                 <button (click)="confirmandoForzar.set(true)" [disabled]="pidiendo()"
                         class="px-4 py-2 rounded-lg text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/10 cursor-pointer disabled:opacity-50">
@@ -109,7 +124,9 @@ type Resultado = SincronizacionPrecios['resultado'];
             }
           </div>
         } @else if (e.habilitada) {
-          <p class="mt-4 text-sm text-gray-400">Todavía no corrió ninguna vez. Tocá «Actualizar ahora» para la primera.</p>
+          <p class="mt-4 text-sm text-gray-400">
+            {{ esEgsa() ? 'Todavía no llegó ninguna lista por esta vía.' : 'Todavía no corrió ninguna vez. Tocá «Actualizar ahora» para la primera.' }}
+          </p>
         }
 
         @if (mensaje(); as m) {
@@ -149,7 +166,7 @@ type Resultado = SincronizacionPrecios['resultado'];
                     <th class="py-2 pr-3">Código</th>
                     <th class="py-2 pr-3 hidden md:table-cell">Descripción</th>
                     <th class="py-2 pr-3 text-right">Costo hoy</th>
-                    <th class="py-2 pr-3 text-right">Según ADS</th>
+                    <th class="py-2 pr-3 text-right">Según {{ esEgsa() ? 'la lista' : 'ADS' }}</th>
                     <th class="py-2 text-right">Cambio</th>
                   </tr>
                 </thead>
@@ -193,7 +210,7 @@ type Resultado = SincronizacionPrecios['resultado'];
                             <span class="w-2 h-2 rounded-full" [class]="resultado(h.resultado).punto"></span>{{ resultado(h.resultado).nombre }}
                           </span>
                         </td>
-                        <td class="py-2 pr-3 text-gray-500 whitespace-nowrap hidden sm:table-cell">{{ h.origen === 'AUTOMATICA' ? 'automática' : 'botón' }}</td>
+                        <td class="py-2 pr-3 text-gray-500 whitespace-nowrap hidden sm:table-cell">{{ origen(h.origen, true) }}</td>
                         <td class="py-2 text-gray-300">{{ h.mensaje }}</td>
                       </tr>
                     }
@@ -212,7 +229,7 @@ type Resultado = SincronizacionPrecios['resultado'];
         <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-amber-500/40 shadow-neon" (click)="$event.stopPropagation()">
           <h3 class="text-lg font-bold text-white mb-3">Aplicar la lista igual</h3>
           <p class="text-sm text-gray-300">
-            Se vuelve a bajar la lista de ADS y se aplica aunque llegue con los mismos datos raros.
+            {{ esEgsa() ? 'Se aplica la lista que mandó el robot, la que quedó retenida,' : 'Se vuelve a bajar la lista de ADS y se aplica' }} aunque llegue con los mismos datos raros.
             Los precios que cambien demasiado igual quedan para que los revises uno por uno.
           </p>
           <p class="text-xs text-amber-400 mt-2">Si algo sale mal, se puede revertir desde el Historial de Actualizaciones.</p>
@@ -225,7 +242,7 @@ type Resultado = SincronizacionPrecios['resultado'];
     }
   `,
 })
-export class PreciosAds implements OnInit, OnDestroy {
+export class PreciosFuente implements OnInit, OnDestroy {
   private service = inject(PrecioSyncService);
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -238,6 +255,10 @@ export class PreciosAds implements OnInit, OnDestroy {
   pidiendo = signal(false);
   mensaje = signal<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   confirmandoForzar = signal(false);
+
+  /** De que lista es el panel: "Autopartes del Sur" o "EGSA". */
+  proveedor = input.required<string>();
+  esEgsa = computed(() => this.proveedor() === 'EGSA');
   verHistorial = signal(false);
 
   revisiones = signal<PrecioRevision[]>([]);
@@ -255,7 +276,7 @@ export class PreciosAds implements OnInit, OnDestroy {
   }
 
   cargar(): void {
-    this.service.estado().subscribe({
+    this.service.estado(this.proveedor()).subscribe({
       next: (e) => {
         const estabaCorriendo = this.estado()?.enCurso;
         this.estado.set(e);
@@ -277,7 +298,8 @@ export class PreciosAds implements OnInit, OnDestroy {
     this.confirmandoForzar.set(false);
     this.pidiendo.set(true);
     this.mensaje.set(null);
-    this.service.actualizarAhora(forzar).subscribe({
+    const pedido = this.esEgsa() ? this.service.aplicarRetenida() : this.service.actualizarAhora(forzar);
+    pedido.subscribe({
       next: () => {
         this.pidiendo.set(false);
         this.cargar();
@@ -290,7 +312,7 @@ export class PreciosAds implements OnInit, OnDestroy {
   }
 
   private cargarRevisiones(): void {
-    this.service.revisiones().subscribe({
+    this.service.revisiones(this.proveedor()).subscribe({
       next: (lista) => {
         this.revisiones.set(lista);
         const vigentes = new Set(lista.map(r => r.id));
@@ -332,6 +354,13 @@ export class PreciosAds implements OnInit, OnDestroy {
         this.mensaje.set({ tipo: 'error', texto: e?.error?.message ?? 'No se pudo completar.' });
       },
     });
+  }
+
+  /** Quien disparo la corrida, en palabras. */
+  origen(o: SincronizacionPrecios['origen'], corto = false): string {
+    if (o === 'AUTOMATICA') return 'automática';
+    if (o === 'RECEPCION') return corto ? 'robot' : 'la mandó el robot';
+    return corto ? 'botón' : 'con el botón';
   }
 
   chip(e: SincronizacionEstado): { texto: string; clase: string; punto: string } {

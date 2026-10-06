@@ -238,7 +238,7 @@ export interface PrecioBatch {
 export interface SincronizacionPrecios {
   id: number;
   proveedor: string;
-  origen: 'AUTOMATICA' | 'MANUAL';
+  origen: 'AUTOMATICA' | 'MANUAL' | 'RECEPCION';
   forzada: boolean;
   iniciadaEn: string;
   terminadaEn: string | null;
@@ -263,12 +263,16 @@ export interface AlertaPrecios {
 export interface SincronizacionEstado {
   habilitada: boolean;
   proveedor: string;
+  /** true si la lista la manda el robot del cliente (EGSA); false si la baja el servidor (ADS). */
+  recibeArchivo: boolean;
   enCurso: boolean;
   ultima: SincronizacionPrecios | null;
   ultimaBuenaEn: string | null;
   pendientesRevision: number;
   alerta: AlertaPrecios | null;
   historial: SincronizacionPrecios[];
+  /** Hay un archivo retenido guardado para tocar «Aplicar igual». */
+  hayListaRetenida: boolean;
 }
 
 /** Un precio que cambio demasiado de golpe y espera que alguien lo apruebe o lo descarte. */

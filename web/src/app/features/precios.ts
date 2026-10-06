@@ -4,12 +4,12 @@ import { FormsModule } from '@angular/forms';
 
 import { ConfiguracionPrecio, PrecioBatch, PrecioImportPreview, PrecioImportProgreso, PrecioImportResult, PrecioPreviewFila } from '../core/models';
 import { ProductoService } from '../core/producto.service';
-import { PreciosAds } from './precios-ads';
+import { PreciosFuente } from './precios-fuente';
 
 @Component({
   selector: 'app-precios',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, DatePipe, PreciosAds],
+  imports: [FormsModule, DecimalPipe, DatePipe, PreciosFuente],
   template: `
     <div class="space-y-8 animate-fade-in max-w-5xl mx-auto">
       <!-- Header -->
@@ -28,8 +28,10 @@ import { PreciosAds } from './precios-ads';
         </p>
       </div>
 
-      <!-- === Actualización automática de ADS (la importación manual de abajo queda de respaldo) === -->
-      <app-precios-ads (actualizado)="cargarBatches()" />
+      <!-- === Listas que se mantienen solas: ADS la baja el servidor, EGSA la manda el robot del cliente.
+           La importación manual de abajo queda de respaldo. === -->
+      <app-precios-fuente proveedor="Autopartes del Sur" (actualizado)="cargarBatches()" />
+      <app-precios-fuente proveedor="EGSA" (actualizado)="cargarBatches()" />
 
       <!-- === SECCIÓN 1: Márgenes por proveedor === -->
       <div class="glass-panel rounded-2xl p-6 border border-dark-border shadow-card">
@@ -376,8 +378,8 @@ import { PreciosAds } from './precios-ads';
                     <td class="py-2.5 px-3 text-sm text-white">{{ b.proveedor }}</td>
                     <td class="py-2.5 px-3">
                       <span class="px-2 py-0.5 rounded text-[10px] font-semibold"
-                            [class]="b.fuente === 'API_SYNC' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-neon-purple/15 text-neon-purple border border-neon-purple/30'">
-                        {{ b.fuente === 'API_SYNC' ? 'API' : 'CSV' }}
+                            [class]="b.fuente.startsWith('API') ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-neon-purple/15 text-neon-purple border border-neon-purple/30'">
+                        {{ b.fuente.startsWith('API') ? 'API' : 'CSV' }}
                       </span>
                     </td>
                     <td class="py-2.5 px-3 text-right font-mono text-neon-green">{{ b.aplicados }}</td>

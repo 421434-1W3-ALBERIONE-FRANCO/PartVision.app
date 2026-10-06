@@ -72,6 +72,11 @@ partvision:
       # Hora de Buenos Aires. "-" la apaga sin tocar las credenciales (queda el boton).
       # 6:30 y no 7: a las 7 arranca el robot de EGSA del cliente, y comparten el candado.
       cron: ${ADS_CRON:0 30 6,13 * * *}
+    egsa:
+      # Clave con la que el robot del cliente (el equipo que corre EGSA CAT) manda la lista de EGSA a
+      # POST /api/v1/precios/recepcion/egsa. Sin ella la recepcion queda apagada.
+      # Va SOLO en el entorno del servidor (~/.partvision-backend.env), nunca en el repo.
+      api-key: ${EGSA_API_KEY:}
     limpieza:
       # Borra del historial las filas sin cambio de precio y compacta la tabla. "-" la apaga.
       cron: ${PRECIOS_LIMPIEZA_CRON:0 0 4 * * SUN}

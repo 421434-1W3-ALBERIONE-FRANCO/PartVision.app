@@ -309,7 +309,7 @@ public class PrecioImportService {
         batch.setArchivo(archivo);
         batchRepo.save(batch);
 
-        int aplicados = 0, omitidos = 0, conflictos = 0;
+        int aplicados = 0, omitidos = 0, conflictos = 0, sinCambio = 0;
         List<Producto> modificados = new ArrayList<>();
         List<HistorialPrecio> historiales = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();
@@ -338,6 +338,15 @@ public class PrecioImportService {
             BigDecimal costo = tarifa.costoDesde(precioArchivo);
             BigDecimal precioVenta = tarifa.ventaDesde(costo);
 
+            // Un precio que no cambio no se escribe: ni el producto ni una fila de historial.
+            // Reescribir 67 mil productos iguales todos los dias llenaba el historial (88% de sus
+            // filas eran asi) y obligaba a tener en memoria dos entidades por producto: la carga
+            // diaria de EGSA dejo el backend colgado varias veces.
+            if (igual(p.getPrecioCosto(), costo) && igual(p.getPrecioVenta(), precioVenta)) {
+                sinCambio++;
+                continue;
+            }
+
             HistorialPrecio h = new HistorialPrecio();
             h.setProducto(p);
             h.setBatch(batch);
@@ -358,15 +367,15 @@ public class PrecioImportService {
         if (!modificados.isEmpty()) productoRepository.saveAll(modificados);
         if (!historiales.isEmpty()) historialRepo.saveAll(historiales);
 
-        batch.setTotal(aplicados + omitidos + conflictos);
+        batch.setTotal(aplicados + sinCambio + omitidos + conflictos);
         batch.setAplicados(aplicados);
         batch.setOmitidos(omitidos);
         batch.setConflictos(conflictos);
         batchRepo.save(batch);
 
         String mensaje = String.format(
-                "Importación completada: %d aplicados, %d omitidos, %d conflictos (ajuste %.2f%%, margen %.2f%%)",
-                aplicados, omitidos, conflictos, tarifa.ajusteLista(), tarifa.margen());
+                "Importación completada: %d aplicados, %d sin cambio, %d omitidos, %d conflictos (ajuste %.2f%%, margen %.2f%%)",
+                aplicados, sinCambio, omitidos, conflictos, tarifa.ajusteLista(), tarifa.margen());
         log.info(mensaje);
 
         return new PrecioImportResultResponse(batch.getId(), batch.getTotal(), aplicados, omitidos, conflictos, mensaje);
@@ -434,6 +443,10 @@ public class PrecioImportService {
     }
 
     // --- Helpers ---
+
+    private static boolean igual(BigDecimal a, BigDecimal b) {
+        return a != null && b != null && a.compareTo(b) == 0;
+    }
 
     private static final int SKU_BATCH_SIZE = 10_000;
     private static final int PREVIEW_MAX_FILAS = 500;

@@ -51,6 +51,8 @@ class SincronizacionPreciosServiceTest {
     @Mock private HistorialPrecioRepository historialRepo;
     @Mock private SincronizacionPrecioRepository syncRepo;
     @Mock private PrecioRevisionRepository revisionRepo;
+    @Mock private ListasRetenidas retenidas;
+    @Mock private ProductoBulkImporter bulkImporter;
 
     private PrecioImportService importService;
     private SincronizacionPreciosService service;
@@ -61,7 +63,7 @@ class SincronizacionPreciosServiceTest {
     @BeforeEach
     void setUp() {
         importService = new PrecioImportService(productoRepository, configuracionRepo, batchRepo, historialRepo,
-                mock(ProductoBulkImporter.class));
+                bulkImporter);
         service = nuevoServicio(props("20111111112", "secreta"));
 
         ConfiguracionPrecio config = new ConfiguracionPrecio();
@@ -90,9 +92,17 @@ class SincronizacionPreciosServiceTest {
     }
 
     private SincronizacionPreciosService nuevoServicio(AdsSyncProperties props) {
-        return new SincronizacionPreciosService(props, portal, importService, productoRepository, batchRepo,
-                historialRepo, syncRepo, revisionRepo, new TransactionTemplate(mock(PlatformTransactionManager.class)),
-                r -> executor.execute(r));
+        FuentesListas fuentes = new FuentesListas(props, egsaProps());
+        AplicadorListaPrecios aplicador = new AplicadorListaPrecios(importService, productoRepository, bulkImporter,
+                batchRepo, historialRepo, syncRepo, revisionRepo, fuentes);
+        return new SincronizacionPreciosService(props, portal, importService, batchRepo, syncRepo, revisionRepo,
+                new TransactionTemplate(mock(PlatformTransactionManager.class)), r -> executor.execute(r),
+                aplicador, fuentes, retenidas);
+    }
+
+    static EgsaRecepcionProperties egsaProps() {
+        return new EgsaRecepcionProperties("clave-de-prueba", "EGSA", "Código", "PrecioLista",
+                60, 35, 10, 80, 1, 5, 50, 300, 2, 1000);
     }
 
     /** Umbrales chicos: con pocas filas de prueba no tiene que saltar el freno de "pocas filas". */
@@ -614,5 +624,182 @@ class SincronizacionPreciosServiceTest {
         assertThat(ResultadoSincronizacion.RETENIDA.esBuena()).isFalse();
         assertThat(ResultadoSincronizacion.ERROR.esBuena()).isFalse();
         assertThat(ResultadoSincronizacion.EN_CURSO.esBuena()).isFalse();
+    }
+
+    // --- Varias listas: EGSA, carga a mano, avisos juntos ---
+
+    private static final String EGSA = "EGSA";
+
+    private SincronizacionPrecio deEgsa(ResultadoSincronizacion r, LocalDateTime cuando, String mensaje) {
+        SincronizacionPrecio s = sincronizacion(r, cuando, mensaje);
+        s.setProveedor(EGSA);
+        s.setOrigen(OrigenSincronizacion.RECEPCION);
+        return s;
+    }
+
+    private void historialEgsa(SincronizacionPrecio... corridas) {
+        when(syncRepo.findByProveedorOrderByIniciadaEnDesc(eq(EGSA), any())).thenReturn(List.of(corridas));
+    }
+
+    /** created_at no tiene setter: se pisa por reflexion solo en los tests. */
+    private void cargaAMano(String proveedor, LocalDateTime cuando) {
+        ImportPrecioBatch b = new ImportPrecioBatch();
+        b.setProveedor(proveedor);
+        b.setFuente("CSV_IMPORT");
+        b.setEstado("APLICADO");
+        try {
+            var campo = ImportPrecioBatch.class.getDeclaredField("createdAt");
+            campo.setAccessible(true);
+            campo.set(b, cuando);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        when(batchRepo.findFirstByProveedorIgnoreCaseAndFuenteAndEstadoOrderByCreatedAtDesc(proveedor, "CSV_IMPORT", "APLICADO"))
+                .thenReturn(Optional.of(b));
+    }
+
+    @Test
+    void estado_deEgsa_esUnaListaQueNosMandan_ySabeSiHayUnaRetenida() {
+        SincronizacionPrecio retenida = deEgsa(ResultadoSincronizacion.RETENIDA, LocalDateTime.now().minusHours(2), "llego rara");
+        historialEgsa(retenida);
+        when(retenidas.hay(EGSA)).thenReturn(true);
+
+        SincronizacionEstadoResponse e = service.estado("egsa");
+
+        assertThat(e.proveedor()).isEqualTo(EGSA);
+        assertThat(e.recibeArchivo()).isTrue();
+        assertThat(e.habilitada()).isTrue();
+        assertThat(e.hayListaRetenida()).isTrue();
+        assertThat(e.ultima().origen()).isEqualTo("RECEPCION");
+        assertThat(e.alerta().nivel()).isEqualTo("AVISO");
+        assertThat(e.alerta().mensaje()).contains("La lista de precios de EGSA llegó con datos raros");
+    }
+
+    @Test
+    void estado_deAds_nuncaDiceQueHayListaRetenida() {
+        when(retenidas.hay(anyString())).thenReturn(true);
+        historial();
+
+        assertThat(service.estado().hayListaRetenida()).isFalse();
+        assertThat(service.estado().recibeArchivo()).isFalse();
+    }
+
+    @Test
+    void estado_proveedorDesconocido() {
+        assertThatThrownBy(() -> service.estado("OTRO")).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("No hay actualización automática para el proveedor OTRO");
+    }
+
+    @Test
+    void ultimaBuena_esLaMasNuevaEntreLaCorridaYLaCargaAMano() {
+        SincronizacionPrecio ok = sincronizacion(ResultadoSincronizacion.SIN_CAMBIOS, LocalDateTime.now().minusDays(2), "ok");
+        LocalDateTime hace3Horas = LocalDateTime.now().minusHours(3);
+        historial(ok);
+        ultimaBuena(ok);
+        cargaAMano(ADS, hace3Horas);
+
+        assertThat(service.estado().ultimaBuenaEn()).isEqualTo(hace3Horas);
+
+        cargaAMano(ADS, LocalDateTime.now().minusDays(9));
+        assertThat(service.estado().ultimaBuenaEn()).isEqualTo(ok.getIniciadaEn());
+    }
+
+    @Test
+    void alerta_egsaSinNingunaListaHaceDias_avisaAunqueElRobotCargueAMano() {
+        cargaAMano(EGSA, LocalDateTime.of(2026, 10, 2, 17, 49));
+        historial();
+
+        AlertaPreciosResponse a = service.alerta().orElseThrow();
+
+        assertThat(a.nivel()).isEqualTo("ERROR");
+        assertThat(a.mensaje()).isEqualTo("Los precios de EGSA no se actualizan desde el 02/10 17:49.");
+    }
+
+    @Test
+    void alerta_egsaConUnaCargaDeAyer_noAvisa() {
+        cargaAMano(EGSA, LocalDateTime.now().minusDays(1));
+        historial();
+
+        assertThat(service.alerta()).isEmpty();
+    }
+
+    @Test
+    void alerta_egsaConUnaListaViejaYUnErrorReciente_diceElMotivoDeLaUltima() {
+        historialEgsa(deEgsa(ResultadoSincronizacion.ERROR, LocalDateTime.now().minusHours(5), "La lista no tiene el formato."));
+        SincronizacionPrecio viejaBuena = deEgsa(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.of(2026, 9, 28, 7, 0), "ok");
+        when(syncRepo.findFirstByProveedorAndResultadoInOrderByIniciadaEnDesc(eq(EGSA), any())).thenReturn(Optional.of(viejaBuena));
+
+        assertThat(service.alerta().orElseThrow().mensaje())
+                .isEqualTo("Los precios de EGSA no se actualizan desde el 28/09 07:00. La lista no tiene el formato.");
+    }
+
+    @Test
+    void alerta_juntaLasListas_loGraveTapaLoQueEsParaRevisar() {
+        historial(sincronizacion(ResultadoSincronizacion.RETENIDA, LocalDateTime.now(), "x"));
+        ultimaBuena(sincronizacion(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.now().minusDays(1), "ok"));
+        historialEgsa(deEgsa(ResultadoSincronizacion.ERROR, LocalDateTime.now(), "No llego el archivo."));
+
+        AlertaPreciosResponse a = service.alerta().orElseThrow();
+
+        assertThat(a.nivel()).isEqualTo("ERROR");
+        assertThat(a.mensaje()).isEqualTo("No se pudieron actualizar los precios de EGSA: No llego el archivo.");
+    }
+
+    @Test
+    void alerta_juntaLasListas_dosErroresSeUnenEnUnSoloMensaje() {
+        historial(sincronizacion(ResultadoSincronizacion.ERROR, LocalDateTime.now(), "ADS caido"));
+        ultimaBuena(sincronizacion(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.now().minusDays(1), "ok"));
+        historialEgsa(deEgsa(ResultadoSincronizacion.ERROR, LocalDateTime.now(), "robot caido"));
+
+        assertThat(service.alerta().orElseThrow().mensaje()).isEqualTo(
+                "No se pudieron actualizar los precios de Autopartes del Sur: ADS caido"
+                        + " · No se pudieron actualizar los precios de EGSA: robot caido");
+    }
+
+    @Test
+    void alerta_juntaLasListas_dosAvisosSeUnen() {
+        historial(sincronizacion(ResultadoSincronizacion.RETENIDA, LocalDateTime.now(), "x"));
+        ultimaBuena(sincronizacion(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.now().minusDays(1), "ok"));
+        historialEgsa(deEgsa(ResultadoSincronizacion.RETENIDA, LocalDateTime.now(), "y"));
+
+        AlertaPreciosResponse a = service.alerta().orElseThrow();
+
+        assertThat(a.nivel()).isEqualTo("AVISO");
+        assertThat(a.mensaje()).contains("Autopartes del Sur").contains("EGSA").contains(" · ");
+    }
+
+    @Test
+    void revisionesPendientes_deEgsa() {
+        Producto p = producto(7, "A1", "100.00");
+        when(revisionRepo.findPendientes(eq(EstadoRevisionPrecio.PENDIENTE), eq(EGSA), any()))
+                .thenReturn(List.of(revision(10, p, "500", EstadoRevisionPrecio.PENDIENTE)));
+
+        assertThat(service.revisionesPendientes("EGSA")).hasSize(1);
+        assertThat(service.revisionesPendientes()).isEmpty();
+    }
+
+    @Test
+    void aplicarRevisiones_deDosProveedoresAlMismoTiempo_unLotePorCadaUno() {
+        ConfiguracionPrecio configEgsa = new ConfiguracionPrecio();
+        configEgsa.setProveedor(EGSA);
+        configEgsa.setMargen(new BigDecimal("20"));
+        configEgsa.setAjusteLista(BigDecimal.ZERO);
+        when(configuracionRepo.findByProveedorIgnoreCase(EGSA)).thenReturn(Optional.of(configEgsa));
+        Producto deAds = producto(1, "A1", "100.00");
+        Producto deEgsa = producto(2, "E1", "100.00");
+        deEgsa.setProveedor(EGSA);
+        PrecioRevision r1 = revision(10, deAds, "500", EstadoRevisionPrecio.PENDIENTE);
+        PrecioRevision r2 = revision(11, deEgsa, "400", EstadoRevisionPrecio.PENDIENTE);
+        when(revisionRepo.findConProductoByIdIn(List.of(10L, 11L))).thenReturn(List.of(r1, r2));
+
+        RevisionPreciosResponse resp = service.aplicarRevisiones(List.of(10L, 11L));
+
+        assertThat(resp.resueltas()).isEqualTo(2);
+        assertThat(deAds.getPrecioVenta()).isEqualByComparingTo("550.00");
+        assertThat(deEgsa.getPrecioVenta()).isEqualByComparingTo("480.00");
+        ArgumentCaptor<ImportPrecioBatch> lotes = ArgumentCaptor.forClass(ImportPrecioBatch.class);
+        verify(batchRepo, atLeast(2)).save(lotes.capture());
+        assertThat(lotes.getAllValues()).extracting(ImportPrecioBatch::getArchivo)
+                .contains("Revisión de precios de ADS", "Revisión de precios de EGSA");
     }
 }

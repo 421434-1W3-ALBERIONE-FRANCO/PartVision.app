@@ -35,6 +35,7 @@ class SincronizacionPreciosControllerTest {
 
     @Autowired private MockMvc mvc;
     @MockBean private SincronizacionPreciosService service;
+    @MockBean private RecepcionListaService recepcion;
     @MockBean private JwtService jwtService;
     @MockBean private TokenRevocationService revocationService;
 
@@ -45,15 +46,47 @@ class SincronizacionPreciosControllerTest {
 
     @Test
     void estado() throws Exception {
-        when(service.estado()).thenReturn(new SincronizacionEstadoResponse(true, "Autopartes del Sur", false,
-                corrida("ACTUALIZADA"), LocalDateTime.now(), 3, AlertaPreciosResponse.aviso("revisar"), List.of()));
+        when(service.estado(null)).thenReturn(new SincronizacionEstadoResponse(true, "Autopartes del Sur", false, false,
+                corrida("ACTUALIZADA"), LocalDateTime.now(), 3, AlertaPreciosResponse.aviso("revisar"), List.of(), false));
 
         mvc.perform(get(URL))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.habilitada").value(true))
+                .andExpect(jsonPath("$.recibeArchivo").value(false))
+                .andExpect(jsonPath("$.hayListaRetenida").value(false))
                 .andExpect(jsonPath("$.pendientesRevision").value(3))
                 .andExpect(jsonPath("$.alerta.nivel").value("AVISO"))
                 .andExpect(jsonPath("$.ultima.resultado").value("ACTUALIZADA"));
+    }
+
+    @Test
+    void estado_deEgsa_pasaElProveedor() throws Exception {
+        when(service.estado("EGSA")).thenReturn(new SincronizacionEstadoResponse(true, "EGSA", true, false,
+                corrida("RETENIDA"), null, 0, null, List.of(), true));
+
+        mvc.perform(get(URL).param("proveedor", "EGSA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proveedor").value("EGSA"))
+                .andExpect(jsonPath("$.recibeArchivo").value(true))
+                .andExpect(jsonPath("$.hayListaRetenida").value(true));
+    }
+
+    @Test
+    void aplicarIgualALaListaRetenida_devuelve202() throws Exception {
+        when(recepcion.aplicarRetenida()).thenReturn(corrida("EN_CURSO"));
+
+        mvc.perform(post(URL + "/retenida/aplicar"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.resultado").value("EN_CURSO"));
+    }
+
+    @Test
+    void aplicarIgualALaListaRetenida_sinNingunaGuardada_devuelve422() throws Exception {
+        when(recepcion.aplicarRetenida()).thenThrow(new BusinessException("No hay una lista retenida"));
+
+        mvc.perform(post(URL + "/retenida/aplicar"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value("No hay una lista retenida"));
     }
 
     @Test
@@ -97,10 +130,10 @@ class SincronizacionPreciosControllerTest {
 
     @Test
     void revisiones() throws Exception {
-        when(service.revisionesPendientes()).thenReturn(List.of(new PrecioRevisionResponse(10, 7, "A1", "Junta",
+        when(service.revisionesPendientes("EGSA")).thenReturn(List.of(new PrecioRevisionResponse(10, 7, "A1", "Junta",
                 new BigDecimal("100.00"), new BigDecimal("500.00"), new BigDecimal("400.00"))));
 
-        mvc.perform(get(URL + "/revisiones"))
+        mvc.perform(get(URL + "/revisiones").param("proveedor", "EGSA"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sku").value("A1"))
                 .andExpect(jsonPath("$[0].variacionPct").value(400.00));

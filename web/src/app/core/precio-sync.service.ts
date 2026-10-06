@@ -11,8 +11,8 @@ export class PrecioSyncService {
   private http = inject(HttpClient);
   private base = `${API_BASE_URL}/precios/sincronizacion`;
 
-  estado(): Observable<SincronizacionEstado> {
-    return this.http.get<SincronizacionEstado>(this.base);
+  estado(proveedor: string): Observable<SincronizacionEstado> {
+    return this.http.get<SincronizacionEstado>(this.base, { params: new HttpParams().set('proveedor', proveedor) });
   }
 
   /** "Actualizar ahora"; con forzar aplica una lista que habia quedado retenida. */
@@ -21,14 +21,19 @@ export class PrecioSyncService {
     return this.http.post<SincronizacionPrecios>(this.base, null, { params });
   }
 
+  /** «Aplicar igual» a la lista de EGSA retenida: usa el archivo guardado en el servidor. */
+  aplicarRetenida(): Observable<SincronizacionPrecios> {
+    return this.http.post<SincronizacionPrecios>(`${this.base}/retenida/aplicar`, null);
+  }
+
   /** null cuando no hay nada que mirar (el backend responde 204). */
   alerta(): Observable<AlertaPrecios | null> {
     return this.http.get<AlertaPrecios>(`${this.base}/alerta`, { observe: 'response' })
       .pipe(map((r: HttpResponse<AlertaPrecios>) => r.status === 204 ? null : r.body));
   }
 
-  revisiones(): Observable<PrecioRevision[]> {
-    return this.http.get<PrecioRevision[]>(`${this.base}/revisiones`);
+  revisiones(proveedor: string): Observable<PrecioRevision[]> {
+    return this.http.get<PrecioRevision[]>(`${this.base}/revisiones`, { params: new HttpParams().set('proveedor', proveedor) });
   }
 
   aplicar(ids: number[]): Observable<RevisionPreciosResultado> {

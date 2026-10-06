@@ -1,5 +1,6 @@
 package com.partvision.pricing;
 
+import com.partvision.catalog.domain.Marca;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.pricing.AnalizadorListaPrecios.Analisis;
 import com.partvision.pricing.AnalizadorListaPrecios.Referencia;
@@ -34,6 +35,20 @@ class AnalizadorListaPreciosTest {
         }
         catalogo.computeIfAbsent(sku, k -> new ArrayList<>()).add(p);
         return p;
+    }
+
+    private Producto producto(String sku, String proveedor, String costo, String marca) {
+        Producto p = producto(sku, proveedor, costo);
+        if (marca != null) {
+            Marca m = new Marca();
+            m.setNombre(marca);
+            p.setMarca(m);
+        }
+        return p;
+    }
+
+    private static FilaArchivo filaConMarca(String sku, String precio, String marca) {
+        return new FilaArchivo(sku, precio, "desc", marca);
     }
 
     private static FilaArchivo fila(String sku, String precio) {
@@ -291,5 +306,137 @@ class AnalizadorListaPreciosTest {
     @Test
     void numeros_conSeparadorDeMiles() {
         assertThat(AnalizadorListaPrecios.n(67280)).isEqualTo("67.280");
+    }
+
+    // --- Codigos repetidos con marcas distintas (EGSA) ---
+
+    @Test
+    void repetidoConMarcasDistintas_usaElPrecioDeLaMarcaDelProducto() {
+        Producto arbol = producto("106", ADS, "100.00", "BH");
+
+        Analisis a = analizar(List.of(filaConMarca("106", "18736.64", "RUL-REP"), filaConMarca("106", "110", "BH")));
+
+        assertThat(a.cambios()).singleElement().satisfies(c -> {
+            assertThat(c.producto()).isSameAs(arbol);
+            assertThat(c.costo()).isEqualByComparingTo("110.00");
+        });
+        assertThat(a.repetidos()).isZero();
+        assertThat(a.repetidosPorMarca()).isEqualTo(1);
+        assertThat(a.filasLista()).isEqualTo(1);
+        assertThat(a.problemas()).anyMatch(p -> p.contains("1 código(s) vienen repetidos con marcas distintas"));
+    }
+
+    @Test
+    void repetido_laMarcaSeComparaSinMayusculasTildesNiEspaciosDeMas() {
+        producto("X1", ADS, "100.00", "Rul  Rép");
+
+        Analisis a = analizar(List.of(filaConMarca("X1", "999", "BH"), filaConMarca("X1", "105", " RUL REP ")));
+
+        assertThat(a.cambios()).singleElement().satisfies(c -> assertThat(c.costo()).isEqualByComparingTo("105.00"));
+    }
+
+    @Test
+    void repetido_siElProductoNoTieneMarca_noSeToca() {
+        producto("X1", ADS, "100.00");
+
+        Analisis a = analizar(List.of(filaConMarca("X1", "110", "BH"), filaConMarca("X1", "120", "RUL-REP")));
+
+        assertThat(a.cambios()).isEmpty();
+        assertThat(a.repetidos()).isEqualTo(1);
+        assertThat(a.repetidosPorMarca()).isZero();
+    }
+
+    @Test
+    void repetido_siNingunaFilaTraeSuMarca_noSeToca() {
+        producto("X1", ADS, "100.00", "STACO");
+
+        Analisis a = analizar(List.of(filaConMarca("X1", "110", "BH"), filaConMarca("X1", "120", "RUL-REP")));
+
+        assertThat(a.cambios()).isEmpty();
+        assertThat(a.repetidos()).isEqualTo(1);
+    }
+
+    @Test
+    void repetido_siLaListaNoTraeMarca_noSeToca() {
+        producto("X1", ADS, "100.00", "BH");
+
+        Analisis a = analizar(List.of(fila("X1", "110"), fila("X1", "120")));
+
+        assertThat(a.repetidos()).isEqualTo(1);
+    }
+
+    @Test
+    void repetido_dosFilasDeSuMarcaConPreciosDistintos_noSeToca() {
+        producto("4015300", ADS, "100.00", "EMIC");
+
+        Analisis a = analizar(List.of(filaConMarca("4015300", "4824.66", "EMIC"), filaConMarca("4015300", "5469.33", "EMIC")));
+
+        assertThat(a.cambios()).isEmpty();
+        assertThat(a.repetidos()).isEqualTo(1);
+    }
+
+    @Test
+    void repetido_dosFilasDeSuMarcaConElMismoPrecio_seUsaEseYCuentaComoResuelto() {
+        producto("X1", ADS, "100.00", "BH");
+
+        Analisis a = analizar(List.of(filaConMarca("X1", "110", "BH"), filaConMarca("X1", "110", "BH"),
+                filaConMarca("X1", "999", "OTRA")));
+
+        assertThat(a.cambios()).singleElement().satisfies(c -> assertThat(c.costo()).isEqualByComparingTo("110.00"));
+        assertThat(a.repetidosPorMarca()).isEqualTo(1);
+    }
+
+    @Test
+    void repetido_sinProductoEnElCatalogo_noSeDaDeAltaNiSeCuentaComoNuevo() {
+        Analisis a = analizar(List.of(filaConMarca("Z9", "110", "BH"), filaConMarca("Z9", "120", "RUL-REP")));
+
+        assertThat(a.repetidos()).isEqualTo(1);
+        assertThat(a.nuevos()).isEmpty();
+    }
+
+    @Test
+    void repetidoConElMismoPrecioEnTodasLasFilas_noEsUnProblema() {
+        producto("X1", ADS, "100.00");
+
+        Analisis a = analizar(List.of(filaConMarca("X1", "110", "BH"), filaConMarca("X1", "110", "RUL-REP")));
+
+        assertThat(a.repetidos()).isZero();
+        assertThat(a.repetidosPorMarca()).isZero();
+        assertThat(a.cambios()).hasSize(1);
+    }
+
+    // --- Codigos nuevos ---
+
+    @Test
+    void nuevos_seDevuelvenConSuPrecio_yEnADSSeAvisaDeLaImportacionManual() {
+        Analisis a = analizar(List.of(fila("N1", "50"), fila("N2", "60")), new Umbrales(60, 35, 10, 80, 1, 5, 0), Referencia.NINGUNA);
+
+        assertThat(a.nuevos()).extracting(AnalizadorListaPrecios.Nuevo::sku).containsExactly("N1", "N2");
+        assertThat(a.nuevos().getFirst().precioLista()).isEqualByComparingTo("50.00");
+        assertThat(a.noEncontrados()).isEqualTo(2);
+        assertThat(a.problemas()).singleElement().asString().contains("no están en tu catálogo").contains("importación manual");
+    }
+
+    @Test
+    void nuevos_siLaFuenteDaDeAltaSola_elAnalizadorNoDiceNada() {
+        Analisis a = analizar(List.of(fila("N1", "50")), new Umbrales(60, 35, 10, 80, 1, 5, 0, 300), Referencia.NINGUNA);
+
+        assertThat(a.nuevos()).hasSize(1);
+        assertThat(a.problemas()).isEmpty();
+    }
+
+    @Test
+    void normalizarMarca() {
+        assertThat(AnalizadorListaPrecios.normalizarMarca("  Rul-Rép  ")).isEqualTo("RUL-REP");
+        assertThat(AnalizadorListaPrecios.normalizarMarca("a   b")).isEqualTo("A B");
+        assertThat(AnalizadorListaPrecios.normalizarMarca("   ")).isNull();
+        assertThat(AnalizadorListaPrecios.normalizarMarca(null)).isNull();
+    }
+
+    @Test
+    void umbrales_desdeLasPropiedades() {
+        assertThat(Umbrales.de(SincronizacionPreciosServiceTest.egsaProps()).maxAltas()).isEqualTo(300);
+        assertThat(Umbrales.de(new AdsSyncProperties("u", "p", "http://a/", "ADS", "c", "p", 60, 35, 10, 80, 1000, 5, 50, 3, 5, 5, 1))
+                .maxAltas()).isZero();
     }
 }

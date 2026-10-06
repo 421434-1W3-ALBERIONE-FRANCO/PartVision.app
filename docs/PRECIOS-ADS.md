@@ -3,7 +3,7 @@
 PartVision baja sola la **lista de precios del portal de ADS**
 (`catalogo.autopartesdelsur.com.ar`) y la aplica. Es el mismo Excel del botón **"Lista de
 precios"** del portal ("Catalogo Autopartes del Sur - DD-MM-YYYY.xlsx", con Código,
-Descripción y Precio de Lista). Corre **todos los días a las 6:30 y a las 13 h** (hora de Buenos
+Descripción y Precio de Lista). Corre **todos los días a las 6:30 y a las 13:30** (hora de Buenos
 Aires) y cuando alguien toca **«Actualizar ahora»** en la pantalla Precios.
 
 La cuenta es la misma que la de la importación manual:
@@ -63,7 +63,7 @@ Otras variables (opcionales):
 
 | Variable | Default | Para qué |
 |---|---|---|
-| `ADS_CRON` | `0 30 6,13 * * *` | Cuándo corre sola (hora de Buenos Aires; 6:30 para no cruzarse con el robot de EGSA de las 7). `-` la apaga y deja solo el botón. Para reactivarla hay que **escribir el horario**, no alcanza con borrar la línea: `redeploy.sh` conserva las `ADS_` del contenedor anterior. |
+| `ADS_CRON` | `0 30 6,13 * * *` | Cuándo corre sola: 6:30 y 13:30, hora de Buenos Aires (a las 6:30 y no a las 7 para no cruzarse con el robot de EGSA). `-` la apaga y deja solo el botón. Para reactivarla hay que **escribir el horario**, no alcanza con borrar la línea: `redeploy.sh` conserva las `ADS_` del contenedor anterior. |
 | `PARTVISION_PRECIOS_ADS_URL` | `https://catalogo.autopartesdelsur.com.ar/` | Solo para pruebas. |
 
 ## Qué hace cada corrida

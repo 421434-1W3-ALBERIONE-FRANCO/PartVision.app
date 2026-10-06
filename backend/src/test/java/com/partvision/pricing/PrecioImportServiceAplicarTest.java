@@ -34,6 +34,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -90,6 +91,8 @@ class PrecioImportServiceAplicarTest {
             return b;
         });
     }
+
+    private static final String NL = System.lineSeparator();
 
     private String subir(String csv) {
         PrecioImportColumnasResponse cols =
@@ -154,6 +157,54 @@ class PrecioImportServiceAplicarTest {
         service.ejecutarImportAsync(id, "sku", "precio", "ADS", Set.of(), "precios.csv");
 
         assertThat(service.getProgresoImport().ultimoResultado().omitidos()).isEqualTo(1);
+        verify(historialRepo, never()).saveAll(anyCollection());
+    }
+
+    /** Un precio que no cambio no escribe ni el producto ni el historial. */
+    @Test
+    void aplicar_precioQueNoCambio_noSeEscribeNiDejaHistorial() {
+        configurar("ADS", "10");
+        batchConId();
+        String id = subir("sku,precio" + NL + "SKU1,100" + NL + "SKU2,200" + NL + "SKU3,300" + NL);
+        Producto igual = producto(1L, "SKU1", "ADS");
+        igual.setPrecioCosto(new BigDecimal("100.00"));
+        igual.setPrecioVenta(new BigDecimal("110.00"));
+        Producto distinto = producto(2L, "SKU2", "ADS");
+        distinto.setPrecioCosto(new BigDecimal("150.00"));
+        distinto.setPrecioVenta(new BigDecimal("165.00"));
+        Producto soloVenta = producto(3L, "SKU3", "ADS");
+        soloVenta.setPrecioCosto(new BigDecimal("300.00"));
+        soloVenta.setPrecioVenta(new BigDecimal("320.00")); // cambio el margen: la venta ya no corresponde
+        when(productoRepository.findBySkuIn(any())).thenReturn(List.of(igual, distinto, soloVenta));
+
+        service.ejecutarImportAsync(id, "sku", "precio", "ADS", Set.of(), "precios.csv");
+
+        var resultado = service.getProgresoImport().ultimoResultado();
+        assertThat(resultado.aplicados()).isEqualTo(2);
+        assertThat(resultado.total()).isEqualTo(3);
+        assertThat(resultado.mensaje()).contains("2 aplicados, 1 sin cambio");
+        assertThat(igual.getPrecioActualizadoEn()).isNull();
+        assertThat(distinto.getPrecioCosto()).isEqualByComparingTo("200.00");
+        assertThat(soloVenta.getPrecioVenta()).isEqualByComparingTo("330.00");
+        verify(productoRepository).saveAll(argThat(l -> ((java.util.Collection<?>) l).size() == 2));
+        verify(historialRepo).saveAll(argThat(l -> ((java.util.Collection<?>) l).size() == 2));
+    }
+
+    /** Si ningun precio cambio, queda la constancia del batch pero sin tocar productos ni historial. */
+    @Test
+    void aplicar_nadaCambio_dejaElBatchSinTocarNada() {
+        configurar("ADS", "10");
+        batchConId();
+        String id = subir("sku,precio" + NL + "SKU1,100" + NL);
+        Producto p = producto(1L, "SKU1", "ADS");
+        p.setPrecioCosto(new BigDecimal("100.00"));
+        p.setPrecioVenta(new BigDecimal("110.00"));
+        when(productoRepository.findBySkuIn(any())).thenReturn(List.of(p));
+
+        service.ejecutarImportAsync(id, "sku", "precio", "ADS", Set.of(), "precios.csv");
+
+        assertThat(service.getProgresoImport().ultimoResultado().aplicados()).isZero();
+        verify(productoRepository, never()).saveAll(anyCollection());
         verify(historialRepo, never()).saveAll(anyCollection());
     }
 
