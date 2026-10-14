@@ -29,90 +29,111 @@ el flujo nuevo.
 ## El flujo nuevo
 
 ```
-Cuando se crea un archivo (OneDrive, /Rectificaciones Barria/Catálogo EGSA)
-   solo si se llama EGSA_ListaPrecios_<HOY>.xlsx         ← condición de desencadenador
-  └─ Redactar: PartVision_URL
-  └─ Inicializar variables: resultado, mensaje
-  └─ Retraso 1 minuto                                    ← que el archivo termine de subirse
-  └─ OneDrive: Obtener contenido del archivo  (por Id)
-  └─ HTTP POST a PartVision                              ← con reintentos
-  └─ Hasta que resultado ≠ EN_CURSO:  Retraso 10 s → HTTP GET → guardar resultado
-  └─ Condición: ACTUALIZADA o SIN_CAMBIOS
-        sí → correo "se cargaron los precios"
-        no → correo "ALERTA: PartVision no aplicó la lista"
+Cuando se crea un archivo (OneDrive, /Rectificaciones Barria/Catálogo EGSA)   ← ya trae el contenido
+  └─ Inicializar variable: PartVision_URL, EstadoCarga (= EN_CURSO), MensajeRespuesta
+  └─ Condición: ¿el archivo se llama EGSA_ListaPrecios_<HOY>.xlsx?
+       Verdadero:
+         └─ HTTP POST a PartVision (cuerpo = el contenido del archivo)    ← con reintentos
+         └─ Hasta que EstadoCarga ≠ EN_CURSO:  Retraso 10 s → HTTP GET → guardar resultado
+         └─ Condición: ACTUALIZADA o SIN_CAMBIOS
+               sí → correo "se cargaron los precios"
+               no → correo "ALERTA: PartVision no aplicó la lista"
+       Falso: nada (la ejecución queda en el historial y se ve qué archivo llegó)
   (si algo de lo anterior falla → correo "HA FALLADO EL FLUJO")
 ```
 
+En el diseñador nuevo la **Vista de código** de cada acción es de solo lectura: los JSON de abajo sirven para
+**comparar** con lo que quedó armado, no para pegarlos. Las expresiones (lo que tiene paréntesis) se cargan con el
+botón **fx** (*Insertar expresión*) del campo; escritas como texto quedan como texto y no se calculan.
+
 ### Paso 1: el desencadenador
 
-**OneDrive para la Empresa → Cuando se crea un archivo** (*When a file is created*):
+**OneDrive para la Empresa → Cuando se crea un archivo** (*When a file is created*, `OnNewFileV2`):
 
 - **Carpeta:** `/Rectificaciones Barria/Catálogo EGSA`
-- Preferir **"se crea un archivo"** a "se crea o modifica un archivo (solo propiedades)". El robot genera un archivo nuevo con
-  la fecha de cada día, así que "se crea" dispara **una vez por lista**. Con "o modifica" dispara de nuevo cada vez que
-  OneDrive toca el archivo al sincronizarlo, y la lista se mandaría varias veces.
-- En `...` → **Configuración** del desencadenador:
-  - **Control de simultaneidad: Activado, grado de paralelismo 1**, para que dos disparos no corran a la vez.
-  - **Condiciones de desencadenador** (esto reemplaza al "verificar que el nombre empiece con EGSA_ListaPrecios_" y es
-    mejor, porque ni siquiera arranca una ejecución para archivos ajenos). Pegar:
+- **Este, no "Cuando se crea un archivo (solo propiedades)"**: este ya trae el **contenido** del archivo, así que no
+  hace falta pedirlo aparte. Tampoco "se crea o modifica": con "modifica" dispara de nuevo cada vez que OneDrive toca el
+  archivo al sincronizarlo, y la lista se mandaría varias veces. El robot genera un archivo nuevo por día, así que
+  "se crea" dispara **una vez por lista**.
+- **Ojo con el nombre: viene en base64.** El dato dinámico *Nombre de archivo* es
+  `triggerOutputs()?['headers/x-ms-file-name-encoded']`, y para `EGSA_ListaPrecios_14-10-2026.xlsx` trae
+  `RUdTQV9MaXN0YVByZWNpb3NfMTQtMTAtMjAyNi54bHN4`. Para compararlo o mandarlo hay que decodificarlo:
 
-    ```
-    @equals(triggerOutputs()?['body/Name'], concat('EGSA_ListaPrecios_', formatDateTime(convertFromUtc(utcnow(), 'Argentina Standard Time'), 'dd-MM-yyyy'), '.xlsx'))
-    ```
+  ```
+  base64ToString(triggerOutputs()?['headers/x-ms-file-name-encoded'])
+  ```
 
-    Pide que el archivo sea **el de hoy**, no solo que empiece con `EGSA_ListaPrecios_`. Es importante: PartVision no sabe
-    de qué día es una lista, así que si por cualquier motivo se disparara con un archivo **viejo** (alguien lo restaura o
-    lo vuelve a guardar), se aplicarían **precios de hace días**.
+  Sin `base64ToString`, una condición como "empieza por `EGSA_ListaPrecios_`" da **siempre falso** y el flujo no manda
+  nada nunca, sin ningún error.
+- En `...` → **Configuración** del desencadenador: **Control de simultaneidad: Activado, grado de paralelismo 1**, para que
+  dos disparos no corran a la vez.
+- Limitaciones del desencadenador: ignora archivos de **más de 50 MB** (la lista pesa unos pocos) y archivos **movidos**
+  dentro de OneDrive (un archivo subido o creado sí dispara).
 
 ### Paso 2: variables
 
-- **Redactar** `PartVision_URL` = `https://190.106.132.98.nip.io/pv-api/v1` (cuando PartVision se mude de servidor,
-  **solo cambia esto**).
-- **Inicializar variable** `resultado` (Cadena) = `EN_CURSO` y `mensaje` (Cadena) = vacío.
+Tres **Inicializar variable**, una debajo de la otra, antes de la condición (Power Automate no deja inicializar variables
+adentro de una condición):
 
-### Paso 3: esperar y obtener el archivo
+| Nombre | Tipo | Valor |
+|---|---|---|
+| `PartVision_URL` | Cadena | `https://190.106.132.98.nip.io/pv-api/v1` |
+| `EstadoCarga` | Cadena | `EN_CURSO` |
+| `MensajeRespuesta` | Cadena | (vacío) |
 
-1. **Retraso** de **1 minuto**: el disparo puede llegar cuando OneDrive todavía está terminando de subir el archivo.
-2. **OneDrive para la Empresa → Obtener contenido de archivo** (por **Id**, no por ruta):
-   - Archivo: `@{triggerOutputs()?['body/Id']}`
-   - Inferir tipo de contenido: **Sí**
+La URL va **tal cual, escrita a mano**: si se pega desde un chat o un documento puede quedar como enlace
+(`[https://...](https://...)`) y todas las llamadas fallan. Cuando PartVision se mude de servidor, **solo cambia esta
+variable**. En todas las acciones se usa como `variables('PartVision_URL')`.
 
-El desencadenador solo trae las *propiedades* del archivo (nombre, Id); **el contenido hay que pedirlo** con este paso.
+### Paso 3: ¿es la lista de hoy?
+
+**Condición** con una sola fila:
+
+- Izquierda (fx): `base64ToString(triggerOutputs()?['headers/x-ms-file-name-encoded'])`
+- Operador: **es igual a**
+- Derecha (fx): `concat('EGSA_ListaPrecios_', convertFromUtc(utcNow(), 'Argentina Standard Time', 'dd-MM-yyyy'), '.xlsx')`
+
+Pide que el archivo sea **el de hoy**, no solo que empiece con `EGSA_ListaPrecios_`. Es importante: PartVision no sabe
+de qué día es una lista, así que si por cualquier motivo se disparara con un archivo **viejo** (alguien lo restaura o
+lo vuelve a subir), se aplicarían **precios de hace días**.
+
+Como **acción** (y no como "condición de desencadenador") tiene una ventaja: si el nombre no coincide, la ejecución igual
+queda en el historial y se ve qué archivo llegó y por qué no se mandó. Todo lo que sigue va en la rama **Verdadero**; la
+rama **Falso** queda vacía.
 
 ### Paso 4: mandar el archivo (acción HTTP)
 
-En `...` → **Configuración**: **transferencia fragmentada desactivada** (igual que en compras) y **directiva de reintentos**:
-*Intervalo fijo*, recuento **6**, intervalo **PT1M**.
+En `...` → **Configuración**: **fragmentación (transferencia fragmentada) desactivada**, igual que en compras, y
+**directiva de reintentos**: *Intervalo fijo*, recuento **6**, intervalo **PT1M**.
 
 La directiva de reintentos importa por esto: **mientras el robot viejo siga cargando la lista por la pantalla**, a esa hora
 PartVision puede estar ocupado con esa carga. En ese caso responde **429** ("ocupado"), y Power Automate **reintenta solo**
 (reintenta 408, 429 y 5xx; un 409, por ejemplo, no lo reintentaría).
 
 - **Método:** `POST`
-- **URI:** `@{outputs('PartVision_URL')}/precios/recepcion/egsa`
+- **URI:** `@{variables('PartVision_URL')}/precios/recepcion/egsa`
 - **Encabezados:**
   - `X-API-Key` = la clave de recepción de EGSA (la da el administrador de PartVision; **no** es la de compras)
   - `Content-Type` = `application/octet-stream`
-  - `X-Filename` = `@{triggerOutputs()?['body/Name']}`
-- **Cuerpo:** el contenido del archivo del paso anterior (*Contenido del archivo*).
+  - `X-Filename` = (fx) `base64ToString(triggerOutputs()?['headers/x-ms-file-name-encoded'])`
+- **Cuerpo:** el dato dinámico **Contenido del archivo** del desencadenador.
 
-Para pegar en la **Vista de código** de la acción (ajustar el nombre de la acción anterior si se llama distinto):
+La Vista de código tiene que quedar así:
 
 ```json
 {
   "type": "Http",
   "inputs": {
-    "uri": "@{outputs('PartVision_URL')}/precios/recepcion/egsa",
+    "uri": "@{variables('PartVision_URL')}/precios/recepcion/egsa",
     "method": "POST",
     "headers": {
-      "X-API-Key": "PEGAR_ACA_LA_CLAVE",
+      "X-API-Key": "LA_CLAVE_DE_EGSA",
       "Content-Type": "application/octet-stream",
-      "X-Filename": "@{triggerOutputs()?['body/Name']}"
+      "X-Filename": "@{base64ToString(triggerOutputs()?['headers/x-ms-file-name-encoded'])}"
     },
-    "body": "@body('Obtener_contenido_de_archivo')",
+    "body": "@triggerBody()",
     "retryPolicy": { "type": "fixed", "count": 6, "interval": "PT1M" }
-  },
-  "runAfter": { "Obtener_contenido_de_archivo": ["Succeeded"] }
+  }
 }
 ```
 
@@ -130,12 +151,12 @@ PartVision responde **202** con un número de constancia (`id`): "la recibí y l
 
 Con solo el 202 se sabe que PartVision **recibió** la lista, no que la **aplicó**. Para saberlo:
 
-**Hasta que** (*Until*): `resultado` **no es igual a** `EN_CURSO`. Límite: **30** repeticiones. Adentro:
+**Hasta que** (*Until*): `EstadoCarga` **no es igual a** `EN_CURSO`. Límite: **30** repeticiones. Adentro:
 
 1. **Retraso** de **10 segundos**
-2. **HTTP** `GET` `@{outputs('PartVision_URL')}/precios/recepcion/@{body('HTTP')?['id']}` con el encabezado `X-API-Key`
-3. **Establecer variable** `resultado` = `@{body('HTTP_2')?['resultado']}`
-4. **Establecer variable** `mensaje` = `@{body('HTTP_2')?['mensaje']}`
+2. **HTTP** `GET` `@{variables('PartVision_URL')}/precios/recepcion/@{body('HTTP')?['id']}` con el encabezado `X-API-Key`
+3. **Establecer variable** `EstadoCarga` = (fx) `body('HTTP_2')?['resultado']`
+4. **Establecer variable** `MensajeRespuesta` = (fx) `body('HTTP_2')?['mensaje']`
 
 (Los nombres `HTTP` y `HTTP_2` son los que Power Automate le pone a las acciones; ajustar si se llaman distinto.)
 
@@ -144,14 +165,14 @@ administrador la revise) y `ERROR` (no se pudo leer el archivo).
 
 ### Paso 6: el correo
 
-**Condición** sobre `resultado`: es `ACTUALIZADA` **o** `SIN_CAMBIOS`.
+**Condición** sobre `EstadoCarga`: es `ACTUALIZADA` **o** `SIN_CAMBIOS`.
 
-- **Sí** → correo "Carga precios EGSA": `Se cargaron los precios en PartVision. @{variables('mensaje')}`
-- **No** → correo con asunto **"ALERTA: PartVision no aplicó la lista de EGSA"** y cuerpo `@{variables('mensaje')}` (el motivo
-  viene ahí; el detalle completo está en la pantalla Precios).
+- **Sí** → correo "Carga precios EGSA": `Se cargaron los precios en PartVision. @{variables('MensajeRespuesta')}`
+- **No** → correo con asunto **"ALERTA: PartVision no aplicó la lista de EGSA"** y cuerpo
+  `@{variables('MensajeRespuesta')}` (el motivo viene ahí; el detalle completo está en la pantalla Precios).
 
 Un correo de **"HA FALLADO EL FLUJO"** con *Configurar ejecución posterior* → *Ha fallado* y *Se agotó el tiempo de espera*
-para el HTTP y para "Obtener contenido de archivo". Un 401 o una lista que no llegó **no se ven** si nadie lo mira.
+para el HTTP. Un 401 o una lista que no llegó **no se ven** si nadie lo mira.
 
 ## Cosas a tener en cuenta
 
@@ -171,18 +192,28 @@ para el HTTP y para "Obtener contenido de archivo". Un 401 o una lista que no ll
 
 ## Cómo probarlo
 
-1. Con la clave ya cargada, guardar el flujo y esperar a la próxima lista, **o** probarlo ya: copiar a mano un archivo
-   `EGSA_ListaPrecios_<hoy>.xlsx` a la carpeta (el nombre con la fecha de hoy, o la condición lo ignora).
-2. En el historial de ejecuciones: el HTTP tiene que dar **202** y el "Hasta que" terminar en `ACTUALIZADA` o `SIN_CAMBIOS`.
-3. En PartVision, pantalla **Precios**: el panel "Lista recibida · EGSA" muestra la fecha, "la mandó el robot" y los números.
-   Si sale **RETENIDA**, ahí aparece el motivo y el botón **Aplicar igual**.
+**Nunca probar con una lista vieja renombrada con la fecha de hoy**: PartVision la aplicaría y volverían precios de
+hace días. Hay dos formas seguras:
+
+1. **Esperar la lista de mañana**: el robot la deja a las 7:10 y el flujo se dispara solo unos minutos después.
+2. **Con la lista de HOY** que ya está en la carpeta: bajarla, borrarla de la carpeta y volver a subirla (moverla dentro de
+   OneDrive no dispara el flujo; subirla sí).
+
+En el historial de ejecuciones:
+
+- La **Condición** tiene que dar **Verdadero**. Si da Falso, abrir el desencadenador → *Mostrar salidas sin procesar* y
+  mirar `x-ms-file-name-encoded`: decodificado tiene que ser exactamente `EGSA_ListaPrecios_dd-MM-aaaa.xlsx` con la fecha
+  de hoy.
+- El **HTTP** tiene que dar **202** y el "Hasta que" terminar en `ACTUALIZADA` o `SIN_CAMBIOS`.
+- En PartVision, pantalla **Precios**: el panel "Lista recibida · EGSA" muestra la fecha, "la mandó el robot" y los
+  números. Si sale **RETENIDA**, ahí aparece el motivo y el botón **Aplicar igual**.
 
 La primera lista va a mandar a revisión unos ~100 precios: son los productos con códigos repetidos que hoy tienen el
 precio de **otra marca**; el servidor ya calcula el correcto y espera que alguien lo apruebe.
 
 ## Cuando PartVision se mude de servidor
 
-1. Cambiar `PartVision_URL` (Paso 2).
+1. Cambiar la variable `PartVision_URL` (Paso 2).
 2. La clave de recepción vive en el servidor: se copia al nuevo (o se genera una nueva y se cambia en el encabezado
    `X-API-Key`).
 3. Probar copiando un archivo de hoy a la carpeta.
