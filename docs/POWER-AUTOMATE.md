@@ -65,7 +65,8 @@ se guardan igual (cada factura va en su propia transacción).
   "ignoradas": [
     { "posicion": 7, "factura": "900000482", "descripcion": "CONTROLO:",
       "motivo": "sin cantidad (o no es un entero positivo)" }
-  ]
+  ],
+  "advertencia": null
 }
 ```
 
@@ -79,6 +80,11 @@ se guardan igual (cada factura va en su propia transacción).
 
 `conflictos` y `errores` son lo que alguien tiene que mirar: conviene que el flujo mande un
 mail cuando alguno sea mayor que cero.
+
+`advertencia` viene en `null`, salvo que el envío parezca cortado: si llegan **exactamente 256
+filas** (lo que manda Power Automate sin la paginación activada, ver [Armar el flujo](#armar-el-flujo))
+o exactamente 5.000 (nuestro tope). En los dos casos las que faltan son las de abajo de la
+planilla, o sea las facturas más nuevas.
 
 ## Estados
 
@@ -203,6 +209,12 @@ lo único que dice a cuál de los dos productos va el stock.
    la planilla, al terminar.
 2. **Enumerar las filas de una tabla** (Excel Online Business) sobre "Ingreso stock". El
    formato de fecha puede quedar en el valor por defecto.
+   - **Paginación, obligatoria**: `...` de la acción → **Configuración** → **Paginación**
+     activada, **umbral 5000**. Sin eso la acción devuelve **solo las primeras 256 filas**, sin
+     error ni aviso. Como las facturas nuevas se agregan abajo, cuando la planilla pasa de 256
+     filas dejan de llegar. Pasó del 2026-09-25 al 2026-10-13: el flujo corrió verde todos los
+     días, mandó 256 filas y PartVision no recibió ninguna factura nueva. Desde entonces la
+     respuesta trae `advertencia` cuando llegan justo 256.
 3. **HTTP**:
    - Método: `POST`
    - URI: la de arriba
@@ -279,8 +291,20 @@ la cantidad es real, y recién aceptada se puede dar de alta o asociar.
 ### Límites
 
 - **5.000 filas** y **2 MB** por envío. El tope existe porque la ruta es pública y el servidor
-  lee el cuerpo entero antes de mirar la clave.
+  lee el cuerpo entero antes de mirar la clave. Una fila de la planilla ocupa unos 300 bytes, así
+  que los dos topes llegan más o menos juntos. Al ritmo de 2026 (~240 filas por mes) alcanza para
+  más de un año; antes de llegar, borrar de la planilla las facturas ya ingresadas.
+- **256 filas** si la acción "Enumerar las filas" no tiene la paginación activada: ese tope es
+  de Power Automate y no da error (ver arriba).
 - **30 envíos por minuto por IP.** Con la planilla entera en un solo envío, sobra.
+
+### Cuando las facturas nuevas no llegan, pero el flujo sale verde
+
+Mirá `filasRecibidas` y `advertencia` en **Salidas** de la acción HTTP. Si dice 256, falta la
+paginación en "Enumerar las filas de una tabla" (paso 2 de [Armar el flujo](#armar-el-flujo)).
+Cuando se activa, el siguiente envío trae de una vez todas las facturas que se habían quedado
+afuera: entran como cualquier otra, en tránsito o por ubicar según la planilla, y ninguna carga
+stock sola.
 
 ### Cuando el envío falla
 

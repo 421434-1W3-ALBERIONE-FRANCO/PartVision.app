@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -266,5 +267,35 @@ class RecepcionFilasServiceTest {
         assertThat(resp.conflictos()).isEqualTo(1);
         assertThat(resp.resultados()).extracting(RecepcionFilasResponse.ResultadoFactura::estado)
                 .containsExactly("POR_UBICAR", "EN_TRANSITO", "INGRESADA");
+    }
+
+    /**
+     * Del 2026-09-25 al 2026-10-13 llegaron 256 filas todos los dias: el tope de Power Automate
+     * sin paginacion. Las facturas nuevas estaban debajo y no llegaban, sin ningun error.
+     */
+    @Test
+    void justoElTopeDePowerAutomate_avisaQueFaltaLaPaginacion() {
+        RecepcionFilasResponse resp = service.recibir(filas(256));
+
+        assertThat(resp.filasRecibidas()).isEqualTo(256);
+        assertThat(resp.advertencia()).contains("256").contains("Paginación");
+    }
+
+    @Test
+    void justoElTopeNuestro_avisaQuePuedenFaltarFilas() {
+        RecepcionFilasResponse resp = service.recibir(filas(5_000));
+
+        assertThat(resp.advertencia()).contains("5000").contains("Borrá de la planilla");
+    }
+
+    @Test
+    void unaCantidadCualquiera_noAvisaNada() {
+        assertThat(service.recibir(filas(255)).advertencia()).isNull();
+        assertThat(service.recibir(filas(257)).advertencia()).isNull();
+    }
+
+    /** Una fila por factura: lo que importa aca es cuantas llegan, no que traen. */
+    private static List<FilaSheetRequest> filas(int cuantas) {
+        return IntStream.rangeClosed(1, cuantas).mapToObj(i -> filaDe(null, "F" + i, TRANSITO)).toList();
     }
 }

@@ -66,7 +66,7 @@ class CompraControllerFilasTest {
     private static RecepcionFilasResponse respuesta() {
         return RecepcionFilasResponse.de(2, List.of(
                 new RecepcionFilasResponse.ResultadoFactura("900004110", "CREADA", "EN_TRANSITO", 1, 1, "registrada")),
-                List.of());
+                List.of(), null);
     }
 
     @Test

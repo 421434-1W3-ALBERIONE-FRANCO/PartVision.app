@@ -3,6 +3,7 @@ package com.partvision.compras;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.compras.domain.CompraEstado;
 import com.partvision.compras.dto.FilaSheetRequest;
+import com.partvision.compras.dto.RecepcionFilasRequest;
 import com.partvision.compras.dto.RecepcionFilasResponse;
 import com.partvision.compras.dto.RecepcionFilasResponse.FilaIgnorada;
 import com.partvision.compras.dto.RecepcionFilasResponse.ResultadoFactura;
@@ -33,6 +34,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class RecepcionFilasService {
 
+    /** Lo que devuelve "Enumerar las filas de una tabla" si no tiene la paginacion activada. */
+    static final int TOPE_SIN_PAGINACION = 256;
+
     private final CompraService compraService;
     private final ProveedorResolver proveedores;
 
@@ -59,11 +63,32 @@ public class RecepcionFilasService {
         List<ResultadoFactura> resultados = new ArrayList<>();
         porFactura.forEach((numero, filasFactura) -> resultados.add(procesar(numero, filasFactura)));
 
-        RecepcionFilasResponse respuesta = RecepcionFilasResponse.de(filas.size(), resultados, ignoradas);
+        RecepcionFilasResponse respuesta = RecepcionFilasResponse.de(filas.size(), resultados, ignoradas,
+                advertencia(filas.size()));
         log.info("Planilla recibida: {} filas, {} facturas ({} nuevas, {} actualizadas, {} conflictos, {} errores)",
                 respuesta.filasRecibidas(), respuesta.facturas(), respuesta.creadas(),
                 respuesta.actualizadas(), respuesta.conflictos(), respuesta.errores());
+        if (respuesta.advertencia() != null) log.warn("Planilla posiblemente cortada: {}", respuesta.advertencia());
         return respuesta;
+    }
+
+    /**
+     * Un envio que trae justo tantas filas como un tope casi seguro vino cortado, y lo que falta
+     * es lo de abajo de la planilla: las facturas mas nuevas. Paso del 2026-09-25 al 2026-10-13:
+     * llegaban 256 filas todos los dias y ninguna factura nueva, sin un solo error a la vista.
+     */
+    static String advertencia(int filas) {
+        if (filas == TOPE_SIN_PAGINACION) {
+            return "Llegaron exactamente " + TOPE_SIN_PAGINACION + " filas, que es lo máximo que manda «Enumerar las "
+                    + "filas de una tabla» sin la paginación activada: las filas de más abajo (las facturas más nuevas) "
+                    + "no llegaron. En esa acción: … → Configuración → Paginación activada, umbral "
+                    + RecepcionFilasRequest.MAX_FILAS + ".";
+        }
+        if (filas == RecepcionFilasRequest.MAX_FILAS) {
+            return "Llegaron " + RecepcionFilasRequest.MAX_FILAS + " filas, el máximo por envío: si la planilla tiene "
+                    + "más, las de abajo no llegaron. Borrá de la planilla las filas de facturas ya ingresadas.";
+        }
+        return null;
     }
 
     private ResultadoFactura procesar(String numero, List<FilaSheetRequest> filas) {

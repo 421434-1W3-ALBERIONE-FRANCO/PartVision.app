@@ -6,6 +6,9 @@ import java.util.List;
  * Resultado de recibir la planilla: que paso con cada factura y que filas no se usaron. Se
  * devuelve 200 aunque haya conflictos o errores, porque el resto de las facturas se proceso
  * igual: el flujo puede mirar {@code conflictos} y {@code errores} para avisar por mail.
+ *
+ * <p>{@code advertencia}: null salvo que el envio parezca cortado (llegaron justo tantas filas
+ * como el tope de Power Automate o el nuestro).
  */
 public record RecepcionFilasResponse(
         int filasRecibidas,
@@ -17,7 +20,8 @@ public record RecepcionFilasResponse(
         int conflictos,
         int errores,
         List<ResultadoFactura> resultados,
-        List<FilaIgnorada> ignoradas
+        List<FilaIgnorada> ignoradas,
+        String advertencia
 ) {
     /** {@code resultado}: CREADA, ACTUALIZADA, SIN_CAMBIOS, CONFLICTO o ERROR. */
     public record ResultadoFactura(
@@ -35,7 +39,7 @@ public record RecepcionFilasResponse(
     }
 
     public static RecepcionFilasResponse de(int filasRecibidas, List<ResultadoFactura> resultados,
-                                            List<FilaIgnorada> ignoradas) {
+                                            List<FilaIgnorada> ignoradas, String advertencia) {
         return new RecepcionFilasResponse(
                 filasRecibidas,
                 ignoradas.size(),
@@ -46,7 +50,8 @@ public record RecepcionFilasResponse(
                 contar(resultados, "CONFLICTO"),
                 contar(resultados, "ERROR"),
                 resultados,
-                ignoradas);
+                ignoradas,
+                advertencia);
     }
 
     private static int contar(List<ResultadoFactura> resultados, String tipo) {
