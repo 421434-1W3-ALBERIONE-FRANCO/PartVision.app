@@ -87,16 +87,20 @@ deploy_backend(){
   docker stop partvision-backend >/dev/null 2>&1 || true
   docker rm   partvision-backend >/dev/null 2>&1 || true
   # Limite de memoria DURO: sin esto, con --network host y sin cgroup limit,
-  # -XX:MaxRAMPercentage=75.0 de la imagen calcula el heap contra la RAM TOTAL
+  # -XX:MaxRAMPercentage de la imagen calcula el heap contra la RAM TOTAL
   # del host (3.8G) en vez de un cupo propio: una carga pesada puede tirar
   # abajo NexVia/Postgres, que comparten este mismo VPS. Con el limite puesto,
   # UseContainerSupport lo detecta solo y calcula el heap contra ESTO.
+  # 1280m con el 60% de la imagen = heap de 768 MB (el que necesita la actualizacion de
+  # precios) + 512 MB para lo que la JVM usa fuera del heap. Con 1g y 75% el heap era el
+  # mismo pero el resto no entraba: el kernel lo mato a las 6:30 el 10, 11 y 12/10/2026.
+  # Si se cambia uno de los dos numeros, revisar el otro (backend/Dockerfile).
   # Ademas del techo de memoria: tope de CPU y de procesos. El VPS tiene 2 nucleos y los
   # comparte con NexVia; una importacion de 67k filas puede tomarlos enteros y dejar al otro
   # proyecto sin atender. --cpus es un freno proporcional, no mata nada: la importacion tarda
   # un poco mas y el host sigue respondiendo. --pids-limit acota un fork-bomb accidental.
   docker run -d --name partvision-backend --restart=always \
-    --memory="${BACKEND_MEMORY:-1g}" --memory-swap="${BACKEND_MEMORY:-1g}" \
+    --memory="${BACKEND_MEMORY:-1280m}" --memory-swap="${BACKEND_MEMORY:-1280m}" \
     --cpus="${BACKEND_CPUS:-1.5}" --pids-limit="${BACKEND_PIDS:-1024}" --network host \
     --env-file "$envf" partvision-backend >/dev/null
   log "Esperando health del backend (localhost:8088)"

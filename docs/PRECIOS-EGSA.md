@@ -162,6 +162,8 @@ EGSA (67.671 filas, 170 códigos repetidos), con el mismo tope de memoria que el
   106 existe, pero la cadena RUL-REP del mismo código no). Para tenerlos todos, EGSA tendría que
   identificarse por **código + marca**, lo que cambia una regla de la base y el cruce de otras pantallas.
 - **Memoria del servidor.** Cargar 67 mil productos para compararlos llega a ~650-690 MB de los 768 MB
-  de heap del backend, tanto en la importación por pantalla como en esta recepción y en ADS. Hay poco
-  margen si coincide con otra cosa. La recomendación es subir `BACKEND_MEMORY` de 1 GB a 1,5 GB
-  (el servidor tiene 3,9 GB y la comparte con NexVia, por eso es decisión del dueño).
+  de heap del backend, tanto en la importación por pantalla como en esta recepción y en ADS. Con 1 GB
+  de contenedor eso no entraba: la JVM usa además ~320 MB fuera del heap, y el kernel la mató en la
+  corrida de ADS de las 6:30 el 10, 11 y 12/10/2026. Desde entonces el contenedor tiene 1280 MB y el
+  heap el 60% (los mismos 768 MB): ver `backend/Dockerfile` y `redeploy.sh`. Lo de fondo sigue
+  pendiente: comparar cargando solo id, código y precios en vez de los 67 mil productos enteros.
