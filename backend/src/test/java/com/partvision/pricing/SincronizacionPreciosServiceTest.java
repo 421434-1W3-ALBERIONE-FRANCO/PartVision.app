@@ -572,12 +572,20 @@ class SincronizacionPreciosServiceTest {
     @Test
     void alerta_preciosViejos() {
         historial(sincronizacion(ResultadoSincronizacion.ERROR, LocalDateTime.now(), "ADS caido."));
-        ultimaBuena(sincronizacion(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.of(2026, 9, 20, 7, 0), "ok"));
+        // Guardado en UTC: las 10:00 de UTC son las 7:00 de Buenos Aires, que es lo que lee el cliente.
+        ultimaBuena(sincronizacion(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.of(2026, 9, 20, 10, 0), "ok"));
 
         AlertaPreciosResponse a = service.alerta().orElseThrow();
 
         assertThat(a.nivel()).isEqualTo("ERROR");
         assertThat(a.mensaje()).isEqualTo("Los precios de Autopartes del Sur no se actualizan desde el 20/09 07:00. ADS caido.");
+    }
+
+    /** Pasada la medianoche de UTC todavia es el dia anterior en Buenos Aires. */
+    @Test
+    void horaDelCliente_pasaDeUtcAHoraArgentina_aunqueCambieElDia() {
+        assertThat(SincronizacionPreciosService.horaDelCliente(LocalDateTime.of(2026, 10, 3, 2, 0)))
+                .isEqualTo("02/10 23:00");
     }
 
     @Test
@@ -706,7 +714,9 @@ class SincronizacionPreciosServiceTest {
 
     @Test
     void alerta_egsaSinNingunaListaHaceDias_avisaAunqueElRobotCargueAMano() {
-        cargaAMano(EGSA, LocalDateTime.of(2026, 10, 2, 17, 49));
+        // El caso real: la ultima carga del robot quedo guardada a las 20:49 de UTC, y el aviso
+        // decia "desde el 02/10 20:49" cuando en Buenos Aires eran las 17:49.
+        cargaAMano(EGSA, LocalDateTime.of(2026, 10, 2, 20, 49));
         historial();
 
         AlertaPreciosResponse a = service.alerta().orElseThrow();
@@ -726,7 +736,8 @@ class SincronizacionPreciosServiceTest {
     @Test
     void alerta_egsaConUnaListaViejaYUnErrorReciente_diceElMotivoDeLaUltima() {
         historialEgsa(deEgsa(ResultadoSincronizacion.ERROR, LocalDateTime.now().minusHours(5), "La lista no tiene el formato."));
-        SincronizacionPrecio viejaBuena = deEgsa(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.of(2026, 9, 28, 7, 0), "ok");
+        // 10:00 de UTC = 7:00 de Buenos Aires.
+        SincronizacionPrecio viejaBuena = deEgsa(ResultadoSincronizacion.ACTUALIZADA, LocalDateTime.of(2026, 9, 28, 10, 0), "ok");
         when(syncRepo.findFirstByProveedorAndResultadoInOrderByIniciadaEnDesc(eq(EGSA), any())).thenReturn(Optional.of(viejaBuena));
 
         assertThat(service.alerta().orElseThrow().mensaje())

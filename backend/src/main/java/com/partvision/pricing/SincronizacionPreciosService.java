@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Executor;
@@ -45,6 +47,8 @@ public class SincronizacionPreciosService {
     private static final int MAX_REVISIONES_LISTADAS = 1000;
     private static final String CARGA_A_MANO = "CSV_IMPORT";
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+    /** Las fechas se guardan en UTC; en los avisos van con la hora que ve el cliente. */
+    private static final ZoneId ZONA_CLIENTE = ZoneId.of("America/Argentina/Buenos_Aires");
     private static final List<ResultadoSincronizacion> BUENAS =
             List.of(ResultadoSincronizacion.ACTUALIZADA, ResultadoSincronizacion.SIN_CAMBIOS);
 
@@ -273,6 +277,10 @@ public class SincronizacionPreciosService {
         return manual != null && manual.isAfter(sync) ? manual : sync;
     }
 
+    static String horaDelCliente(LocalDateTime utc) {
+        return utc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZONA_CLIENTE).format(FECHA);
+    }
+
     private AlertaPreciosResponse alerta(FuenteLista f, List<SincronizacionPrecio> recientes, LocalDateTime ultimaOk,
                                          long pendientes) {
         // ADS sin credenciales: la funcion esta apagada, no hay nada que avisar.
@@ -286,7 +294,7 @@ public class SincronizacionPreciosService {
         if (ultimaOk != null && ultimaOk.isBefore(LocalDateTime.now().minusDays(f.diasSinActualizar()))) {
             String motivo = ultima == null || ultima.getMensaje() == null ? "" : " " + ultima.getMensaje();
             return AlertaPreciosResponse.error("Los precios de " + f.proveedor() + " no se actualizan desde el "
-                    + ultimaOk.format(FECHA) + "." + motivo);
+                    + horaDelCliente(ultimaOk) + "." + motivo);
         }
         if (ultima == null) return null;
         if (ultima.getResultado() == ResultadoSincronizacion.ERROR) {
