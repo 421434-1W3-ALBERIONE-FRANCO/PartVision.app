@@ -117,17 +117,23 @@ Lo hace el administrador una sola vez. B2 tiene **10 GB gratis**; con 11 backups
 ## La copia en la PC
 
 `bajar-backup.ps1` baja el backup más nuevo por SSH (usa el alias `partvision` de `~/.ssh/config`), comprueba que llegue
-completo y conserva los últimos 7. Lo corre la tarea programada **"PartVision - bajar backup"**, todos los días a las
-12:00; si la PC está apagada a esa hora, Windows la corre apenas se prende. Lo que hace queda en
-`respaldos\nocturnos\bajadas.log`.
+completo y conserva los últimos 7. Lo corre la tarea programada **"PartVision - bajar backup"** **cada 2 horas y al
+iniciar sesión**. Si el backup más nuevo ya está, no baja nada, así que intentar seguido no cuesta. Lo que hace queda en
+`respaldos\nocturnos\bajadas.log` (un error anota también la línea del script).
+
+Por qué así y no "una vez por día": la primera versión corría a las 12:00 con "ejecutar apenas se pueda si se saltó", y
+el 14 y el 15/10 Windows anotó las dos corridas como perdidas (la PC estaba suspendida) y no las recuperó nunca. Además,
+dentro de la tarea programada `ssh.exe` se quedaba esperando en la consola oculta y no terminaba: por eso el script corre
+`ssh`/`scp` con la entrada cerrada y un tope de tiempo.
 
 Para crearla de nuevo (PowerShell, sin permisos de administrador):
 
 ```powershell
 $accion = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\Users\alber\Desktop\trabajo\PartVision\PartVision.app\bajar-backup.ps1"'
-$cuando = New-ScheduledTaskTrigger -Daily -At 12:00
-$opciones = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
-Register-ScheduledTask -TaskName 'PartVision - bajar backup' -Action $accion -Trigger $cuando -Settings $opciones
+$cadaDosHoras = New-ScheduledTaskTrigger -Once -At (Get-Date '08:00') -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Days 3650)
+$alEntrar = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"; $alEntrar.Delay = 'PT5M'
+$opciones = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName 'PartVision - bajar backup' -Action $accion -Trigger @($cadaDosHoras, $alEntrar) -Settings $opciones
 ```
 
 ## En la mudanza
