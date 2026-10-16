@@ -433,7 +433,9 @@ adelante de la descripción: `bie0199 biela`, `jt1232 junta tapa om926`. Desde e
   ejemplo "BALANCIN MITSUBISHI - 4D56 ADMISION", idéntica al BV19129A), aparece "Se parece a
   BV19129A (100%)". Asociarla siempre pide confirmación mostrando la descripción del catálogo:
   dos descripciones parecidas pueden ser piezas de otra medida u otro motor. Si un producto del
-  proveedor de la factura se parece casi tanto como el mejor, se sugiere ese.
+  proveedor de la factura se parece casi tanto como el mejor, se sugiere ese. Estas sugerencias
+  aparecen **unos segundos después** de abrir la lista: se calculan línea por línea (~150 ms cada
+  una con el índice GiST de V35), para que la lista se vea enseguida.
 
 Medido el 2026-10-15 sobre las 81 líneas importadas pendientes: ninguna tenía todavía un `IMP-`
 creado, y 53 se parecían en un 60% o más a un producto que ya existía.

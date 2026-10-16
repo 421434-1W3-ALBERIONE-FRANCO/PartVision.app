@@ -73,10 +73,21 @@ public class ImportadosService {
                 : productoRepo.findBySkuIn(codigos).stream()
                         .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase(Locale.ROOT)));
 
-        return pagina.map(linea -> {
-            ImportadoPendienteResponse.Sugerencia porCodigo = sugerir(linea, porSku);
-            return ImportadoPendienteResponse.from(linea, porCodigo != null ? porCodigo : sugerirPorDescripcion(linea));
-        });
+        // Solo la sugerencia por codigo, que es inmediata. La de descripcion parecida la pide el
+        // panel linea por linea despues de mostrar la lista (ver parecidoPorDescripcion): calcular
+        // 20 juntas demoraba la pantalla varios segundos.
+        return pagina.map(linea -> ImportadoPendienteResponse.from(linea, sugerir(linea, porSku)));
+    }
+
+    /**
+     * El producto de descripcion mas parecida a una linea que llego sin codigo, o vacio si no
+     * hay ninguno que se parezca lo suficiente, la linea ya se resolvio o no es un importado.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<ImportadoPendienteResponse.Sugerencia> parecidoPorDescripcion(Long lineaId) {
+        return lineaRepo.findById(lineaId)
+                .filter(l -> LectorSheet.CODIGO_IMPORTADO.equals(l.getCodigo()) && l.getProducto() == null)
+                .map(this::sugerirPorDescripcion);
     }
 
     /**

@@ -2,7 +2,8 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { Compra, CompraLinea, ImportadoPendiente, ProductoListItem, Ubicacion } from '../core/models';
+import { catchError, from, map, mergeMap, of } from 'rxjs';
+import { Compra, CompraLinea, ImportadoPendiente, ProductoListItem, SugerenciaImportado, Ubicacion } from '../core/models';
 import { CompraService, LineaUbicacionAsignacion } from '../core/compra.service';
 import { UbicacionService } from '../core/ubicacion.service';
 import { ProductoService } from '../core/producto.service';
@@ -1057,8 +1058,28 @@ export class Compras implements OnInit {
         this.importadosPaginas.set(res.totalPages);
         this.importadosPagina.set(pagina);
         this.cargandoImportados.set(false);
+        this.completarParecidos(pagina, res.content);
       },
       error: () => this.cargandoImportados.set(false),
+    });
+  }
+
+  /**
+   * Las sugerencias por descripcion parecida se piden despues de mostrar la lista, de a dos por
+   * vez: calcular las 20 juntas demoraba la pantalla. Van apareciendo a medida que llegan. Si
+   * mientras tanto se cambio de pagina, lo que llega tarde se descarta.
+   */
+  private completarParecidos(pagina: number, lineas: ImportadoPendiente[]): void {
+    const sinSugerencia = lineas.filter(i => !i.sugerencia).map(i => i.lineaId);
+    from(sinSugerencia).pipe(
+      mergeMap(id => this.compraService.parecidoImportado(id).pipe(
+        map(sug => ({ id, sug })),
+        catchError(() => of({ id, sug: null as SugerenciaImportado | null })),
+      ), 2),
+    ).subscribe(({ id, sug }) => {
+      if (!sug || this.importadosPagina() !== pagina) return;
+      this.importados.update(lista =>
+        lista.map(i => i.lineaId === id && !i.sugerencia ? { ...i, sugerencia: sug } : i));
     });
   }
 

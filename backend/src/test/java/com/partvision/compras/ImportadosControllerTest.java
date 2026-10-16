@@ -72,6 +72,26 @@ class ImportadosControllerTest {
     }
 
     @Test
+    void parecido_devuelveLaSugerencia() throws Exception {
+        when(importadosService.parecidoPorDescripcion(40L)).thenReturn(java.util.Optional.of(
+                new ImportadoPendienteResponse.Sugerencia(900L, "BV19129A", "BALANCIN MITSUBISHI - 4D56 \"ADMISION\"",
+                        "Autopartes del Sur", false, "DESCRIPCION", 100)));
+
+        mvc.perform(get(URL + "/40/parecido"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("BV19129A"))
+                .andExpect(jsonPath("$.motivo").value("DESCRIPCION"))
+                .andExpect(jsonPath("$.parecido").value(100));
+    }
+
+    @Test
+    void parecido_sinNingunoParecido_204() throws Exception {
+        when(importadosService.parecidoPorDescripcion(41L)).thenReturn(java.util.Optional.empty());
+
+        mvc.perform(get(URL + "/41/parecido")).andExpect(status().isNoContent());
+    }
+
+    @Test
     void skuSugerido_devuelveElProximoLibre() throws Exception {
         when(importadosService.proponerSku()).thenReturn("IMP-00001");
 

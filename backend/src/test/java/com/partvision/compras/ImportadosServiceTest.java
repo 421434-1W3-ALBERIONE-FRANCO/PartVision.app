@@ -200,8 +200,45 @@ class ImportadosServiceTest {
     private ImportadoPendienteResponse.Sugerencia sugerenciaDe(String descripcion) {
         CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
         linea.setDescripcion(descripcion);
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(linea));
+        return service.parecidoPorDescripcion(40L).orElse(null);
+    }
+
+    @Test
+    void parecido_lineaYaResuelta_noBuscaNada() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        linea.setProducto(producto(1L, "IMP-00001"));
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(linea));
+
+        assertThat(service.parecidoPorDescripcion(40L)).isEmpty();
+        verify(productoRepo, never()).parecidosPorDescripcion(anyString(), eq(5));
+    }
+
+    @Test
+    void parecido_lineaConCodigo_noEsUnImportado() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        linea.setCodigo("PK2000");
+        when(lineaRepo.findById(40L)).thenReturn(Optional.of(linea));
+
+        assertThat(service.parecidoPorDescripcion(40L)).isEmpty();
+    }
+
+    @Test
+    void parecido_lineaInexistente_vacio() {
+        when(lineaRepo.findById(99L)).thenReturn(Optional.empty());
+
+        assertThat(service.parecidoPorDescripcion(99L)).isEmpty();
+    }
+
+    /** La lista sale enseguida: la descripcion parecida la pide el panel despues, linea por linea. */
+    @Test
+    void listado_noBuscaPorDescripcion() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        linea.setDescripcion("junta tapa cilindro fiat");
         enLaListaDeImportados(linea);
-        return service.listarPendientes(PageRequest.of(0, 20)).getContent().get(0).sugerencia();
+
+        assertThat(service.listarPendientes(PageRequest.of(0, 20)).getContent().get(0).sugerencia()).isNull();
+        verify(productoRepo, never()).parecidosPorDescripcion(anyString(), eq(5));
     }
 
     /** Caso real del 2026-10-15: la descripcion de la factura es identica a la del BV19129A. */

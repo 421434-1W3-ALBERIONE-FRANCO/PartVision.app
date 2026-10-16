@@ -27,9 +27,10 @@ public interface ProductoRepositoryCustom {
     Page<Producto> buscarInteligenteConStock(List<String> tokens, String rawQuery, boolean tieneStock, Pageable pageable);
 
     /**
-     * Los productos con la descripcion mas parecida a {@code texto} (trigramas, indice
-     * idx_productos_descripcion_trgm), de mas a menos parecido, con el parecido de 0 a 1. Trae
-     * solo los que superan el umbral de pg_trgm (0,3): quien llama decide desde cuanto sirve.
+     * Los {@code limite} productos con la descripcion mas parecida a {@code texto} (trigramas,
+     * indice GiST ix_productos_descripcion_gist), de mas a menos parecido, con el parecido de 0
+     * a 1. Siempre trae los N mas cercanos, aunque se parezcan poco: quien llama decide desde
+     * cuanto sirve.
      */
     List<Parecido> parecidosPorDescripcion(String texto, int limite);
 

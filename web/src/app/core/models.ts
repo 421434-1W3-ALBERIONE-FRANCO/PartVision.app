@@ -357,7 +357,10 @@ export interface ImportadoPendiente {
   estadoCompra: 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
   descripcion: string | null;
   cantidad: number;
-  /** Producto del catalogo que podria ser esta pieza, deducido del codigo de la descripcion. */
+  /**
+   * Producto del catalogo que podria ser esta pieza. La lista trae la que sale del codigo de la
+   * descripcion; la de descripcion parecida la completa el panel despues (parecidoImportado).
+   */
   sugerencia: SugerenciaImportado | null;
 }
 

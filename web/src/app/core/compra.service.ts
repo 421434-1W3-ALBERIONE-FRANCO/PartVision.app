@@ -1,9 +1,9 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
 import { API_BASE_URL } from './api.config';
-import { Compra, ImportadoPendiente, ImportadoResuelto, Page } from './models';
+import { Compra, ImportadoPendiente, ImportadoResuelto, Page, SugerenciaImportado } from './models';
 
 export interface LineaUbicacionAsignacion {
   lineaId: number;
@@ -43,6 +43,15 @@ export class CompraService {
   }
 
   // --- importados: lineas que llegaron sin codigo ---
+
+  /**
+   * El producto de descripcion mas parecida a una linea sin codigo, o null si no hay ninguno
+   * (204). Se pide linea por linea despues de mostrar la lista, para no demorarla.
+   */
+  parecidoImportado(lineaId: number): Observable<SugerenciaImportado | null> {
+    return this.http.get<SugerenciaImportado>(`${this.base}/importados/${lineaId}/parecido`)
+      .pipe(map(s => s ?? null));
+  }
 
   importados(page = 0, size = 20): Observable<Page<ImportadoPendiente>> {
     const params = new HttpParams().set('page', page).set('size', size);

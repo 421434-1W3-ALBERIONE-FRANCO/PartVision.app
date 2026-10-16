@@ -43,12 +43,14 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
         if (texto == null || texto.isBlank()) {
             return List.of();
         }
-        // El operador % usa el indice trigram y deja afuera lo que no llega a 0,3; similarity()
-        // da el numero para ordenar. pg_trgm compara sin distinguir mayusculas.
+        // Vecinos mas cercanos por trigramas (<-> es 1 - similarity) con el indice GiST de V35:
+        // pide directamente los N mas parecidos en vez de juntar todos los que superan un umbral,
+        // que con palabras comunes eran miles y tardaba segundos. Sin otra clave de orden: con una
+        // segunda columna Postgres ya no usa el indice para ordenar.
         @SuppressWarnings("unchecked")
         List<Object[]> filas = em.createNativeQuery(
-                        "SELECT p.id, similarity(p.descripcion, :texto) AS parecido FROM productos p "
-                                + "WHERE p.descripcion % :texto ORDER BY parecido DESC, p.id LIMIT :limite")
+                        "SELECT p.id, 1 - (p.descripcion <-> :texto) AS parecido FROM productos p "
+                                + "ORDER BY p.descripcion <-> :texto LIMIT :limite")
                 .setParameter("texto", texto.trim())
                 .setParameter("limite", limite)
                 .getResultList();

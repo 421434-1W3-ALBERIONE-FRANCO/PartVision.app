@@ -42,6 +42,17 @@ public class ImportadosController {
         return Map.of("sku", importadosService.proponerSku());
     }
 
+    /**
+     * El producto de descripcion mas parecida a la linea, para sugerirlo. El panel lo pide linea
+     * por linea despues de mostrar la lista. 204 si no hay ninguno que se parezca lo suficiente.
+     */
+    @GetMapping("/{lineaId}/parecido")
+    public ResponseEntity<ImportadoPendienteResponse.Sugerencia> parecido(@PathVariable Long lineaId) {
+        return importadosService.parecidoPorDescripcion(lineaId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
     @PostMapping("/{lineaId}/alta")
     public ResponseEntity<ImportadoResueltoResponse> alta(
             @PathVariable Long lineaId,
