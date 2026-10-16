@@ -5,6 +5,7 @@ import com.partvision.catalog.domain.ProductoEstado;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.catalog.repository.ProductoRepositoryCustom;
 import com.partvision.catalog.service.ProductoService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.ResourceNotFoundException;
@@ -183,6 +184,97 @@ class ImportadosServiceTest {
         assertThat(sugerencia.productoId()).isEqualTo(900L);
         assertThat(sugerencia.proveedor()).isEqualTo("Autopartes del Sur");
         assertThat(sugerencia.mismoProveedor()).isFalse();
+    }
+
+    // --- sugerencia: la descripcion se parece a la de un producto ---
+
+    private void enLaListaDeImportados(CompraLinea linea) {
+        when(lineaRepo.findSinProductoPorCodigo(eq("IMPORTADOS"), any())).thenReturn(new PageImpl<>(List.of(linea)));
+    }
+
+    private static Producto conProveedor(Producto p, String proveedor) {
+        p.setProveedor(proveedor);
+        return p;
+    }
+
+    private ImportadoPendienteResponse.Sugerencia sugerenciaDe(String descripcion) {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        linea.setDescripcion(descripcion);
+        enLaListaDeImportados(linea);
+        return service.listarPendientes(PageRequest.of(0, 20)).getContent().get(0).sugerencia();
+    }
+
+    /** Caso real del 2026-10-15: la descripcion de la factura es identica a la del BV19129A. */
+    @Test
+    void sugerencia_sinCodigoPeroConLaMismaDescripcion_ofreceElProducto() {
+        when(productoRepo.parecidosPorDescripcion("BALANCIN MITSUBISHI - 4D56 \"ADMISION\"", 5))
+                .thenReturn(List.of(new ProductoRepositoryCustom.Parecido(900L, 1.0)));
+        when(productoRepo.findAllById(List.of(900L)))
+                .thenReturn(List.of(conProveedor(producto(900L, "BV19129A"), "Autopartes del Sur")));
+
+        var sugerencia = sugerenciaDe("BALANCIN MITSUBISHI - 4D56 \"ADMISION\"");
+
+        assertThat(sugerencia.motivo()).isEqualTo(ImportadoPendienteResponse.Sugerencia.POR_DESCRIPCION);
+        assertThat(sugerencia.sku()).isEqualTo("BV19129A");
+        assertThat(sugerencia.parecido()).isEqualTo(100);
+        assertThat(sugerencia.mismoProveedor()).isFalse();
+    }
+
+    /** Por debajo de 0,5 ya aparecen piezas de otro motor u otra medida: mejor no sugerir. */
+    @Test
+    void sugerencia_porDescripcionPocoParecida_noOfreceNada() {
+        when(productoRepo.parecidosPorDescripcion(anyString(), eq(5)))
+                .thenReturn(List.of(new ProductoRepositoryCustom.Parecido(900L, 0.45)));
+
+        assertThat(sugerenciaDe("aros rectificacion")).isNull();
+        verify(productoRepo, never()).findAllById(any());
+    }
+
+    /** La misma pieza suele estar en los dos proveedores: si el de la factura empata casi, gana. */
+    @Test
+    void sugerencia_porDescripcion_prefiereElDelProveedorSiSeParecesCasiIgual() {
+        when(productoRepo.parecidosPorDescripcion(anyString(), eq(5))).thenReturn(List.of(
+                new ProductoRepositoryCustom.Parecido(900L, 0.82), new ProductoRepositoryCustom.Parecido(901L, 0.75)));
+        when(productoRepo.findAllById(any())).thenReturn(List.of(
+                conProveedor(producto(900L, "JUN100"), "Autopartes del Sur"), conProveedor(producto(901L, "100-J"), "EGSA")));
+
+        var sugerencia = sugerenciaDe("junta tapa cilindro");
+
+        assertThat(sugerencia.productoId()).isEqualTo(901L);
+        assertThat(sugerencia.mismoProveedor()).isTrue();
+        assertThat(sugerencia.parecido()).isEqualTo(75);
+    }
+
+    @Test
+    void sugerencia_porDescripcion_siElDelProveedorQuedaLejos_ganaElMasParecido() {
+        when(productoRepo.parecidosPorDescripcion(anyString(), eq(5))).thenReturn(List.of(
+                new ProductoRepositoryCustom.Parecido(900L, 0.9), new ProductoRepositoryCustom.Parecido(901L, 0.6)));
+        when(productoRepo.findAllById(any())).thenReturn(List.of(
+                conProveedor(producto(900L, "JUN100"), "Autopartes del Sur"), conProveedor(producto(901L, "100-J"), "EGSA")));
+
+        assertThat(sugerenciaDe("junta tapa cilindro").productoId()).isEqualTo(900L);
+    }
+
+    @Test
+    void sugerencia_porDescripcion_elProductoYaNoExiste_noOfreceNada() {
+        when(productoRepo.parecidosPorDescripcion(anyString(), eq(5)))
+                .thenReturn(List.of(new ProductoRepositoryCustom.Parecido(900L, 0.9)));
+        when(productoRepo.findAllById(any())).thenReturn(List.of());
+
+        assertThat(sugerenciaDe("junta tapa cilindro")).isNull();
+    }
+
+    @Test
+    void sugerencia_porCodigo_noBuscaPorDescripcion() {
+        CompraLinea linea = importado(CompraEstado.EN_TRANSITO);
+        enLaListaDeImportados(linea);
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(conProveedor(producto(901L, "BIE0381"), "EGSA")));
+
+        var sugerencia = service.listarPendientes(PageRequest.of(0, 20)).getContent().get(0).sugerencia();
+
+        assertThat(sugerencia.motivo()).isEqualTo(ImportadoPendienteResponse.Sugerencia.POR_CODIGO);
+        assertThat(sugerencia.parecido()).isNull();
+        verify(productoRepo, never()).parecidosPorDescripcion(anyString(), eq(5));
     }
 
     /** Sin codigo reconocible no se consulta el catalogo: son la mayoria de las lineas. */

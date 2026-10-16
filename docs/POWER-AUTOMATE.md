@@ -417,6 +417,35 @@ Una línea ya resuelta desaparece de la lista y no se puede resolver dos veces (
 stock dos veces). Si después la planilla trae el proveedor de esa factura, el producto que se
 asoció a mano se respeta.
 
+### El código que el cliente anota en la descripción
+
+Muchas veces la planilla dice "Importado" en la columna Código pero el cliente anotó el código
+adelante de la descripción: `bie0199 biela`, `jt1232 junta tapa om926`. Desde el 2026-10-16:
+
+- **Si ese código es un producto del mismo proveedor de la factura, la línea se asocia sola al
+  llegar** y ni aparece en Importados. Un código existe una sola vez por proveedor, así que ahí no
+  hay duda. La línea queda atada al **producto original**, y cuando llega la lista de precios del
+  proveedor actualiza ese mismo producto: no se crea un `IMP-` que después conviva con el
+  verdadero.
+- **Si el código existe solo en el otro proveedor**, no se asocia sola (puede ser otra pieza con
+  el mismo código): aparece como sugerencia en Importados, en ámbar, y asociarla pide confirmación.
+- **Si no hay código pero la descripción se parece mucho** a la de un producto (50% o más, por
+  ejemplo "BALANCIN MITSUBISHI - 4D56 ADMISION", idéntica al BV19129A), aparece "Se parece a
+  BV19129A (100%)". Asociarla siempre pide confirmación mostrando la descripción del catálogo:
+  dos descripciones parecidas pueden ser piezas de otra medida u otro motor. Si un producto del
+  proveedor de la factura se parece casi tanto como el mejor, se sugiere ese.
+
+Medido el 2026-10-15 sobre las 81 líneas importadas pendientes: ninguna tenía todavía un `IMP-`
+creado, y 53 se parecían en un 60% o más a un producto que ya existía.
+
+### Las líneas se vuelven a buscar en cada envío
+
+El catálogo cambia todos los días (listas de precios, altas a mano). Una línea que llegó sin
+producto se vuelve a buscar en **cada envío de la planilla**: si el producto apareció, se vincula
+y la factura vuelve como `ACTUALIZADA` con "N línea(s) se vincularon con el catálogo". Solo en
+compras que no están ingresadas: en una ingresada, vincular la línea pide una ubicación para
+cargar su stock, y eso se hace desde Importados.
+
 ## Lo que todavía no existe
 
 - **Reconocer solo un importado que se repite.** La segunda vez que llega la misma pieza sin

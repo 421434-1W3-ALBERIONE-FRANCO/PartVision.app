@@ -22,11 +22,11 @@ public record ImportadoPendienteResponse(
         Sugerencia sugerencia
 ) {
     /**
-     * Un producto del catalogo que podria ser esta pieza, deducido del codigo que la planilla
-     * escribe al principio de la descripcion ("bie0199 biela"). Es una sugerencia y nada mas:
-     * se muestra para que una persona decida, no se asocia sola. Con ~10.300 SKU repetidos uno
-     * por proveedor, el mismo codigo devuelve dos productos distintos, y acertarle al que no es
-     * carga el stock en el producto equivocado.
+     * Un producto del catalogo que podria ser esta pieza. Es una sugerencia y nada mas: se
+     * muestra para que una persona decida. Con ~10.300 SKU repetidos uno por proveedor, el
+     * mismo codigo devuelve dos productos distintos, y acertarle al que no es carga el stock en
+     * el producto equivocado. (Cuando el codigo de la descripcion es del MISMO proveedor de la
+     * factura no hay duda, y la linea ya se asocia sola al llegar: no aparece aca.)
      */
     public record Sugerencia(
             Long productoId,
@@ -34,16 +34,32 @@ public record ImportadoPendienteResponse(
             String descripcion,
             String proveedor,
             /** El proveedor del producto coincide con el de la factura. Si no, ojo. */
-            boolean mismoProveedor
+            boolean mismoProveedor,
+            /**
+             * CODIGO: el codigo que el cliente anoto al principio de la descripcion ("bie0199
+             * biela") existe en el catalogo. DESCRIPCION: no hay codigo, pero la descripcion se
+             * parece mucho a la de este producto.
+             */
+            String motivo,
+            /** Cuanto se parecen las descripciones, de 0 a 100; null si vino por el codigo. */
+            Integer parecido
     ) {
+        public static final String POR_CODIGO = "CODIGO";
+        public static final String POR_DESCRIPCION = "DESCRIPCION";
+
         public static Sugerencia from(Producto producto, String proveedorFactura) {
-            return new Sugerencia(
-                    producto.getId(),
-                    producto.getSku(),
-                    producto.getDescripcion(),
-                    producto.getProveedor(),
-                    producto.getProveedor() != null
-                            && producto.getProveedor().equalsIgnoreCase(proveedorFactura));
+            return new Sugerencia(producto.getId(), producto.getSku(), producto.getDescripcion(),
+                    producto.getProveedor(), mismoProveedor(producto, proveedorFactura), POR_CODIGO, null);
+        }
+
+        public static Sugerencia porDescripcion(Producto producto, String proveedorFactura, double parecido) {
+            return new Sugerencia(producto.getId(), producto.getSku(), producto.getDescripcion(),
+                    producto.getProveedor(), mismoProveedor(producto, proveedorFactura), POR_DESCRIPCION,
+                    (int) Math.round(parecido * 100));
+        }
+
+        private static boolean mismoProveedor(Producto producto, String proveedorFactura) {
+            return producto.getProveedor() != null && producto.getProveedor().equalsIgnoreCase(proveedorFactura);
         }
     }
 

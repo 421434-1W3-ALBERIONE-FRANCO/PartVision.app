@@ -6,6 +6,7 @@ import com.partvision.catalog.domain.SkuImportado;
 import com.partvision.catalog.dto.ProductoRequest;
 import com.partvision.catalog.dto.ProductoResponse;
 import com.partvision.catalog.repository.ProductoRepository;
+import com.partvision.catalog.repository.ProductoRepositoryCustom;
 import com.partvision.catalog.service.ProductoService;
 import com.partvision.common.exception.BusinessException;
 import com.partvision.common.exception.ResourceNotFoundException;
@@ -72,7 +73,57 @@ public class ImportadosService {
                 : productoRepo.findBySkuIn(codigos).stream()
                         .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase(Locale.ROOT)));
 
-        return pagina.map(linea -> ImportadoPendienteResponse.from(linea, sugerir(linea, porSku)));
+        return pagina.map(linea -> {
+            ImportadoPendienteResponse.Sugerencia porCodigo = sugerir(linea, porSku);
+            return ImportadoPendienteResponse.from(linea, porCodigo != null ? porCodigo : sugerirPorDescripcion(linea));
+        });
+    }
+
+    /**
+     * Desde cuanto se ofrece un producto por descripcion parecida (0 a 1). Medido el 2026-10-15
+     * sobre las 81 lineas importadas: 53 superaban 0,6 contra un producto que ya existia (por
+     * ejemplo "BALANCIN MITSUBISHI - 4D56 ADMISION", identica al BV19129A de ADS). Por debajo de
+     * 0,5 ya aparecen piezas de otro motor u otra medida.
+     */
+    static final double PARECIDO_MINIMO = 0.5;
+
+    /**
+     * Si un producto del proveedor de la factura se parece casi tanto como el mejor, gana: la
+     * misma pieza suele estar en los dos proveedores con la misma descripcion, y asociarla al de
+     * otro proveedor carga el stock en el producto que no es.
+     */
+    private static final double VENTAJA_DEL_PROVEEDOR = 0.1;
+
+    /**
+     * Sin codigo en la descripcion, el producto del catalogo con la descripcion mas parecida.
+     * Es solo una sugerencia: dos descripciones parecidas pueden ser piezas distintas (otra
+     * medida, otro motor), asi que la asocia una persona y el panel le muestra la descripcion
+     * del catalogo antes de confirmar.
+     */
+    private ImportadoPendienteResponse.Sugerencia sugerirPorDescripcion(CompraLinea linea) {
+        List<ProductoRepositoryCustom.Parecido> parecidos = productoRepo.parecidosPorDescripcion(linea.getDescripcion(), 5)
+                .stream().filter(p -> p.parecido() >= PARECIDO_MINIMO).toList();
+        if (parecidos.isEmpty()) {
+            return null;
+        }
+        Map<Long, Producto> productos = productoRepo.findAllById(
+                        parecidos.stream().map(ProductoRepositoryCustom.Parecido::productoId).toList())
+                .stream().collect(Collectors.toMap(Producto::getId, p -> p));
+        String proveedor = linea.getCompra().getProveedor();
+        ProductoRepositoryCustom.Parecido mejor = parecidos.get(0);
+        ProductoRepositoryCustom.Parecido elegido = parecidos.stream()
+                .filter(p -> productos.containsKey(p.productoId())
+                        && esDe(productos.get(p.productoId()), proveedor)
+                        && p.parecido() >= mejor.parecido() - VENTAJA_DEL_PROVEEDOR)
+                .findFirst()
+                .orElse(mejor);
+        Producto producto = productos.get(elegido.productoId());
+        return producto == null ? null
+                : ImportadoPendienteResponse.Sugerencia.porDescripcion(producto, proveedor, elegido.parecido());
+    }
+
+    private static boolean esDe(Producto producto, String proveedor) {
+        return proveedor != null && producto.getProveedor() != null && producto.getProveedor().equalsIgnoreCase(proveedor);
     }
 
     /**

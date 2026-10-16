@@ -25,4 +25,13 @@ public interface ProductoRepositoryCustom {
      * ({@code tieneStock=true} = solo productos con stock > 0, {@code false} = sin stock).
      */
     Page<Producto> buscarInteligenteConStock(List<String> tokens, String rawQuery, boolean tieneStock, Pageable pageable);
+
+    /**
+     * Los productos con la descripcion mas parecida a {@code texto} (trigramas, indice
+     * idx_productos_descripcion_trgm), de mas a menos parecido, con el parecido de 0 a 1. Trae
+     * solo los que superan el umbral de pg_trgm (0,3): quien llama decide desde cuanto sirve.
+     */
+    List<Parecido> parecidosPorDescripcion(String texto, int limite);
+
+    record Parecido(Long productoId, double parecido) {}
 }

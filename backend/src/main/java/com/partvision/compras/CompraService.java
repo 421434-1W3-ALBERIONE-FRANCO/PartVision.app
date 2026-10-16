@@ -119,6 +119,16 @@ public class CompraService {
             compra.setEstadoPlanilla(factura.estado());
         }
 
+        // El catalogo cambia todos los dias (listas de precios, altas a mano): una linea que llego
+        // sin producto puede tenerlo ahora. En una compra ya ingresada no: esa linea necesita una
+        // ubicacion para cargar su stock, y eso se resuelve desde Importados.
+        if (compra.getEstado() != CompraEstado.INGRESADA) {
+            int vinculadas = asignarProductos(compra.getLineas(), compra.getProveedor());
+            if (vinculadas > 0) {
+                cambios.add(vinculadas + " linea(s) se vincularon con el catalogo");
+            }
+        }
+
         // La planilla pisa el estado solo cuando la planilla CAMBIA. Si no cambio y igual
         // diferimos, es porque alguien lo movio desde el panel: eso se respeta, o el cambio
         // hecho a mano se desharia solo en el siguiente envio, quince minutos despues.
@@ -369,20 +379,60 @@ public class CompraService {
      * Busca el producto de las lineas que todavia no lo tienen. Las que ya lo tienen no se
      * tocan: puede ser un importado que alguien asocio a mano, y el codigo IMPORTADOS no
      * encontraria nada y le borraria el producto.
+     *
+     * <p>Si el codigo no lleva a ningun producto (la planilla escribe "Importado" en vez del
+     * codigo), se prueba con el codigo que el cliente anota al principio de la descripcion
+     * ("bie0199 biela"), pero solo si es un producto DEL PROVEEDOR de la factura: como un codigo
+     * existe una sola vez por proveedor, ahi no hay duda. Asi la linea queda atada al producto
+     * original y la lista de precios lo actualiza a el, en vez de terminar dado de alta como un
+     * IMP- que despues convive con el verdadero. Si el codigo es de otro proveedor no se asocia
+     * solo: queda como sugerencia en Importados, para que decida una persona.
+     *
+     * @return cuantas lineas consiguieron producto
      */
-    private void asignarProductos(List<CompraLinea> lineas, String proveedor) {
+    private int asignarProductos(List<CompraLinea> lineas, String proveedor) {
         List<CompraLinea> sinProducto = lineas.stream().filter(l -> l.getProducto() == null).toList();
-        Set<String> codigos = sinProducto.stream()
-                .map(l -> Objects.toString(l.getCodigo(), "").toUpperCase())
-                .collect(Collectors.toSet());
+        if (sinProducto.isEmpty()) {
+            return 0;
+        }
+        Set<String> codigos = new HashSet<>();
+        for (CompraLinea linea : sinProducto) {
+            codigos.add(Objects.toString(linea.getCodigo(), "").toUpperCase());
+            String enLaDescripcion = ImportadosService.codigoEnLaDescripcion(linea.getDescripcion());
+            if (enLaDescripcion != null) {
+                codigos.add(enLaDescripcion);
+            }
+        }
 
         Map<String, List<Producto>> candidatosPorSku = productoRepo.findBySkuIn(codigos).stream()
                 .collect(Collectors.groupingBy(p -> p.getSku().toUpperCase()));
 
+        int vinculadas = 0;
         for (CompraLinea linea : sinProducto) {
             String codigo = Objects.toString(linea.getCodigo(), "").toUpperCase();
-            linea.setProducto(elegirProducto(candidatosPorSku.getOrDefault(codigo, List.of()), proveedor));
+            Producto producto = elegirProducto(candidatosPorSku.getOrDefault(codigo, List.of()), proveedor);
+            if (producto == null) {
+                String enLaDescripcion = ImportadosService.codigoEnLaDescripcion(linea.getDescripcion());
+                producto = delProveedorDeLaFactura(
+                        enLaDescripcion == null ? List.of() : candidatosPorSku.getOrDefault(enLaDescripcion, List.of()),
+                        proveedor);
+            }
+            if (producto != null) {
+                linea.setProducto(producto);
+                vinculadas++;
+            }
         }
+        return vinculadas;
+    }
+
+    private static Producto delProveedorDeLaFactura(List<Producto> candidatos, String proveedor) {
+        if (proveedor == null) {
+            return null;
+        }
+        List<Producto> delProveedor = candidatos.stream()
+                .filter(p -> p.getProveedor() != null && p.getProveedor().trim().equalsIgnoreCase(proveedor.trim()))
+                .toList();
+        return delProveedor.size() == 1 ? delProveedor.get(0) : null;
     }
 
     /** El panel y la planilla no dicen lo mismo: alguien movio el estado a mano. */

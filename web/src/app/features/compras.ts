@@ -529,7 +529,13 @@ type TabEstado = 'TODAS' | 'EN_TRANSITO' | 'POR_UBICAR' | 'INGRESADA';
                             {{ i.descripcion || '—' }}
                             @if (i.sugerencia; as sug) {
                               <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                @if (sug.mismoProveedor) {
+                                @if (sug.motivo === 'DESCRIPCION') {
+                                  <span [class]="'text-[11px] ' + (sug.mismoProveedor ? 'text-neon-cyan' : 'text-amber-400')"
+                                    [title]="sug.descripcion + (sug.mismoProveedor ? '' : ' — ojo: es de ' + sug.proveedor)">
+                                    Se parece a <span class="font-mono font-semibold">{{ sug.sku }}</span>
+                                    ({{ sug.parecido }}%){{ sug.mismoProveedor ? '' : ', de ' + sug.proveedor }}
+                                  </span>
+                                } @else if (sug.mismoProveedor) {
                                   <span class="text-[11px] text-neon-cyan" [title]="sug.descripcion">
                                     Parece ser <span class="font-mono font-semibold">{{ sug.sku }}</span>
                                   </span>
@@ -1125,7 +1131,15 @@ export class Compras implements OnInit {
   asociarSugerida(importado: ImportadoPendiente): void {
     const sug = importado.sugerencia;
     if (!sug || this.guardandoImportado()) return;
-    if (!sug.mismoProveedor && !confirm(
+    // Por descripcion parecida siempre se pregunta: dos descripciones parecidas pueden ser
+    // piezas distintas (otra medida, otro motor), y la persona tiene que ver cual es.
+    if (sug.motivo === 'DESCRIPCION' && !confirm(
+        `¿Esta línea es este producto del catálogo?\n\n${sug.sku} — ${sug.descripcion}`
+        + (sug.mismoProveedor ? '' : `\n\nOjo: es de ${sug.proveedor}, no de ${importado.proveedor || 'este proveedor'}.`)
+        + `\n\nLínea de la factura: ${importado.descripcion || ''}`)) {
+      return;
+    }
+    if (sug.motivo !== 'DESCRIPCION' && !sug.mismoProveedor && !confirm(
         `${sug.sku} existe en el catálogo pero es de ${sug.proveedor}, y esta factura es de `
         + `${importado.proveedor || 'otro proveedor'}. Asociarla carga el stock en el producto `
         + 'del otro proveedor. ¿Seguir igual?')) {

@@ -39,6 +39,27 @@ public class ProductoRepositoryImpl implements ProductoRepositoryCustom {
     }
 
     @Override
+    public List<Parecido> parecidosPorDescripcion(String texto, int limite) {
+        if (texto == null || texto.isBlank()) {
+            return List.of();
+        }
+        // El operador % usa el indice trigram y deja afuera lo que no llega a 0,3; similarity()
+        // da el numero para ordenar. pg_trgm compara sin distinguir mayusculas.
+        @SuppressWarnings("unchecked")
+        List<Object[]> filas = em.createNativeQuery(
+                        "SELECT p.id, similarity(p.descripcion, :texto) AS parecido FROM productos p "
+                                + "WHERE p.descripcion % :texto ORDER BY parecido DESC, p.id LIMIT :limite")
+                .setParameter("texto", texto.trim())
+                .setParameter("limite", limite)
+                .getResultList();
+        List<Parecido> parecidos = new ArrayList<>(filas.size());
+        for (Object[] f : filas) {
+            parecidos.add(new Parecido(((Number) f[0]).longValue(), ((Number) f[1]).doubleValue()));
+        }
+        return parecidos;
+    }
+
+    @Override
     public Page<Producto> buscarInteligenteConStock(List<String> tokens, String rawQuery, boolean tieneStock, Pageable pageable) {
         return buscarInteligenteInterno(tokens, rawQuery, tieneStock, pageable);
     }

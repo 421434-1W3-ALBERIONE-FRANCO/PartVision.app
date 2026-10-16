@@ -316,7 +316,97 @@ class CompraServiceSincronizacionTest {
         assertThat(r.lineasMatcheadas()).isEqualTo(2);
     }
 
-    /** Mientras la planilla no tenga columna de proveedor, los reenvios no cambian nada. */
+    // --- el codigo que el cliente anota en la descripcion ---
+
+    private static FacturaEntrante.Linea importado(String descripcion) {
+        return new FacturaEntrante.Linea("IMPORTADOS", descripcion, 1);
+    }
+
+    /**
+     * La planilla escribe "Importado" pero el cliente anoto el codigo adelante: si es un producto
+     * del proveedor de la factura, la linea queda atada a el (y no a un IMP- nuevo).
+     */
+    @Test
+    void alLlegar_codigoEnLaDescripcionDelMismoProveedor_seAsociaAlProductoOriginal() {
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.empty());
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(producto(10L, "BIE0199", "Autopartes del Sur")));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("Autopartes del Sur", CompraEstado.EN_TRANSITO, importado("bie0199 biela")));
+
+        assertThat(r.compra().getLineas().get(0).getProducto().getId()).isEqualTo(10L);
+        assertThat(r.lineasMatcheadas()).isEqualTo(1);
+    }
+
+    /** De otro proveedor puede ser otra pieza: queda como sugerencia en Importados. */
+    @Test
+    void alLlegar_codigoEnLaDescripcionDeOtroProveedor_noSeAsociaSolo() {
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.empty());
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(producto(10L, "BIE0199", "EGSA")));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("Autopartes del Sur", CompraEstado.EN_TRANSITO, importado("bie0199 biela")));
+
+        assertThat(r.compra().getLineas().get(0).getProducto()).isNull();
+    }
+
+    @Test
+    void alLlegar_codigoEnLaDescripcionSinProveedorEnLaFactura_noSeAsociaSolo() {
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.empty());
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(
+                producto(10L, "BIE0199", "EGSA"), producto(11L, "BIE0199", "Autopartes del Sur")));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura(null, CompraEstado.EN_TRANSITO, importado("bie0199 biela")));
+
+        assertThat(r.compra().getLineas().get(0).getProducto()).isNull();
+    }
+
+    @Test
+    void alLlegar_descripcionSinCodigo_quedaParaImportados() {
+        when(compraRepo.findByNumeroFactura("900004113")).thenReturn(Optional.empty());
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.EN_TRANSITO, importado("termostato perkins")));
+
+        assertThat(r.compra().getLineas().get(0).getProducto()).isNull();
+    }
+
+    /**
+     * El catalogo cambia todos los dias: una linea que llego sin producto se vuelve a buscar en
+     * cada envio de la planilla, y si ahora existe, se vincula.
+     */
+    @Test
+    void reenvio_elProductoAparecioDespues_seVinculaYLoAvisa() {
+        when(compraRepo.findByNumeroFactura("900004113"))
+                .thenReturn(Optional.of(guardada("EGSA", CompraEstado.EN_TRANSITO, "SK10052")));
+        when(productoRepo.findBySkuIn(any())).thenReturn(List.of(producto(5L, "SK10052", "EGSA")));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.EN_TRANSITO, linea("SK10052", 1)));
+
+        assertThat(r.tipo()).isEqualTo(Tipo.ACTUALIZADA);
+        assertThat(r.mensaje()).contains("1 linea(s) se vincularon con el catalogo");
+        assertThat(r.compra().getLineas().get(0).getProducto().getId()).isEqualTo(5L);
+    }
+
+    /** Ya ingresada, vincularla pide una ubicacion para cargar el stock: eso es en Importados. */
+    @Test
+    void reenvio_compraYaIngresada_noSeVuelveABuscar() {
+        when(compraRepo.findByNumeroFactura("900004113"))
+                .thenReturn(Optional.of(guardada("EGSA", CompraEstado.INGRESADA, "SK10052")));
+
+        ResultadoSincronizacion r = service.sincronizar(
+                factura("EGSA", CompraEstado.POR_UBICAR, linea("SK10052", 1)));
+
+        assertThat(r.compra().getLineas().get(0).getProducto()).isNull();
+        verify(productoRepo, never()).findBySkuIn(any());
+    }
+
+    /**
+     * Sin proveedor y sin el producto en el catalogo, un reenvio no cambia nada. El codigo se
+     * vuelve a buscar en cada envio (por si el producto aparecio despues), pero no lo encuentra.
+     */
     @Test
     void sinProveedorDeNingunLado_noHayNadaQueCompletar() {
         when(compraRepo.findByNumeroFactura("900004113"))
@@ -326,7 +416,7 @@ class CompraServiceSincronizacionTest {
                 factura(null, CompraEstado.EN_TRANSITO, linea("140000", 1)));
 
         assertThat(r.tipo()).isEqualTo(Tipo.SIN_CAMBIOS);
-        verify(productoRepo, never()).findBySkuIn(any());
+        assertThat(r.compra().getLineas().get(0).getProducto()).isNull();
     }
 
     // --- ingresar desde el panel ---

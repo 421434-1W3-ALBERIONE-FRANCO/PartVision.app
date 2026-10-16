@@ -59,14 +59,16 @@ class ImportadosControllerTest {
                 new ImportadoPendienteResponse(40L, 3L, "900000482", LocalDate.of(2026, 8, 25), "EGSA",
                         "EN_TRANSITO", "bie0381 biela om651", 2,
                         new ImportadoPendienteResponse.Sugerencia(
-                                901L, "BIE0381", "BIELA OM651", "EGSA", true)))));
+                                901L, "BIE0381", "BIELA OM651", "EGSA", true, "DESCRIPCION", 83)))));
 
         mvc.perform(get(URL))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].lineaId").value(40))
                 .andExpect(jsonPath("$.content[0].descripcion").value("bie0381 biela om651"))
                 .andExpect(jsonPath("$.content[0].sugerencia.sku").value("BIE0381"))
-                .andExpect(jsonPath("$.content[0].sugerencia.mismoProveedor").value(true));
+                .andExpect(jsonPath("$.content[0].sugerencia.mismoProveedor").value(true))
+                .andExpect(jsonPath("$.content[0].sugerencia.motivo").value("DESCRIPCION"))
+                .andExpect(jsonPath("$.content[0].sugerencia.parecido").value(83));
     }
 
     @Test

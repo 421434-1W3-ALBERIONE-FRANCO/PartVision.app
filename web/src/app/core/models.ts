@@ -362,9 +362,11 @@ export interface ImportadoPendiente {
 }
 
 /**
- * El backend deduce esto del codigo que la planilla escribe al principio de la descripcion
- * ("bie0199 biela"). Es una sugerencia: la asocia una persona, no el sistema. `mismoProveedor`
- * en false significa que ese SKU existe pero para el otro proveedor.
+ * Un producto del catalogo que podria ser esta pieza. Es una sugerencia: la asocia una persona.
+ * `motivo` CODIGO: el codigo que la planilla escribe al principio de la descripcion ("bie0199
+ * biela") existe; DESCRIPCION: no hay codigo pero la descripcion se parece (`parecido`, 0 a 100).
+ * `mismoProveedor` en false significa que el producto es del otro proveedor. (Si el codigo es
+ * del mismo proveedor, la linea ya se asocio sola al llegar y no aparece en Importados.)
  */
 export interface SugerenciaImportado {
   productoId: number;
@@ -372,6 +374,8 @@ export interface SugerenciaImportado {
   descripcion: string;
   proveedor: string | null;
   mismoProveedor: boolean;
+  motivo: 'CODIGO' | 'DESCRIPCION';
+  parecido: number | null;
 }
 
 export interface ImportadoResuelto {
