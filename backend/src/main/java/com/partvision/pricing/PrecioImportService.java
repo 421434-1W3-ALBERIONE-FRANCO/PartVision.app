@@ -1,5 +1,6 @@
 package com.partvision.pricing;
 
+import com.partvision.catalog.domain.CodigoProducto;
 import com.partvision.catalog.domain.Producto;
 import com.partvision.catalog.repository.ProductoRepository;
 import com.partvision.pricing.domain.ConfiguracionPrecio;
@@ -147,54 +148,52 @@ public class PrecioImportService {
         Tarifa tarifa = obtenerTarifa(proveedor);
 
         List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
-
-        Set<String> skusUnicos = filas.stream()
-                .map(FilaArchivo::sku)
-                .filter(s -> s != null && !s.isBlank())
-                .collect(Collectors.toSet());
-
-        Map<String, List<Producto>> productosPorSku = buscarProductosPorSkuEnLotes(skusUnicos);
+        ProductosDeLaLista productos = buscarProductos(filas, proveedor);
+        Map<String, Integer> primeraFila = new HashMap<>();
+        for (int i = 0; i < filas.size(); i++) {
+            if (filas.get(i).sku() != null) primeraFila.putIfAbsent(filas.get(i).sku().trim(), i + 2);
+        }
 
         // Solo se devuelve una muestra de filas: el navegador no puede renderizar
         // decenas de miles de <tr> sin congelarse. Los contadores si son del total.
+        // Un codigo repetido en el archivo cuenta una vez: es un solo producto.
         List<PreviewFila> muestra = new ArrayList<>();
         List<PrecioImportPreviewResponse.FilaNoEncontrada> detalleNoEncontrados = new ArrayList<>();
         int total = 0, ok = 0, conflictos = 0, noEncontrados = 0;
 
-        for (int i = 0; i < filas.size(); i++) {
-            FilaArchivo fila = filas.get(i);
-            String sku = fila.sku();
-            BigDecimal precioArchivo = parsearPrecio(fila.precio());
-
-            if (sku == null || sku.isBlank()) continue;
-            if (precioArchivo == null) continue;
-
-            List<Producto> matches = desambiguarPorProveedor(
-                    productosPorSku.getOrDefault(sku, List.of()), proveedor);
+        for (Map.Entry<String, List<FilaArchivo>> e : filasPorCodigo(filas).entrySet()) {
+            String sku = e.getKey();
+            FilaArchivo primera = e.getValue().getFirst();
+            int fila = primeraFila.get(sku);
+            Resolucion r = resolver(e.getValue(), productos.porCodigo().getOrDefault(sku, List.of()), proveedor);
+            BigDecimal precioArchivo = r.precio() != null ? r.precio() : parsearPrecio(primera.precio());
             BigDecimal costo = tarifa.costoDesde(precioArchivo);
             BigDecimal precioNuevo = tarifa.ventaDesde(costo);
             total++;
 
             PreviewFila pf;
-            if (matches.isEmpty()) {
-                pf = new PreviewFila(i + 2, sku, costo, "NO_ENCONTRADO",
+            if (Resolucion.NO_ENCONTRADO.equals(r.estado())) {
+                pf = new PreviewFila(fila, sku, costo, Resolucion.NO_ENCONTRADO,
                         null, null, null, null, precioNuevo, 0);
                 noEncontrados++;
                 if (detalleNoEncontrados.size() < MAX_NO_ENCONTRADOS) {
                     detalleNoEncontrados.add(new PrecioImportPreviewResponse.FilaNoEncontrada(
-                            sku, fila.descripcion(), costo));
+                            sku, primera.descripcion(), costo));
                 }
-            } else if (matches.size() > 1) {
-                String descs = matches.stream()
-                        .map(p -> p.getDescripcion() + (p.getMarca() != null ? " [" + p.getMarca().getNombre() + "]" : ""))
-                        .collect(Collectors.joining(" | "));
-                pf = new PreviewFila(i + 2, sku, costo, "CONFLICTO",
-                        null, descs, null, null, precioNuevo, matches.size());
+            } else if (Resolucion.CONFLICTO.equals(r.estado())) {
+                String descs = r.candidatos().size() == 1
+                        ? "El código viene repetido con precios distintos y no se sabe cuál es de "
+                          + r.candidatos().getFirst().getDescripcion()
+                        : r.candidatos().stream()
+                                .map(p -> p.getDescripcion() + (p.getMarca() != null ? " [" + p.getMarca().getNombre() + "]" : ""))
+                                .collect(Collectors.joining(" | "));
+                pf = new PreviewFila(fila, sku, costo, Resolucion.CONFLICTO,
+                        null, descs, null, null, precioNuevo, r.candidatos().size());
                 conflictos++;
             } else {
-                Producto p = matches.getFirst();
+                Producto p = r.producto();
                 String marca = p.getMarca() != null ? p.getMarca().getNombre() : null;
-                pf = new PreviewFila(i + 2, sku, costo, "OK",
+                pf = new PreviewFila(fila, sku, costo, Resolucion.OK,
                         p.getId(), p.getDescripcion(), marca, p.getPrecioCosto(), precioNuevo, 1);
                 ok++;
             }
@@ -221,11 +220,10 @@ public class PrecioImportService {
         }
 
         List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
-        Set<String> skusArchivo = filas.stream()
-                .map(FilaArchivo::sku)
-                .filter(s -> s != null && !s.isBlank())
-                .collect(Collectors.toSet());
-        Map<String, List<Producto>> existentes = buscarProductosPorSkuEnLotes(skusArchivo);
+        // Mismo criterio que la vista previa: falta si no hay producto de este proveedor (ni con
+        // ese codigo ni con el mismo escrito de otra forma). Que exista en otro proveedor no
+        // impide darlo de alta: es el mismo repuesto con otro costo, como los ~10.300 que ya estan.
+        Map<String, List<Producto>> existentes = buscarProductos(filas, proveedor).porCodigo();
 
         boolean todos = skus == null || skus.isEmpty();
         Set<String> yaVistos = new HashSet<>();
@@ -235,7 +233,7 @@ public class PrecioImportService {
             String sku = fila.sku();
             if (sku == null || sku.isBlank()) continue;
             if (!todos && !skus.contains(sku)) continue;
-            if (!existentes.getOrDefault(sku, List.of()).isEmpty()) continue;
+            if (!elegibles(existentes.getOrDefault(sku, List.of()), proveedor).isEmpty()) continue;
             if (!yaVistos.add(sku)) continue;
 
             String descripcion = fila.descripcion() != null && !fila.descripcion().isBlank()
@@ -294,14 +292,10 @@ public class PrecioImportService {
         Tarifa tarifa = obtenerTarifa(proveedor);
 
         List<FilaArchivo> filas = parsearFilas(info, colSku, colPrecio);
-        progresoTotal.set(filas.size());
+        Map<String, List<FilaArchivo>> porCodigo = filasPorCodigo(filas);
+        progresoTotal.set(porCodigo.size());
 
-        Set<String> skusUnicos = filas.stream()
-                .map(FilaArchivo::sku)
-                .filter(s -> s != null && !s.isBlank())
-                .collect(Collectors.toSet());
-
-        Map<String, List<Producto>> productosPorSku = buscarProductosPorSkuEnLotes(skusUnicos);
+        ProductosDeLaLista productos = buscarProductos(filas, proveedor);
 
         ImportPrecioBatch batch = new ImportPrecioBatch();
         batch.setProveedor(proveedor);
@@ -314,28 +308,25 @@ public class PrecioImportService {
         List<HistorialPrecio> historiales = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();
 
-        for (FilaArchivo fila : filas) {
-            String sku = fila.sku();
-            BigDecimal precioArchivo = parsearPrecio(fila.precio());
+        // Un codigo repetido en el archivo es un solo producto y se escribe una sola vez.
+        for (Map.Entry<String, List<FilaArchivo>> e : porCodigo.entrySet()) {
+            String sku = e.getKey();
             progresoActual.incrementAndGet();
-
-            if (sku == null || sku.isBlank() || precioArchivo == null) continue;
 
             if (skusExcluidos != null && skusExcluidos.contains(sku)) {
                 omitidos++;
                 continue;
             }
 
-            List<Producto> matches = desambiguarPorProveedor(
-                    productosPorSku.getOrDefault(sku, List.of()), proveedor);
-            if (matches.size() != 1) {
-                if (matches.size() > 1) conflictos++;
+            Resolucion r = resolver(e.getValue(), productos.porCodigo().getOrDefault(sku, List.of()), proveedor);
+            if (!Resolucion.OK.equals(r.estado())) {
+                if (Resolucion.CONFLICTO.equals(r.estado())) conflictos++;
                 else omitidos++;
                 continue;
             }
 
-            Producto p = matches.getFirst();
-            BigDecimal costo = tarifa.costoDesde(precioArchivo);
+            Producto p = r.producto();
+            BigDecimal costo = tarifa.costoDesde(r.precio());
             BigDecimal precioVenta = tarifa.ventaDesde(costo);
 
             // Un precio que no cambio no se escribe: ni el producto ni una fila de historial.
@@ -453,18 +444,147 @@ public class PrecioImportService {
     private static final int MAX_NO_ENCONTRADOS = 5_000;
 
     /**
-     * Un mismo SKU puede existir una vez por proveedor (indice unico proveedor+sku), asi
-     * que al importar la lista de un proveedor esos empates se resuelven quedandose con
-     * su producto. Si el proveedor no desempata, se devuelven los candidatos como estaban
-     * y la fila queda marcada como conflicto.
+     * Los productos que puede tocar la lista de un proveedor: los suyos y, si no tiene ninguno
+     * con ese codigo, los que no tienen proveedor. Nunca los de otro: un mismo codigo existe una
+     * vez por proveedor (~10.300 codigos estan en los dos) y cada uno tiene su costo. Hasta el
+     * 2026-10-15 un candidato unico se tomaba aunque fuera de otro proveedor: la lista de ADS
+     * del 13/10 le puso su precio a 29 productos de EGSA. Sin proveedor no hay como elegir.
      */
-    List<Producto> desambiguarPorProveedor(List<Producto> matches, String proveedor) {
-        if (matches.size() <= 1 || proveedor == null) return matches;
-        List<Producto> delProveedor = matches.stream()
-                .filter(p -> p.getProveedor() != null
-                        && p.getProveedor().trim().equalsIgnoreCase(proveedor.trim()))
+    List<Producto> elegibles(List<Producto> candidatos, String proveedor) {
+        if (proveedor == null || proveedor.isBlank()) return candidatos;
+        List<Producto> delProveedor = candidatos.stream().filter(p -> esDelProveedor(p, proveedor)).toList();
+        if (!delProveedor.isEmpty()) return delProveedor;
+        return candidatos.stream().filter(p -> p.getProveedor() == null || p.getProveedor().isBlank()).toList();
+    }
+
+    private static boolean esDelProveedor(Producto p, String proveedor) {
+        return p.getProveedor() != null && p.getProveedor().trim().equalsIgnoreCase(proveedor.trim());
+    }
+
+    /**
+     * Lo que la lista trae y el catalogo tiene: los productos de cada codigo, y cuales se
+     * reconocieron aunque el proveedor los mandara escritos de otra forma.
+     *
+     * @param conOtroFormato codigo de la lista, codigo del catalogo
+     */
+    record ProductosDeLaLista(Map<String, List<Producto>> porCodigo, Map<String, String> conOtroFormato) {}
+
+    /**
+     * Los productos de cada codigo de la lista: los de ese codigo exacto (de cualquier
+     * proveedor; elige quien llama) y, para los codigos sin producto de este proveedor, el que
+     * tiene la misma {@link CodigoProducto#clave clave}. El 2026-10-15 EGSA paso a mandar 651
+     * codigos de PACKSON con un guion de mas ({@code PK-2000} por {@code PK2000}): sin esto, esos
+     * productos se quedaban sin precio y aparecian como nuevos, y darlos de alta los duplicaba.
+     *
+     * <p>La clave sola no alcanza: hay productos distintos que solo se diferencian en un guion
+     * ({@code PK3000} es SABI y {@code PK-3000} es PACKSON). Se empareja solo si la lista dice la
+     * marca y hay un unico producto del proveedor con esa clave y esa marca, que la lista no
+     * traiga ya con su propio codigo, y un solo codigo de la lista apunta a el. Ante la duda, no:
+     * mejor un codigo "no encontrado" que el precio de otro producto.
+     */
+    ProductosDeLaLista buscarProductos(List<FilaArchivo> filas, String proveedor) {
+        Set<String> skus = filas.stream().map(FilaArchivo::sku).filter(Objects::nonNull).map(String::trim)
+                .filter(s -> !s.isEmpty()).collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, List<Producto>> porCodigo = new HashMap<>(buscarProductosPorSkuEnLotes(skus));
+        if (proveedor == null || proveedor.isBlank()) return new ProductosDeLaLista(porCodigo, Map.of());
+
+        Map<String, Set<String>> marcasPorCodigo = new HashMap<>();
+        for (FilaArchivo f : filas) {
+            if (f.sku() == null || f.sku().isBlank()) continue;
+            marcasPorCodigo.computeIfAbsent(f.sku().trim(), k -> new HashSet<>())
+                    .add(Objects.toString(AnalizadorListaPrecios.normalizarMarca(f.marca()), ""));
+        }
+        Set<Long> tomados = new HashSet<>();
+        Map<String, List<String>> faltantesPorClave = new HashMap<>();
+        for (String sku : skus) {
+            Producto propio = AnalizadorListaPrecios.delProveedor(porCodigo.getOrDefault(sku, List.of()), proveedor);
+            if (propio != null) {
+                tomados.add(propio.getId());
+                continue;
+            }
+            Set<String> marcas = marcasPorCodigo.getOrDefault(sku, Set.of());
+            if (marcas.size() != 1 || marcas.contains("")) continue;   // sin marca o con varias: no hay como confirmar
+            faltantesPorClave.computeIfAbsent(CodigoProducto.clave(sku), k -> new ArrayList<>()).add(sku);
+        }
+        if (faltantesPorClave.isEmpty()) return new ProductosDeLaLista(porCodigo, Map.of());
+
+        Map<String, List<Producto>> candidatosPorClave = buscarPorClaveEnLotes(faltantesPorClave.keySet()).stream()
+                .filter(p -> esDelProveedor(p, proveedor))
+                .collect(Collectors.groupingBy(p -> CodigoProducto.clave(p.getSku())));
+        Map<String, String> conOtroFormato = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> e : faltantesPorClave.entrySet()) {
+            if (e.getValue().size() != 1) continue;                     // dos codigos de la lista con la misma clave
+            String sku = e.getValue().getFirst();
+            String marca = marcasPorCodigo.get(sku).iterator().next();
+            List<Producto> deEsaMarca = candidatosPorClave.getOrDefault(e.getKey(), List.of()).stream()
+                    .filter(p -> p.getMarca() != null
+                            && marca.equals(AnalizadorListaPrecios.normalizarMarca(p.getMarca().getNombre())))
+                    .toList();
+            if (deEsaMarca.size() != 1 || tomados.contains(deEsaMarca.getFirst().getId())) continue;
+            Producto p = deEsaMarca.getFirst();
+            tomados.add(p.getId());
+            porCodigo.computeIfAbsent(sku, k -> new ArrayList<>()).add(p);
+            conOtroFormato.put(sku, p.getSku());
+        }
+        return new ProductosDeLaLista(porCodigo, conOtroFormato);
+    }
+
+    private List<Producto> buscarPorClaveEnLotes(Set<String> claves) {
+        List<String> lista = new ArrayList<>(claves);
+        List<Producto> resultado = new ArrayList<>();
+        for (int i = 0; i < lista.size(); i += SKU_BATCH_SIZE) {
+            resultado.addAll(productoRepository.findByClaveSkuIn(lista.subList(i, Math.min(i + SKU_BATCH_SIZE, lista.size()))));
+        }
+        return resultado;
+    }
+
+    /**
+     * Que le toca a un codigo de la lista. {@code precio} es el de la lista (antes de tarifa).
+     * CONFLICTO con un solo candidato quiere decir que el codigo viene repetido con precios
+     * distintos y no se sabe cual es el de este producto.
+     */
+    record Resolucion(String estado, Producto producto, BigDecimal precio, List<Producto> candidatos) {
+        static final String OK = "OK";
+        static final String NO_ENCONTRADO = "NO_ENCONTRADO";
+        static final String CONFLICTO = "CONFLICTO";
+    }
+
+    /**
+     * Las mismas reglas que las actualizaciones automaticas ({@link AnalizadorListaPrecios}):
+     * solo productos del proveedor, y si el codigo viene repetido con precios distintos (EGSA
+     * usa el 2144 para un arbol de levas BH y un tornillo de REY GOMA), el precio de la fila de
+     * su marca. Antes ganaba la ultima fila del archivo: asi el arbol de levas quedo a $579.
+     */
+    Resolucion resolver(List<FilaArchivo> filasDelCodigo, List<Producto> candidatos, String proveedor) {
+        List<Producto> posibles = elegibles(candidatos, proveedor);
+        if (posibles.isEmpty()) return new Resolucion(Resolucion.NO_ENCONTRADO, null, null, posibles);
+        if (posibles.size() > 1) return new Resolucion(Resolucion.CONFLICTO, null, null, posibles);
+        Producto p = posibles.getFirst();
+        List<AnalizadorListaPrecios.Valida> validas = filasDelCodigo.stream()
+                .map(f -> new AnalizadorListaPrecios.Valida(parsearPrecio(f.precio()), f.marca()))
                 .toList();
-        return delProveedor.size() == 1 ? delProveedor : matches;
+        BigDecimal precio = AnalizadorListaPrecios.mismoPrecio(validas)
+                ? validas.getFirst().precio()
+                : AnalizadorListaPrecios.precioDeSuMarca(p, validas);
+        if (precio == null) return new Resolucion(Resolucion.CONFLICTO, null, null, posibles);
+        return new Resolucion(Resolucion.OK, p, precio, posibles);
+    }
+
+    /**
+     * Las filas con codigo y precio valido, agrupadas por codigo en el orden del archivo. Un
+     * precio en cero, negativo o disparatado no se aplica, igual que en las actualizaciones
+     * automaticas: la lista de EGSA trae ~2.700 filas en $0 (IMPORTADO, SINTERMETAL, PACKSON) y
+     * la importacion vieja las cargaba, dejando esos productos en cero.
+     */
+    private Map<String, List<FilaArchivo>> filasPorCodigo(List<FilaArchivo> filas) {
+        Map<String, List<FilaArchivo>> porCodigo = new LinkedHashMap<>();
+        for (FilaArchivo f : filas) {
+            if (f.sku() == null || f.sku().isBlank()) continue;
+            BigDecimal precio = parsearPrecio(f.precio());
+            if (precio == null || precio.signum() <= 0 || precio.compareTo(AnalizadorListaPrecios.PRECIO_MAXIMO) >= 0) continue;
+            porCodigo.computeIfAbsent(f.sku().trim(), k -> new ArrayList<>()).add(f);
+        }
+        return porCodigo;
     }
 
     Map<String, List<Producto>> buscarProductosPorSkuEnLotes(Set<String> skus) {

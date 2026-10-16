@@ -90,8 +90,8 @@ final class AnalizadorListaPrecios {
         }
     }
 
-    /** Una fila con codigo y precio validos. */
-    private record Valida(BigDecimal precio, String marca) {}
+    /** Una fila con codigo y precio validos. La importacion manual usa las mismas reglas. */
+    record Valida(BigDecimal precio, String marca) {}
 
     /**
      * @param filas            la lista de precios del proveedor
@@ -235,7 +235,7 @@ final class AnalizadorListaPrecios {
         return null;
     }
 
-    private static boolean mismoPrecio(List<Valida> filas) {
+    static boolean mismoPrecio(List<Valida> filas) {
         BigDecimal primero = filas.getFirst().precio();
         for (Valida v : filas) {
             if (v.precio().compareTo(primero) != 0) return false;
@@ -248,7 +248,7 @@ final class AnalizadorListaPrecios {
      * Si el producto no tiene marca, la lista no la trae, o hay dos filas de su marca con
      * precios distintos, devuelve null: mejor no tocarlo que ponerle el precio de otro.
      */
-    private static BigDecimal precioDeSuMarca(Producto p, List<Valida> filas) {
+    static BigDecimal precioDeSuMarca(Producto p, List<Valida> filas) {
         String marca = p.getMarca() == null ? null : normalizarMarca(p.getMarca().getNombre());
         if (marca == null) return null;
         BigDecimal precio = null;

@@ -223,8 +223,13 @@ class PrecioImportServiceCoberturaTest {
         assertThat(resp.filas().get(0).productoId()).isEqualTo(1L);
     }
 
+    /**
+     * Ninguno es de ADS: el de otro proveedor no se toca nunca; el que no tiene proveedor si,
+     * como siempre. (Hasta el 2026-10-15 esto era un conflicto, y un candidato unico de otro
+     * proveedor se tomaba sin preguntar.)
+     */
     @Test
-    void preview_ningunoDelProveedor_quedaComoConflicto() {
+    void preview_ningunoDelProveedor_tomaElQueNoTieneProveedorYNuncaElDeOtro() {
         configurarTarifa("ADS", "10", "0");
         String id = subir(csv("sku,precio\nA1,100\n"), "precios.csv");
         when(productoRepository.findBySkuIn(any()))
@@ -232,7 +237,8 @@ class PrecioImportServiceCoberturaTest {
 
         PrecioImportPreviewResponse resp = service.preview(id, "sku", "precio", "ADS");
 
-        assertThat(resp.conflictos()).isEqualTo(1);
+        assertThat(resp.ok()).isEqualTo(1);
+        assertThat(resp.filas().get(0).productoId()).isEqualTo(2L);
     }
 
     @Test

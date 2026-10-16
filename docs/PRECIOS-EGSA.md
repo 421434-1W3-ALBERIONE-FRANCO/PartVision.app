@@ -126,8 +126,19 @@ costo × (1 + margen), con los porcentajes de EGSA de Precios (hoy ajuste 0 y ma
 - **Códigos repetidos con marcas distintas** (el 106 es un árbol de levas BH y una cadena RUL-REP):
   cada producto toma el precio de la fila que trae **su marca**. Si no hay forma de saberlo (dos filas de
   la misma marca con precios distintos, o el producto no tiene marca), no se toca y se informa.
+- **El mismo código escrito de otra forma:** el 2026-10-15 EGSA pasó a mandar los códigos de PACKSON
+  con un guion de más (`PK-2000` en vez de `PK2000`, `PKC-0097-060` en vez de `PKC0097-060`). Desde el
+  2026-10-16, si un código no tiene producto de EGSA, se busca ignorando espacios, puntos, guiones y
+  barras, y se toma como el mismo producto **solo si** hay uno único de EGSA así, **de la misma marca**
+  que dice la lista, y la lista no lo trae ya con su propio código. La marca importa: hay productos
+  distintos que solo se diferencian en un guion (`PK3000` es SABI y `PK-3000` es PACKSON). El detalle
+  de la recepción dice cuántos se reconocieron así. Ese día fueron 818: 651 con precio y 167 en cero.
 - **Códigos nuevos:** se dan de alta solos (con su marca y descripción) y quedan con precio en la misma
-  recepción. Si llegan **más de 300 de una vez**, no se crea ninguno y se avisa.
+  recepción. Si llegan **más de 300 de una vez**, no se crea ninguno y se avisa. El 2026-10-15 llegaron
+  770 "nuevos" y no se creó ninguno: 651 eran el cambio de formato de arriba. Con la regla del formato
+  quedan 120: 96 que no existían (SCHADECK, AKURO, TARANTO, FADECYA, un PACKSON) y 24 que existen solo
+  como producto de ADS. Esos se crean también como producto de EGSA, cada uno con su costo, como los
+  ~10.300 códigos que ya están en los dos proveedores.
 - **Saltos grandes** (suben más de 60% o bajan más de 35%) no se aplican: quedan en el panel de
   Precios para aprobarlos o descartarlos uno por uno.
 - **Frenos** (la lista entera no se aplica y queda `RETENIDA`): trae menos de 1.000 productos o menos
@@ -138,6 +149,19 @@ costo × (1 + margen), con los porcentajes de EGSA de Precios (hoy ajuste 0 y ma
   «Aplicar igual»: se aplica ese mismo archivo. Los saltos grandes igual van a revisión.
 - **Avisos:** si no llega ninguna lista en **2 días**, o llega y falla, aparece un aviso arriba de todas
   las pantallas para los administradores (cuenta también la carga por pantalla del robot viejo).
+
+**La importación manual por pantalla usa las mismas reglas desde el 2026-10-16.** Antes tenía tres
+errores que esta recepción ya no tenía:
+- Ponía el precio en un producto **de otro proveedor** si era el único con ese código. La lista de ADS
+  del 13/10 le puso su precio a 29 productos de EGSA.
+- En un **código repetido** ganaba la última fila del archivo, sin mirar la marca. Así el árbol de levas
+  BH 2144 quedó a $579, el precio del tornillo REY GOMA con el mismo código.
+- **Cargaba los precios en cero** como precio. Así quedaron unos 2.600 productos de EGSA en $0.
+
+Ahora la importación toca solo productos del proveedor elegido (o sin proveedor), en los repetidos toma
+la fila de la marca de cada producto, saltea los precios en cero y reconoce los códigos escritos de otra
+forma con las mismas condiciones. Un código que existe solo en otro proveedor aparece como "no
+encontrado" y se puede dar de alta para este.
 
 ## Probado
 

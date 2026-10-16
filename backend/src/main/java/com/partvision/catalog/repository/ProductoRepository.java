@@ -66,6 +66,15 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>, Produ
     @EntityGraph(attributePaths = {"marca"})
     List<Producto> findBySkuIn(java.util.Collection<String> skus);
 
+    /**
+     * Los productos cuyo codigo, en mayusculas y sin espacios, puntos, guiones ni barras, es
+     * alguna de estas claves ({@link com.partvision.catalog.domain.CodigoProducto#clave}). La
+     * expresion es la del indice ix_productos_clave_sku (V34): si cambia una, cambiar la otra.
+     */
+    @Query(value = "SELECT * FROM productos WHERE upper(regexp_replace(sku, '[\\s./-]', '', 'g')) IN (:claves)",
+            nativeQuery = true)
+    List<Producto> findByClaveSkuIn(@Param("claves") java.util.Collection<String> claves);
+
     // La busqueda por texto ahora es por palabras (token-AND, cualquier orden): ver
     // ProductoRepositoryCustom#buscarInteligente / ProductoRepositoryImpl.
 

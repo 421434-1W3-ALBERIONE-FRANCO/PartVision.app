@@ -75,11 +75,9 @@ class AplicadorListaPrecios {
         Referencia ref = syncRepo.findFirstByProveedorAndResultadoInOrderByIniciadaEnDesc(f.proveedor(), BUENAS)
                 .map(r -> new Referencia(r.getFilasLista()))
                 .orElse(Referencia.NINGUNA);
-        Set<String> skus = filas.stream().map(FilaArchivo::sku).filter(Objects::nonNull).map(String::trim)
-                .filter(x -> !x.isEmpty()).collect(Collectors.toSet());
-        Map<String, List<Producto>> productos = importService.buscarProductosPorSkuEnLotes(skus);
+        PrecioImportService.ProductosDeLaLista lista = importService.buscarProductos(filas, f.proveedor());
 
-        Analisis a = AnalizadorListaPrecios.analizar(filas, productos, tarifa, f.proveedor(), f.umbrales(), ref,
+        Analisis a = AnalizadorListaPrecios.analizar(filas, lista.porCodigo(), tarifa, f.proveedor(), f.umbrales(), ref,
                 importService::parsearPrecio);
 
         s.setFilasLista(a.filasLista());
@@ -89,6 +87,12 @@ class AplicadorListaPrecios {
 
         List<String> problemas = new ArrayList<>(a.motivosParaFrenar());
         problemas.addAll(a.problemas());
+        if (!lista.conOtroFormato().isEmpty()) {
+            problemas.add(n(lista.conOtroFormato().size()) + " código(s) llegaron escritos distinto que en tu catálogo "
+                    + "(misma marca, otros guiones o puntos) y se tomaron como el mismo producto"
+                    + ejemplos(lista.conOtroFormato().entrySet().stream().map(e -> e.getKey() + " = " + e.getValue()).toList())
+                    + ".");
+        }
 
         if (a.hayQueFrenar() && !forzar) {
             if (f.maxAltas() > 0 && !a.nuevos().isEmpty()) {

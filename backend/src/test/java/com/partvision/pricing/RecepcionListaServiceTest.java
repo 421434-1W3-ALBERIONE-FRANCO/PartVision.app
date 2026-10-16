@@ -177,6 +177,30 @@ class RecepcionListaServiceTest {
         assertThat(importService.iniciarImport()).as("candado libre").isTrue();
     }
 
+    /**
+     * El 2026-10-15 EGSA paso a mandar 651 codigos de PACKSON con un guion de mas: PK-2000 es el
+     * PK2000 del catalogo. Se actualiza el que ya existe, no se toma como nuevo ni se duplica.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void recibe_codigoConOtroFormato_actualizaElProductoQueYaExisteYLoAvisa() {
+        Producto pk2000 = producto("PK2000", "100.00", "PACKSON");
+        producto("A2", "200.00", "BH");
+        when(productoRepository.findByClaveSkuIn(anyCollection())).thenAnswer(inv -> {
+            Collection<String> claves = inv.getArgument(0);
+            return catalogo.stream().filter(p -> claves.contains(com.partvision.catalog.domain.CodigoProducto.clave(p.getSku()))).toList();
+        });
+
+        service.recibir(excel(fila("PACKSON", "PK-2000", "Camisa", 110), fila("BH", "A2", "Otro", 200)), null);
+
+        SincronizacionPrecio s = ultima();
+        assertThat(pk2000.getPrecioCosto()).isEqualByComparingTo("110.00");
+        assertThat(s.getActualizados()).isEqualTo(1);
+        assertThat(s.getNoEncontrados()).isZero();
+        assertThat(s.getProblemas()).contains("1 código(s) llegaron escritos distinto").contains("PK-2000 = PK2000");
+        verifyNoInteractions(bulkImporter);
+    }
+
     @Test
     void recibe_sinCambios() {
         producto("A1", "100.00", "BH");
